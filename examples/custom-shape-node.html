@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Shape Node Example</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    
+    #container {
+      border: 1px solid #ccc;
+      width: 800px;
+      height: 600px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Custom Shape Node Example</h1>
+  <div id="container"></div>
+
+  <script src="../node_modules/@antv/g-lite/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-svg/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-annotation/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-dragndrop/dist/index.umd.min.js"></script>
+  <script src="../packages/ge-core/dist/index.umd.min.js"></script>
+  <script>
+    const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop } = window.G;
+    const { Graph, Node, RectNode, CircleNode, Edge, ConnectionPlugin } = window.GE;
+
+    const renderer = new window.G.SVG.Renderer()
+    renderer.registerPlugin(new Annotation.Plugin());
+    renderer.registerPlugin(new Dragndrop.Plugin());
+
+    // Create a graph
+    const graph = new Graph({
+      container: document.getElementById('container'),
+      width: 800,
+      height: 600,
+      renderer,
+    });
+
+    // Wait for canvas to be ready before adding elements
+    graph.ready.then(() => {
+      console.log('Graph ready, creating nodes and edges...');
+
+      const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
+      graph.installPlugin(conn);
+      
+      // Create a circle node
+      const circleNode = new CircleNode({
+        id: 'circle-node',
+        x: 100,
+        y: 100,
+        style: {
+          r: 40,
+          fill: '#1890ff',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Circle Node',
+          labelFill: '#fff',
+          labelFontSize: 14
+        }
+      });
+
+      // Create another circle node
+      const customCircleNode = new CircleNode({
+        id: 'custom-circle-node',
+        x: 200,
+        y: 200,
+        style: {
+          r: 30,
+          fill: '#ff0000',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Custom Circle',
+          labelFill: '#fff',
+          labelFontSize: 12
+        }
+      });
+
+      // Add the nodes to the graph
+      graph.appendChild(circleNode);
+      graph.appendChild(customCircleNode);
+
+      // Create a rect node
+      const rectNode = new RectNode({
+        id: 'rect-node',
+        x: 300,
+        y: 100,
+        style: {
+          width: 100,
+          height: 40,
+          fill: '#fff',
+          stroke: '#000',
+          lineWidth: 1,
+          radius: 4,
+          label: 'Rect Node',
+          labelFill: '#000',
+          labelFontSize: 12
+        }
+      });
+
+      // Add the node to the graph
+      graph.appendChild(rectNode);
+
+      // Create ports on nodes with different layouts
+      circleNode.createPort({ id: 'top', layout: 'top' });
+      circleNode.createPort({ id: 'right', layout: 'right' });
+      circleNode.createPort({ id: 'bottom', layout: 'bottom' });
+      circleNode.createPort({ id: 'left', layout: 'left' });
+
+      rectNode.createPort({ id: 'top', layout: 'top' });
+      rectNode.createPort({ id: 'bottom', layout: 'bottom' });
+      customCircleNode.createPort({ id: 'angle-45', layout: { name: 'angle', args: { angle: 45 } } });
+      customCircleNode.createPort({ id: 'angle-135', layout: { name: 'angle', args: { angle: 135 } } });
+
+
+      // Create a line edge using node objects directly (will connect to node centers)
+      const lineEdge = new Edge({
+        id: 'line-edge',
+        source: circleNode,  // 直接使用节点对象
+        target: rectNode,    // 直接使用节点对象
+        style: {
+          stroke: '#000',
+          lineWidth: 1
+        }
+      });
+
+      graph.appendChild(lineEdge);
+
+      // Create a polyline edge using port objects directly
+      const polylineEdge = new Edge({
+        id: 'polyline-edge',
+        source: circleNode.getPort('right'),  // 直接使用端口对象
+        target: rectNode.getPort('top'),      // 直接使用端口对象
+        style: {
+          stroke: '#ff0000',
+          lineWidth: 2,
+          lineDash: [5, 5]
+        }
+      });
+
+      graph.appendChild(polylineEdge);
+
+      // Also demonstrate a port-to-port connection between the two circles
+      const portEdge = new Edge({
+        id: 'port-edge',
+        source: customCircleNode.getPort('angle-45'),  // 直接使用端口对象
+        target: circleNode.getPort('left'),            // 直接使用端口对象
+        style: {
+          stroke: '#00aa00',
+          lineWidth: 1
+        }
+      });
+
+      graph.appendChild(portEdge);
+
+      console.log('Graph with custom shape nodes, ports and edges created');
+    });
+  </script>
+</body>
+</html>
