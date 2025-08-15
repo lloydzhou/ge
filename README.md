@@ -1,22 +1,20 @@
 # GE - Graph Editor for G
 
-基于 [AntV/G](https://g.antv.vision/) 的现代化图编辑器库。
 
-[![NPM version](https://img.shields.io/npm/v/@antv/ge.svg)](https://www.npmjs.com/package/@antv/ge)
-[![NPM downloads](https://img.shields.io/npm/dm/@antv/ge.svg)](https://www.npmjs.com/package/@antv/ge)
 
-## 简介
 
-GE (Graph Editor) 是一个基于 AntV/G 渲染引擎的现代化图编辑器库。它提供了丰富的图编辑功能，采用类似 DOM 的 API 设计，让开发者感觉像是在使用原生的图编辑接口。
+基于 [AntV/G](https://g.antv.antgroup.com/) 构建，GE 旨在成为新一代图编辑基础设施。它以开放、可扩展的架构为核心，面向多样化场景和未来需求，强调灵活性、可组合性与技术融合。GE 关注开发者体验，致力于推动图编辑技术的边界。核心 API 采用类 DOM 风格设计，与 Web 标准高度对齐，易于理解和集成。
+
+
+
 
 ## 特性
 
-- 🚀 **高性能** - 基于 AntV/G 渲染引擎，支持大规模图数据
-- 🎨 **DOM 风格 API** - 类似原生 DOM 的操作方式
-- 🔧 **插件化架构** - 模块化设计，按需使用功能
-- 📦 **TypeScript 支持** - 完整的类型定义
-- 🌍 **国际化** - 支持多语言
-- 🎨 **主题定制** - 支持自定义主题和样式
+- 面向未来的架构设计，开放且可扩展
+- 类 DOM 风格 API，与 Web 标准一致，易用性强
+- 灵活的技术融合与生态适配
+- 强调可组合性与开发者体验
+- 支持多样化场景与持续演进
 
 ## 安装
 
@@ -344,5 +342,5 @@ MIT
 ## 相关链接
 
 - [AntV 官网](https://antv.vision/)
-- [AntV/G](https://g.antv.vision/)
+- [AntV/G](https://g.antv.antgroup.com/)
 - [GitHub](https://github.com/antvis/GE)
