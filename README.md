@@ -96,6 +96,11 @@ graph.addEventListener('click', (event) => {
 });
 ```
 
+<!-- 示例渲染截图 -->
+<p>
+  <img width="800" height="600" alt="Image" src="https://github.com/user-attachments/assets/55aacbb7-6d9d-4905-aa17-a960d28ce2fd" />
+</p>
+
 ## DOM 风格 API 设计
 
 ### 1. 元素创建和操作
