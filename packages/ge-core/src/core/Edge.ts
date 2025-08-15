@@ -1,7 +1,7 @@
 import { CustomElement, Line, Text, DisplayObject, Polyline } from '@antv/g-lite';
 import { resolveCtor } from '../utils/shapeResolver';
 import type { EdgeLayoutOptions, Vec2 } from '../utils/edgeLayout';
-import { computeAnchor } from './EdgeLayout';
+import { computeAnchor } from '../utils/edgeLayout';
 import type { BaseEdgeStyleProps } from '../types';
 import { EdgeMarker } from './EdgeMarker';
 import type { DisplayObjectConfigWithShape } from '../types';
