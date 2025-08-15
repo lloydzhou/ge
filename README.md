@@ -277,8 +277,8 @@ node.data.age = 31;
 │   ├── Node.ts          # 节点（继承 CustomElement）
 │   ├── Edge.ts          # 边（继承 CustomElement）
 │   ├── Port.ts          # 端口（继承 CustomElement）
-│   ├── EdgeMarker.ts    # 边端 marker 抽象（创建/更新/销毁）
-│   └── （EdgeLayout 已移至 utils/edgeLayout.ts，仅在 utils 中维护实现）
+│   └── EdgeMarker.ts    # 边端 marker 抽象（创建/更新/销毁）
+edgeLayout.ts，仅在 utils 中维护实现）
 ├── plugins/             # 插件系统（交互/工具）
 │   ├── ConnectionPlugin.ts
 │   ├── RendererPluginAdapter.ts
