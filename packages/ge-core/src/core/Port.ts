@@ -1,5 +1,5 @@
 import { CustomElement, Circle, DisplayObject } from '@antv/g-lite';
-import { resolveCtor } from './shapeResolver';
+import { resolveCtor } from '../utils/shapeResolver';
 import type { BasePortStyleProps } from '../types';
 
 export interface PortStyleProps extends BasePortStyleProps {
@@ -11,7 +11,7 @@ export interface PortStyleProps extends BasePortStyleProps {
   y?: number;
 }
 
-export type PortLayout =
+export type PortLayoutOptions =
   | 'top'
   | 'bottom'
   | 'left'
@@ -35,7 +35,7 @@ export interface PortConfig {
   parentId?: string;
   shape?: string | Function;
   style?: PortStyleProps;
-  layout?: PortLayout;
+  layout?: PortLayoutOptions;
   [key: string]: any;
 }
 
@@ -43,7 +43,7 @@ export class Port extends CustomElement<PortStyleProps> {
   private circle: DisplayObject | null = null;
   private data: any;
   public owner: any = null; // parent node reference
-  private layout: PortLayout | undefined;
+  private layout: PortLayoutOptions | undefined;
 
   constructor(config: PortConfig) {
     super({
@@ -111,10 +111,28 @@ export class Port extends CustomElement<PortStyleProps> {
       return;
     }
 
-    const shape = this.owner.getPrimaryShape();
-    if (!shape) {
-      return;
+    // Prefer using owner's computeAnchorForLayout if available (centralized logic)
+    try {
+      if (typeof (this.owner as any).computeAnchorForLayout === 'function') {
+        const p = (this.owner as any).computeAnchorForLayout(this.layout);
+        if (Array.isArray(p) && p.length >= 2) {
+          const pos = { x: Number(p[0] || 0), y: Number(p[1] || 0) };
+          try {
+            if (this.circle && (this.circle as any).style) {
+              (this.circle as any).style.cx = pos.x;
+              (this.circle as any).style.cy = pos.y;
+            }
+          } catch (e) {}
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore and fallback to local calculation
     }
+
+    // Fallback: compute based on owner's primary shape (back-compat)
+    const shape = this.owner.getPrimaryShape && this.owner.getPrimaryShape();
+    if (!shape) return;
 
     let pos = { x: 0, y: 0 };
 
@@ -160,8 +178,8 @@ export class Port extends CustomElement<PortStyleProps> {
             pos = { x: cx + r, y: cy };
             break;
         }
-      } else if (this.layout.name === 'angle') {
-        const angleRad = (this.layout.args.angle * Math.PI) / 180;
+      } else if ((this.layout as any).name === 'angle') {
+        const angleRad = (((this.layout as any).args?.angle ?? 0) * Math.PI) / 180;
         pos = {
           x: cx + r * Math.cos(angleRad),
           y: cy + r * Math.sin(angleRad),
@@ -169,8 +187,8 @@ export class Port extends CustomElement<PortStyleProps> {
       }
     }
 
-    if (typeof this.layout === 'object' && this.layout.name === 'absolute') {
-      pos = this.layout.args;
+    if (typeof this.layout === 'object' && (this.layout as any).name === 'absolute') {
+      pos = (this.layout as any).args;
     }
 
     try {

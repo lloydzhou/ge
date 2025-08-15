@@ -1,7 +1,8 @@
 import { CustomElement, Rect, Text, DisplayObject } from '@antv/g-lite';
-import { resolveCtor } from './shapeResolver';
+import { resolveCtor } from '../utils/shapeResolver';
 import type { BaseNodeStyleProps, DisplayObjectConfigWithShape } from '../types';
-import { Port, PortLayout } from './Port';
+import { Port, PortLayoutOptions } from './Port';
+import { computeAnchorForShape } from '../utils/nodeAnchor';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
@@ -188,7 +189,7 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
     return this.primaryShape;
   }
   
-  createPort(portConfig: { id?: string; layout?: PortLayout; style?: any; [key: string]: any } = {}): Port {
+  createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: any; [key: string]: any } = {}): Port {
     const portId = portConfig.id ? String(portConfig.id) : `port-${Math.random().toString(36).slice(2, 9)}`;
     const fullId = portId.includes(':') ? portId : `${this.getId()}:${portId}`;
 
@@ -344,6 +345,30 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
     }
 
     return this;
+  }
+  
+  /**
+   * Compute a point on or around the primary shape according to a PortLayoutOptions.
+   * Returns coordinates in the same local coordinate space used by the primary shape styles.
+   * Useful for positioning ports and node tools consistently.
+   */
+  public computeAnchorForLayout(layout?: PortLayoutOptions): [number, number] {
+    const shape: any = this.primaryShape as any;
+    const nodeStyle = this.data?.style || {};
+    try {
+      return computeAnchorForShape(shape, layout as any, nodeStyle);
+    } catch (e) {
+      try {
+        // fallback to center
+        if (shape && typeof (shape as any).getLocalBounds === 'function') {
+          const bounds: any = (this.primaryShape as any).getLocalBounds();
+          const centerX = (bounds.min[0] + bounds.max[0]) / 2;
+          const centerY = (bounds.min[1] + bounds.max[1]) / 2;
+          return [centerX, centerY];
+        }
+      } catch (er) {}
+      return [Number(nodeStyle.width || 100) / 2, Number(nodeStyle.height || 40) / 2];
+    }
   }
 }
 

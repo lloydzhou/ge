@@ -1,7 +1,7 @@
 import { DisplayObject, Circle, Polygon } from '@antv/g-lite';
-import type { Vec2 } from './EdgeLayout';
-import type { EdgeLayoutOptions } from './EdgeLayout';
-import { resolveCtor } from './shapeResolver';
+import type { Vec2 } from '../utils/edgeLayout';
+import type { EdgeLayoutOptions } from '../utils/edgeLayout';
+import { resolveCtor } from '../utils/shapeResolver';
 
 export type EdgeMarkerOptions = {
   enabled?: boolean;
