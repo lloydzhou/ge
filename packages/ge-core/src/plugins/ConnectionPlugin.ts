@@ -307,7 +307,7 @@ export class ConnectionPlugin {
       const doc = (this.graph as any).document;
       if (!doc || typeof (doc as any).elementsFromBBox !== 'function') return null;
 
-      const r = this.opts.pickRadius || 10; // pick radius in canvas coords
+      const r = this.opts.pickRadius || 2; // pick radius in canvas coords
       const maybe: any = (doc as any).elementsFromBBox(px - r, py - r, px + r, py + r);
 
       const pickFromArray = (elems: any[]): Node | Port | null => {

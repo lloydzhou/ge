@@ -1,5 +1,8 @@
 import { CustomElement, Line, Text, DisplayObject, Polyline, DisplayObjectConfig } from '@antv/g-lite';
+import type { EdgeLayoutOptions, Vec2 } from './EdgeLayout';
+import { computeAnchor } from './EdgeLayout';
 import type { BaseEdgeStyleProps } from '../types';
+import { EdgeMarker } from './EdgeMarker';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -8,6 +11,25 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
   label?: string;
   labelFill?: string;
   labelFontSize?: number;
+  labelOffset?: number; // offset along normal for label
+  startMarker?: {
+    enabled?: boolean;
+    type?: 'none' | 'circle' | 'triangle';
+    size?: number;
+    fill?: string;
+    stroke?: string;
+    lineWidth?: number;
+    layout?: EdgeLayoutOptions; // optional layout on edge
+  };
+  endMarker?: {
+    enabled?: boolean;
+    type?: 'none' | 'circle' | 'triangle';
+    size?: number;
+    fill?: string;
+    stroke?: string;
+    lineWidth?: number;
+    layout?: EdgeLayoutOptions; // optional layout on edge
+  };
 }
 
 export interface EdgeConfig {
@@ -26,7 +48,15 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   private targetNode: any = null;
   private _onSourceMoved: any = null;
   private _onTargetMoved: any = null;
-
+  // markers
+  private startMarker: DisplayObject | null = null;
+  private endMarker: DisplayObject | null = null;
+  private startMarkerCfg: NonNullable<EdgeStyleProps['startMarker']> = {};
+  private endMarkerCfg: NonNullable<EdgeStyleProps['endMarker']> = {};
+  private startMarkerObj: EdgeMarker | null = null;
+  private endMarkerObj: EdgeMarker | null = null;
+  private labelOffset: number = 0;
+  
   constructor(config: EdgeConfig) {
     super({
       ...config,
@@ -43,7 +73,26 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       label: '',
       labelFill: '#000',
       labelFontSize: 12,
-      ...config.style
+      ...(config.style || {})
+    } as EdgeStyleProps;
+    this.labelOffset = Number(style.labelOffset ?? 0);
+
+    const defaultColor = style.stroke || '#000';
+    this.startMarkerCfg = {
+      enabled: !!(style.startMarker && style.startMarker.enabled),
+      type: (style.startMarker && style.startMarker.type) || 'circle',
+      size: (style.startMarker && style.startMarker.size) ?? 4,
+      fill: (style.startMarker && style.startMarker.fill) ?? defaultColor,
+      stroke: (style.startMarker && style.startMarker.stroke) ?? defaultColor,
+      lineWidth: (style.startMarker && style.startMarker.lineWidth) ?? (style.lineWidth || 1),
+    };
+    this.endMarkerCfg = {
+      enabled: style.endMarker?.enabled !== false, // 默认启用终点箭头
+      type: (style.endMarker && style.endMarker.type) || 'triangle',
+      size: (style.endMarker && style.endMarker.size) ?? 6,
+      fill: (style.endMarker && style.endMarker.fill) ?? defaultColor,
+      stroke: (style.endMarker && style.endMarker.stroke) ?? defaultColor,
+      lineWidth: (style.endMarker && style.endMarker.lineWidth) ?? (style.lineWidth || 1),
     };
     
     this.primaryShape = this.createPrimaryShape({
@@ -60,6 +109,28 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       }
     });
     
+    // Create markers if enabled using EdgeMarker abstraction
+    this.startMarkerObj = this.startMarkerCfg.enabled ? new EdgeMarker({
+      enabled: this.startMarkerCfg.enabled,
+      type: (this.startMarkerCfg.type as any) || 'circle',
+      size: this.startMarkerCfg.size,
+      fill: this.startMarkerCfg.fill,
+      stroke: this.startMarkerCfg.stroke,
+      lineWidth: this.startMarkerCfg.lineWidth,
+      layout: this.startMarkerCfg.layout,
+    }) : null;
+    this.endMarkerObj = this.endMarkerCfg.enabled ? new EdgeMarker({
+      enabled: this.endMarkerCfg.enabled,
+      type: (this.endMarkerCfg.type as any) || 'triangle',
+      size: this.endMarkerCfg.size,
+      fill: this.endMarkerCfg.fill,
+      stroke: this.endMarkerCfg.stroke,
+      lineWidth: this.endMarkerCfg.lineWidth,
+      layout: this.endMarkerCfg.layout,
+    }) : null;
+    this.startMarker = this.startMarkerObj ? this.startMarkerObj.getDisplayObject() : null;
+    this.endMarker = this.endMarkerObj ? this.endMarkerObj.getDisplayObject() : null;
+    
     // Create the edge label
     this.label = new Text({
       style: {
@@ -71,8 +142,10 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       }
     });
     
-    // Add children to the group
+    // Add children to the group: line -> markers -> label
     super.appendChild(this.primaryShape);
+    if (this.startMarker) super.appendChild(this.startMarker);
+    if (this.endMarker) super.appendChild(this.endMarker);
     super.appendChild(this.label);
   }
   
@@ -147,40 +220,47 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
    */
   private positionLabel(): void {
     try {
-      // Get the bounding box of the primary shape
-      // getBBox returns a DOMRect with x, y, width, height properties
-      const bbox = this.primaryShape.getBBox();
-      
-      if (bbox) {
-        // Calculate center from DOMRect properties
-        const centerX = bbox.x + bbox.width / 2;
-        const centerY = bbox.y + bbox.height / 2;
-        this.label.setLocalPosition([centerX, centerY]);
-      } else {
-        // Fallback to mid-point calculation for lines
-        if (this.primaryShape instanceof Line) {
-          const x1 = this.primaryShape.style.x1 || 0;
-          const y1 = this.primaryShape.style.y1 || 0;
-          const x2 = this.primaryShape.style.x2 || 0;
-          const y2 = this.primaryShape.style.y2 || 0;
-          this.label.setLocalPosition([(x1 + x2) / 2, (y1 + y2) / 2]);
-        } else {
-          // Fallback to a default position
-          this.label.setLocalPosition([150, 100]);
-        }
-      }
+      const pts = this.getEdgePoints();
+      const anchor = computeAnchor(pts, { t: 0.5, offset: { normal: this.labelOffset } });
+      this.label.setLocalPosition([anchor.x, anchor.y]);
     } catch (error) {
-      // Fallback to mid-point calculation for lines
-      if (this.primaryShape instanceof Line) {
-        const x1 = this.primaryShape.style.x1 || 0;
-        const y1 = this.primaryShape.style.y1 || 0;
-        const x2 = this.primaryShape.style.x2 || 0;
-        const y2 = this.primaryShape.style.y2 || 0;
-        this.label.setLocalPosition([(x1 + x2) / 2, (y1 + y2) / 2]);
-      } else {
-        // Fallback to a default position
-        this.label.setLocalPosition([150, 100]);
-      }
+      // ignore label positioning errors
+    }
+  }
+  
+  private updateMarkers() {
+    // Delegating marker layout to EdgeMarker instances
+    try {
+      const pts = this.getEdgePoints();
+      const startAnchor = computeAnchor(pts, this.startMarkerCfg.layout || { snap: 'start' });
+      const endAnchor = computeAnchor(pts, this.endMarkerCfg.layout || { snap: 'end' });
+      if (this.startMarkerObj) this.startMarkerObj.update(startAnchor);
+      if (this.endMarkerObj) this.endMarkerObj.update(endAnchor);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  private getEdgePoints(): Vec2[] {
+    if (this.primaryShape instanceof Line) {
+      const x1 = Number(this.primaryShape.style.x1) || 0;
+      const y1 = Number(this.primaryShape.style.y1) || 0;
+      const x2 = Number(this.primaryShape.style.x2) || 0;
+      const y2 = Number(this.primaryShape.style.y2) || 0;
+      return [[x1, y1], [x2, y2]];
+    }
+    if (this.primaryShape instanceof Polyline) {
+      const pts = (this.primaryShape.style as any).points as number[][] | undefined;
+      if (Array.isArray(pts) && pts.length >= 2) return pts as Vec2[];
+    }
+    // fallback: try bbox center for both ends (degenerate)
+    try {
+      const bbox = this.primaryShape.getBBox();
+      const cx = bbox.x + bbox.width / 2;
+      const cy = bbox.y + bbox.height / 2;
+      return [[cx, cy], [cx, cy]];
+    } catch {
+      return [[0, 0], [0, 0]];
     }
   }
   
@@ -197,10 +277,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
         
         // If it's a node, get its edge position (closest point on border)
         if (endpoint && typeof endpoint.getPrimaryShape === 'function') {
-          const shape = endpoint.getPrimaryShape();
-          const [nodeX, nodeY] = endpoint.getPosition(); // 获取节点在图中的位置
+           const [nodeX, nodeY] = endpoint.getPosition(); // 获取节点在图中的位置
           
-          return [nodeX, nodeY]; // 先返回节点中心，稍后计算边缘交点
+           return [nodeX, nodeY]; // 先返回节点中心，稍后计算边缘交点
         }
         
         // Final fallback: use node position or [0,0]
@@ -257,6 +336,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
           ],
         });
       }
+
+      // update markers after primary shape laid out
+      this.updateMarkers();
 
       this.positionLabel();
     } catch (e) {
@@ -506,6 +588,14 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
         if (this._onSourceMoved) graph.eventBus.removeEventListener('node:moved', this._onSourceMoved);
         if (this._onTargetMoved) graph.eventBus.removeEventListener('node:moved', this._onTargetMoved);
       }
+    } catch (e) {
+      // ignore
+    }
+
+    // dispose markers
+    try {
+      if (this.startMarkerObj) this.startMarkerObj.dispose();
+      if (this.endMarkerObj) this.endMarkerObj.dispose();
     } catch (e) {
       // ignore
     }
