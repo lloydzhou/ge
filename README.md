@@ -266,95 +266,63 @@ console.log(node.data.name); // 'John'
 node.data.age = 31;
 ```
 
-## 架构设计
+## 架构设计（更新）
+
+项目采用模块化、可插拔的设计，核心按职责拆分：
 
 ```
 @antv/ge/
-├── Graph.ts           # 图容器（继承 Canvas）
-├── Node.ts            # 节点（继承 CustomElement）
-├── Edge.ts            # 边（继承 CustomElement）
-├── Port.ts            # 端口（继承 CustomElement）
-├── plugins/           # 插件系统
-│   ├── Selection.ts   # 选择插件
-│   ├── Drag.ts        # 拖拽插件
-│   ├── Resize.ts      # 缩放插件
-│   ├── Connect.ts     # 连接插件
-│   └── Align.ts       # 对齐插件
-├── themes/            # 主题系统
-├── utils/             # 工具函数
-└── types/             # 类型定义
+├── core/                # 核心实现（对外仍通过 packages/ge-core/src/index.ts 暴露）
+│   ├── Graph.ts         # 图容器（继承 Canvas）
+│   ├── Node.ts          # 节点（继承 CustomElement）
+│   ├── Edge.ts          # 边（继承 CustomElement）
+│   ├── Port.ts          # 端口（继承 CustomElement）
+│   ├── EdgeMarker.ts    # 边端 marker 抽象（创建/更新/销毁）
+│   └── EdgeLayout.ts    # 轻量 re-export（指向 utils 中的实现）
+├── plugins/             # 插件系统（交互/工具）
+│   ├── ConnectionPlugin.ts
+│   ├── RendererPluginAdapter.ts
+│   └── ...
+├── utils/               # 工具函数（推荐直接引用）
+│   ├── shapeResolver.ts # 运行时 shape 解析（优先使用 graph.document.customElements）
+│   ├── edgeLayout.ts    # Edge 上的 anchor 计算（computeAnchor）
+│   └── nodeAnchor.ts    # Node/Port 通用的 anchor 计算（computeAnchorForShape）
+└── types/               # 类型定义与共享类型
 ```
 
-## 开发路线图
+关键设计点：
+- 运行时 shape 注册与解析：优先使用 graph.document.customElements（支持按图隔离的自定义形状），API 接受 `shape?: string | Function`。
+- 去中心化布局计算：Edge 的 anchor（computeAnchor）和 Node 的 anchor（computeAnchorForShape）都放在 utils，Port/EdgeMarker/工具复用同一套计算，便于扩展和测试。
+- Marker 抽象（EdgeMarker）：负责 marker 的创建、朝向、位置更新与销毁，Edge 只负责提供 anchor。
+- 插件化：交互（连接、拖拽、对齐等）以插件形式实现，便于按需加载和替换实现。
 
-### Phase 1: 基础架构搭建 (1-2周)
 
-- [ ] 项目初始化和基础结构搭建
-- [ ] Graph 核心类实现（继承 Canvas）
-- [ ] Node 核心类实现（继承 CustomElement）
-- [ ] Edge 核心类实现（继承 CustomElement）
-- [ ] Port 核心类实现（继承 CustomElement）
-- [ ] DOM 风格 API 实现（appendChild, removeChild, querySelector 等）
-- [ ] 基础事件系统
+## 开发路线图（更新与优先级）
 
-### Phase 2: 核心编辑功能 (2-3周)
+短期优先（当前迭代，1-2 周）
+- [ ] 类型巩固：将 `shape?: string|Function` 等类型统一到共享 types，移除临时的 any/ts-ignore。 (高)
+- [ ] 文档与示例：完善 README、examples，添加自定义 shape、port、marker 的使用示例并保证示例覆盖 polygon/ellipse/angle 等场景。(高)
+- [ ] 单元测试：为 utils（edgeLayout/nodeAnchor/shapeResolver）编写单元测试，覆盖关键几何和边界条件。(中)
 
-- [ ] 节点拖拽功能
-- [ ] 边的连接功能
-- [ ] 基础选择功能
-- [ ] 节点删除功能
-- [ ] 端口系统实现
-- [ ] 样式和属性操作 API
+中期计划（2-6 周）
+- [ ] 插件完善：使 ConnectionPlugin/Drag/Selection 等具备更完善的拾取与交互逻辑（包含异步拾取支持）。(中)
+- [ ] 性能与稳定性：解决内存泄漏、提高大图渲染性能、增加更多集成测试与基准测试。(中)
+- [ ] 类型导出与包入口：在包顶层导出常用 utils/types，改善外部使用体验。(中)
 
-### Phase 3: 插件系统实现 (2-3周)
+长期目标（6 周以上）
+- [ ] 高级编辑功能：自动布局、控制点编辑、撤销/重做、快捷键与工具栏体系。(低)
+- [ ] 生态与集成：提供 React/Vue 封装、示例模板与官方教程。(低)
 
-- [ ] 插件架构设计
-- [ ] 选择插件（Selection Plugin）
-- [ ] 拖拽插件（Drag Plugin）
-- [ ] 缩放插件（Resize Plugin）
-- [ ] 连接插件（Connect Plugin）
-- [ ] 对齐插件（Align Plugin）
-
-### Phase 4: 高级编辑功能 (3-4周)
-
-- [ ] 多选和框选功能
-- [ ] 节点旋转功能
-- [ ] 边的控制点编辑
-- [ ] 撤销/重做功能
-- [ ] 网格对齐和吸附功能
-- [ ] 快捷键支持
-
-### Phase 5: 性能优化和稳定性 (2-3周)
-
-- [ ] 大规模数据性能优化
-- [ ] 内存泄漏检测和修复
-- [ ] 单元测试覆盖率提升
-- [ ] 性能基准测试
-- [ ] 文档完善
-
-### Phase 6: 高级特性和生态 (3-4周)
-
-- [ ] 自动布局插件
-- [ ] 导出/导入功能（JSON、图片等）
-- [ ] React/Vue 组件封装
-- [ ] 主题系统
-- [ ] 国际化支持
-- [ ] 官方示例和模板
-
-### Phase 7: 生产就绪 (2周)
-
-- [ ] 完整的文档和教程
-- [ ] 性能测试报告
-- [ ] 兼容性测试
-- [ ] 发布 1.0 版本
-- [ ] 社区推广
+如果你同意，我可以马上：
+- 将 README 中的“高级用法”示例也替换为使用 `shape` 参数的版本（把 CustomNode 示例改为示范如何继承并使用 shape），并把上面文档里的要点进一步压缩成 API 摘要；或
+- 直接开始为 `computeAnchorForShape` 写单元测试（需要我先检查项目是否有测试框架，例如 jest 或 vitest）。
 
 ## 与 DOM API 的对应关系
 
 | GE API | DOM API | 说明 |
 |--------|---------|------|
 | `graph.appendChild(node)` | `parent.appendChild(child)` | 添加子元素 |
-| `graph.removeChild(node)` | `parent.removeChild(child)` | 移除子元素 |
+| `graph.removeChild(node)` | `parent.removeChild(child)` | 秼除子元素 |
 | `graph.getElementById(id)` | `document.getElementById(id)` | 通过 ID 获取元素 |
 | `graph.querySelectorAll(selector)` | `document.querySelectorAll(selector)` | 查询元素 |
 | `node.addEventListener(type, handler)` | `element.addEventListener(type, handler)` | 添加事件监听器 |
