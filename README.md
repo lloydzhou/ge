@@ -1,6 +1,6 @@
 # GE - Graph Editor for G
 
-基于 [AntV/G](https://g.antv.antgroup.com/)，采用类似 DOM 的 API 设计的现代化图编辑器库。
+基于 [AntV/G](https://g.antv.antgroup.com/)，采用类 DOM 的 API 设计的现代化图编辑器库。
 
 GE 以开放、可扩展的架构为核心，面向多样化场景和未来需求，强调灵活性、可组合性与技术融合。关注开发者体验，致力于推动图编辑技术的边界。
 
