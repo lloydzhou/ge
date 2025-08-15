@@ -1,8 +1,10 @@
-import { CustomElement, Line, Text, DisplayObject, Polyline, DisplayObjectConfig } from '@antv/g-lite';
+import { CustomElement, Line, Text, DisplayObject, Polyline } from '@antv/g-lite';
+import { resolveCtor } from './shapeResolver';
 import type { EdgeLayoutOptions, Vec2 } from './EdgeLayout';
 import { computeAnchor } from './EdgeLayout';
 import type { BaseEdgeStyleProps } from '../types';
 import { EdgeMarker } from './EdgeMarker';
+import type { DisplayObjectConfigWithShape } from '../types';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -20,6 +22,7 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
     stroke?: string;
     lineWidth?: number;
     layout?: EdgeLayoutOptions; // optional layout on edge
+    shape?: string | Function; // registry name or ctor
   };
   endMarker?: {
     enabled?: boolean;
@@ -29,11 +32,13 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
     stroke?: string;
     lineWidth?: number;
     layout?: EdgeLayoutOptions; // optional layout on edge
+    shape?: string | Function; // registry name or ctor
   };
 }
 
 export interface EdgeConfig {
   id: string;
+  shape?: string | Function;
   source: string | any; // 支持字符串ID或直接对象引用(Node/Port)
   target: string | any; // 支持字符串ID或直接对象引用(Node/Port)  
   style?: EdgeStyleProps;
@@ -85,6 +90,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       fill: (style.startMarker && style.startMarker.fill) ?? defaultColor,
       stroke: (style.startMarker && style.startMarker.stroke) ?? defaultColor,
       lineWidth: (style.startMarker && style.startMarker.lineWidth) ?? (style.lineWidth || 1),
+      // allow registry name passthrough
+      // @ts-ignore
+      shape: style.startMarker ? ((style.startMarker as any).shape || (style.startMarker as any).typeName) : undefined,
     };
     this.endMarkerCfg = {
       enabled: style.endMarker?.enabled !== false, // 默认启用终点箭头
@@ -93,6 +101,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       fill: (style.endMarker && style.endMarker.fill) ?? defaultColor,
       stroke: (style.endMarker && style.endMarker.stroke) ?? defaultColor,
       lineWidth: (style.endMarker && style.endMarker.lineWidth) ?? (style.lineWidth || 1),
+      // allow registry name passthrough
+      // @ts-ignore
+      shape: style.endMarker ? ((style.endMarker as any).shape || (style.endMarker as any).typeName) : undefined,
     };
     
     this.primaryShape = this.createPrimaryShape({
@@ -118,7 +129,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       stroke: this.startMarkerCfg.stroke,
       lineWidth: this.startMarkerCfg.lineWidth,
       layout: this.startMarkerCfg.layout,
-    }) : null;
+      // pass registry name/ctor under unified 'shape' field used by EdgeMarker
+      shape: (this.startMarkerCfg as any).shape || (this.startMarkerCfg as any).typeName,
+    }, this) : null;
     this.endMarkerObj = this.endMarkerCfg.enabled ? new EdgeMarker({
       enabled: this.endMarkerCfg.enabled,
       type: (this.endMarkerCfg.type as any) || 'triangle',
@@ -127,7 +140,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       stroke: this.endMarkerCfg.stroke,
       lineWidth: this.endMarkerCfg.lineWidth,
       layout: this.endMarkerCfg.layout,
-    }) : null;
+      shape: (this.endMarkerCfg as any).shape || (this.endMarkerCfg as any).typeName,
+    }, this) : null;
     this.startMarker = this.startMarkerObj ? this.startMarkerObj.getDisplayObject() : null;
     this.endMarker = this.endMarkerObj ? this.endMarkerObj.getDisplayObject() : null;
     
@@ -149,9 +163,16 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     super.appendChild(this.label);
   }
   
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): T {
+  protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): T {
     // This method should be overridden by subclasses to create the appropriate shape
     // For the base Edge class, we default to Line
+    // try resolving a registered ctor from config.primaryShapeType if provided
+    // @ts-ignore
+    const ptype = (config as any).shape;
+    const ctor = resolveCtor(this, ptype);
+    if (ctor) {
+      try { return new ctor(config) as unknown as T; } catch (e) {}
+    }
     return new Line(config) as unknown as T;
   }
 
@@ -602,15 +623,4 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
 }
 
-// Predefined edge types
-export class LineEdge extends Edge<Line> {
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): Line {
-    return new Line(config);
-  }
-}
-
-export class PolylineEdge extends Edge<Polyline> {
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): Polyline {
-    return new Polyline(config);
-  }
-}
+// legacy specific edge classes removed in favor of registry-based 'shape' option

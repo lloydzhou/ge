@@ -1,4 +1,5 @@
-import { CustomElement, Circle } from '@antv/g-lite';
+import { CustomElement, Circle, DisplayObject } from '@antv/g-lite';
+import { resolveCtor } from './shapeResolver';
 import type { BasePortStyleProps } from '../types';
 
 export interface PortStyleProps extends BasePortStyleProps {
@@ -32,13 +33,14 @@ export type PortLayout =
 export interface PortConfig {
   id: string; // unique id, may be namespaced by node e.g. `${nodeId}:${portId}`
   parentId?: string;
+  shape?: string | Function;
   style?: PortStyleProps;
   layout?: PortLayout;
   [key: string]: any;
 }
 
 export class Port extends CustomElement<PortStyleProps> {
-  private circle: Circle;
+  private circle: DisplayObject | null = null;
   private data: any;
   public owner: any = null; // parent node reference
   private layout: PortLayout | undefined;
@@ -63,20 +65,45 @@ export class Port extends CustomElement<PortStyleProps> {
       ...config.style,
     };
 
-    // Create the port circle (position is relative)
-    this.circle = new Circle({
-      style: {
-        r: style.r || 3,
-        fill: style.fill,
-        stroke: style.stroke,
-        lineWidth: style.lineWidth,
-        cx: style.x || 0,
-        cy: style.y || 0,
-      },
-    });
-
-    // Add children to the group
-    super.appendChild(this.circle);
+    // Try to create port shape immediately using config.shape (falls back to global registry),
+    // so ports are visible even before connectedCallback.
+    let initialShape: any = null;
+    try {
+      const ctor = resolveCtor(this, config.shape as any);
+      if (ctor) {
+        try {
+          initialShape = new ctor({
+            style: {
+              r: Number(style.r ?? 3),
+              fill: style.fill,
+              stroke: style.stroke,
+              lineWidth: Number(style.lineWidth ?? 1),
+              cx: Number(style.x ?? 0),
+              cy: Number(style.y ?? 0),
+            },
+          });
+        } catch (e) {
+          initialShape = null;
+        }
+      }
+    } catch (e) {}
+    if (!initialShape) {
+      initialShape = new Circle({
+        style: {
+          r: Number(style.r ?? 3),
+          fill: style.fill,
+          stroke: style.stroke,
+          lineWidth: Number(style.lineWidth ?? 1),
+          cx: Number(style.x ?? 0),
+          cy: Number(style.y ?? 0),
+        },
+      });
+    }
+    this.circle = initialShape;
+    // Add to group so it's visible immediately; connectedCallback will skip creation if already present
+    try {
+      super.appendChild(this.circle as any);
+    } catch (e) {}
   }
 
   public updatePosition(): void {
@@ -89,14 +116,13 @@ export class Port extends CustomElement<PortStyleProps> {
       return;
     }
 
-    const style = shape.style || {};
     let pos = { x: 0, y: 0 };
 
     if (shape.nodeName === 'rect') {
-      const w = style.width || 0;
-      const h = style.height || 0;
-      const x = style.x || 0;
-      const y = style.y || 0;
+      const w = shape.style.width || 0;
+      const h = shape.style.height || 0;
+      const x = shape.style.x || 0;
+      const y = shape.style.y || 0;
       if (typeof this.layout === 'string') {
         switch (this.layout) {
           case 'top':
@@ -116,9 +142,9 @@ export class Port extends CustomElement<PortStyleProps> {
     }
 
     if (shape.nodeName === 'circle') {
-      const cx = style.cx || 0;
-      const cy = style.cy || 0;
-      const r = style.r || 0;
+      const cx = shape.style.cx || 0;
+      const cy = shape.style.cy || 0;
+      const r = shape.style.r || 0;
       if (typeof this.layout === 'string') {
         switch (this.layout) {
           case 'top':
@@ -147,8 +173,12 @@ export class Port extends CustomElement<PortStyleProps> {
       pos = this.layout.args;
     }
 
-    this.circle.style.cx = pos.x;
-    this.circle.style.cy = pos.y;
+    try {
+      if (this.circle && (this.circle as any).style) {
+        (this.circle as any).style.cx = pos.x;
+        (this.circle as any).style.cy = pos.y;
+      }
+    } catch (e) {}
   }
 
   /**
@@ -170,8 +200,8 @@ export class Port extends CustomElement<PortStyleProps> {
    */
   getRelativePosition(): [number, number] {
     try {
-      const cx = Number(this.circle.style.cx) || 0;
-      const cy = Number(this.circle.style.cy) || 0;
+      const cx = Number((this.circle as any)?.style?.cx) || 0;
+      const cy = Number((this.circle as any)?.style?.cy) || 0;
       return [cx, cy];
     } catch (e) {
       return [0, 0];

@@ -1,6 +1,7 @@
 import { DisplayObject, Circle, Polygon } from '@antv/g-lite';
 import type { Vec2 } from './EdgeLayout';
 import type { EdgeLayoutOptions } from './EdgeLayout';
+import { resolveCtor } from './shapeResolver';
 
 export type EdgeMarkerOptions = {
   enabled?: boolean;
@@ -10,6 +11,7 @@ export type EdgeMarkerOptions = {
   stroke?: string;
   lineWidth?: number;
   layout?: EdgeLayoutOptions;
+  shape?: string | Function; // optional registry name or ctor
 };
 
 export type EdgeAnchor = {
@@ -22,9 +24,11 @@ export type EdgeAnchor = {
 export class EdgeMarker {
   private cfg: EdgeMarkerOptions;
   private node: DisplayObject | null = null;
+  private host: any = null;
 
-  constructor(cfg: EdgeMarkerOptions) {
+  constructor(cfg: EdgeMarkerOptions, host?: any) {
     this.cfg = cfg || {};
+    this.host = host;
     this.node = this.createNode();
   }
 
@@ -34,6 +38,18 @@ export class EdgeMarker {
     const fill = this.cfg.fill ?? '#000';
     const stroke = this.cfg.stroke ?? '#000';
     const lineWidth = this.cfg.lineWidth ?? 1;
+
+    // try custom constructor from registry if provided
+    const shapeName = this.cfg.shape;
+    const ctx = this.host || (this as any);
+    const ctor = resolveCtor(ctx, shapeName as any);
+    if (ctor) {
+      try {
+        return new ctor({ style: { r: size / 2, fill, stroke, lineWidth } });
+      } catch (e) {
+        // ignore and fallback
+      }
+    }
 
     if (this.cfg.type === 'circle') {
       return new Circle({

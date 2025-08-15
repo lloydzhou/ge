@@ -1,5 +1,6 @@
-import { CustomElement, Rect, Text, DisplayObject, Circle, DisplayObjectConfig } from '@antv/g-lite';
-import type { BaseNodeStyleProps } from '../types';
+import { CustomElement, Rect, Text, DisplayObject } from '@antv/g-lite';
+import { resolveCtor } from './shapeResolver';
+import type { BaseNodeStyleProps, DisplayObjectConfigWithShape } from '../types';
 import { Port, PortLayout } from './Port';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
@@ -18,6 +19,7 @@ export interface NodeConfig {
   id: string;
   x?: number;
   y?: number;
+  shape?: string | Function;
   style?: NodeStyleProps;
   [key: string]: any;
 }
@@ -41,7 +43,9 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
       super.setPosition(config.x, config.y);
     }
 
-    this.primaryShape = this.createPrimaryShape({ ...config, id: `${config.id}-primary` });
+    // pass through shape but cast to any to avoid DisplayObjectConfig excess property error
+    // @ts-ignore
+    this.primaryShape = this.createPrimaryShape(({ ...(config as any), id: `${config.id}-primary`, shape: config.shape } as any));
 
     // Create the node label
     this.label = new Text({
@@ -66,9 +70,15 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
     }
   }
   
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): T {
+  protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): T {
     // This method should be overridden by subclasses to create the appropriate shape
     // For the base Node class, we default to Rect
+    // try resolving a registered ctor from config.shape if provided
+    const ptype = (config as any).shape || (this.data && this.data.shape);
+    const ctor = resolveCtor(this, ptype as any);
+    if (ctor) {
+      try { return new ctor(config) as unknown as T; } catch (e) {}
+    }
     return new Rect(config) as unknown as T;
   }
   
@@ -337,15 +347,4 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
   }
 }
 
-// Predefined node types
-export class RectNode extends Node<Rect> {
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): Rect {
-    return new Rect(config);
-  }
-}
-
-export class CircleNode extends Node<Circle> {
-  protected createPrimaryShape(config: DisplayObjectConfig<any>): Circle {
-    return new Circle(config);
-  }
-}
+// legacy specific node classes removed in favor of registry-based 'shape' option

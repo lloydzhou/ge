@@ -28,8 +28,8 @@
   <script src="../node_modules/@antv/g-plugin-dragndrop/dist/index.umd.min.js"></script>
   <script src="../packages/ge-core/dist/index.umd.min.js"></script>
   <script>
-    const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop } = window.G;
-    const { Graph, Node, RectNode, CircleNode, Edge, ConnectionPlugin } = window.GE;
+    const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape } = window.G;
+    const { Graph, Node, Edge, ConnectionPlugin } = window.GE;
 
     const renderer = new window.G.SVG.Renderer()
     renderer.registerPlugin(new Annotation.Plugin());
@@ -43,6 +43,9 @@
       renderer,
     });
 
+    // Register a custom circle shape constructor under name 'custom-circle'
+    graph.customElements.define('custom-circle', Circle);
+
     // Wait for canvas to be ready before adding elements
     graph.ready.then(() => {
       console.log('Graph ready, creating nodes and edges...');
@@ -50,11 +53,14 @@
       const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
       graph.installPlugin(conn);
       
-      // Create a circle node
-      const circleNode = new CircleNode({
+      // Create a circle node using registry name
+      const circleNode = new Node({
         id: 'circle-node',
         x: 100,
         y: 100,
+        // shape: 'custom-circle', // Use the registered name
+        // shape: Shape.CIRCLE, // 'custom-circle',
+        shape: Circle, // Use Circle directly
         style: {
           r: 40,
           fill: '#1890ff',
@@ -66,11 +72,12 @@
         }
       });
 
-      // Create another circle node
-      const customCircleNode = new CircleNode({
+      // Create another circle node using ctor directly
+      const customCircleNode = new Node({
         id: 'custom-circle-node',
         x: 200,
         y: 200,
+        shape: Circle,
         style: {
           r: 30,
           fill: '#ff0000',
@@ -86,8 +93,8 @@
       graph.appendChild(circleNode);
       graph.appendChild(customCircleNode);
 
-      // Create a rect node
-      const rectNode = new RectNode({
+      // Create a rect node using default rect (no shape override)
+      const rectNode = new Node({
         id: 'rect-node',
         x: 300,
         y: 100,
