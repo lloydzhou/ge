@@ -5,6 +5,7 @@ import type { Node } from '../core/Node';
 
 export interface ConnectionPluginOptions {
   defaultEdgeStyle?: any;
+  pickRadius?: number; // radius in canvas coordinates for picking endpoints
 }
 
 export class ConnectionPlugin {
@@ -46,10 +47,45 @@ export class ConnectionPlugin {
       };
     };
 
+    const cleanupTemp = () => {
+      try {
+        if (this.tempEdge && this.graph) this.graph.removeChild(this.tempEdge);
+      } catch (err) {}
+      this.tempEdge = null;
+      this.virtualTarget = null;
+      this.startEndpoint = null;
+      this.startPos = null;
+    };
+
     this._onPointerDown = (e: any) => {
       try {
-        const target = e.target || e.path?.[0];
-        const endpoint = this._findNodeOrPort(target);
+        const pick = this._pickEndpointFromEvent(e);
+        if (pick && typeof (pick as any).then === 'function') {
+          // async result
+          (pick as unknown as Promise<any>).then((endpoint) => {
+            try {
+              if (!endpoint) return;
+              this.startEndpoint = endpoint;
+              this.startPos = this._computeEndpointPosition(endpoint);
+              this.virtualTarget = createVirtualEndpoint(this.startPos[0], this.startPos[1]);
+              this.tempEdge = new Edge({
+                id: `tmp-edge-${Math.random().toString(36).slice(2, 9)}`,
+                source: this.startEndpoint,
+                target: this.virtualTarget,
+                style: {
+                  ...(this.opts.defaultEdgeStyle || {}),
+                }
+              });
+              if (this.graph) this.graph.appendChild(this.tempEdge);
+              try { this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget); } catch (e) {}
+            } catch (err) {
+              // ignore
+            }
+          }).catch(() => {});
+           return;
+         }
+
+        const endpoint = pick as any;
         if (endpoint) {
           this.startEndpoint = endpoint;
           // compute start position
@@ -73,7 +109,7 @@ export class ConnectionPlugin {
             // ensure geometry is initialized
             this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget);
           } catch (err) {
-            // ignore append errors
+            console.error && console.error('[connection] failed create tempEdge', err);
           }
         }
       } catch (err) {
@@ -118,42 +154,84 @@ export class ConnectionPlugin {
     this._onPointerUp = (e: any) => {
       try {
         if (!this.startEndpoint) return;
-        const target = e.target || e.path?.[0];
-        const endpoint = this._findNodeOrPort(target);
-        if (endpoint && endpoint !== this.startEndpoint) {
-          // ensure ports have up-to-date positions
-          try {
-            if (typeof (this.startEndpoint as any).updatePosition === 'function') (this.startEndpoint as any).updatePosition();
-            if (typeof (endpoint as any).updatePosition === 'function') (endpoint as any).updatePosition();
-          } catch (err) {}
 
-          // prefer using IDs for robust resolution (node:port or node id) when available
-          const sourceVal = (typeof (this.startEndpoint as any).getId === 'function') ? (this.startEndpoint as any).getId() : this.startEndpoint;
-          const targetVal = (typeof (endpoint as any).getId === 'function') ? (endpoint as any).getId() : endpoint;
+        const pick = this._pickEndpointFromEvent(e);
+        if (pick && typeof (pick as any).then === 'function') {
+          // async endpoint resolution
+          (pick as unknown as Promise<any>).then((endpoint) => {
+            try {
+              if (!endpoint) {
+                cleanupTemp();
+                return;
+              }
+              if (endpoint === this.startEndpoint) {
+                cleanupTemp();
+                return;
+              }
 
-          // create a real Edge between startEndpoint and endpoint
-          const edge = new Edge({
-            id: `edge-${Math.random().toString(36).slice(2, 9)}`,
-            source: sourceVal,
-            target: targetVal,
-            style: {
-              ...(this.opts.defaultEdgeStyle || {}),
+              try {
+                if (typeof (this.startEndpoint as any).updatePosition === 'function') (this.startEndpoint as any).updatePosition();
+                if (typeof (endpoint as any).updatePosition === 'function') (endpoint as any).updatePosition();
+              } catch (err) {}
+
+              const edge = new Edge({
+                id: `edge-${Math.random().toString(36).slice(2, 9)}`,
+                source: this.startEndpoint,
+                target: endpoint,
+                style: {
+                  ...(this.opts.defaultEdgeStyle || {}),
+                }
+              });
+
+              if (this.graph) {
+                try { this.graph.appendChild(edge); } catch (err) { console.error && console.error('[connection] appendChild failed', err); }
+                try { if (typeof (this.startEndpoint as any).updatePosition === 'function') (this.startEndpoint as any).updatePosition(); if (typeof (endpoint as any).updatePosition === 'function') (endpoint as any).updatePosition(); } catch (err) {}
+                try { edge.connectTo(this.startEndpoint, endpoint); } catch (err) { console.error && console.error('[connection] connectTo failed', err); }
+              }
+            } catch (err) {
+              // ignore
+            } finally {
+              cleanupTemp();
             }
-          });
-          // append to graph
-          if (this.graph) this.graph.appendChild(edge);
+          }).catch(() => { cleanupTemp(); });
+
+          return;
         }
+
+        // synchronous path
+        const endpoint = pick as any;
+        if (!endpoint) {
+          cleanupTemp();
+          return;
+        }
+        if (endpoint === this.startEndpoint) {
+          cleanupTemp();
+          return;
+        }
+
+        try {
+          if (typeof (this.startEndpoint as any).updatePosition === 'function') (this.startEndpoint as any).updatePosition();
+          if (typeof (endpoint as any).updatePosition === 'function') (endpoint as any).updatePosition();
+        } catch (err) {}
+
+        const edge = new Edge({
+          id: `edge-${Math.random().toString(36).slice(2, 9)}`,
+          source: this.startEndpoint,
+          target: endpoint,
+          style: {
+            ...(this.opts.defaultEdgeStyle || {}),
+          }
+        });
+
+        if (this.graph) {
+          try { this.graph.appendChild(edge); } catch (err) { console.error && console.error('[connection] appendChild failed', err); }
+          try { if (typeof (this.startEndpoint as any).updatePosition === 'function') (this.startEndpoint as any).updatePosition(); if (typeof (endpoint as any).updatePosition === 'function') (endpoint as any).updatePosition(); } catch (err) {}
+          try { edge.connectTo(this.startEndpoint, endpoint); } catch (err) { console.error && console.error('[connection] connectTo failed', err); }
+        }
+
+        cleanupTemp();
       } catch (err) {
         // ignore
-      } finally {
-        // cleanup temp edge and virtual target
-        try {
-          if (this.tempEdge && this.graph) this.graph.removeChild(this.tempEdge);
-        } catch (err) {}
-        this.tempEdge = null;
-        this.virtualTarget = null;
-        this.startEndpoint = null;
-        this.startPos = null;
       }
     };
 
@@ -188,20 +266,6 @@ export class ConnectionPlugin {
     this.startPos = null;
   }
 
-  private _findNodeOrPort(el: any): Node | Port | null {
-    try {
-      let cur = el;
-      while (cur) {
-        // Prefer Port detection first (ports expose getAbsolutePosition)
-        if (typeof cur.getAbsolutePosition === 'function') return cur as Port;
-        // Node detection: check for node-specific port APIs to avoid matching Edge objects
-        if (typeof cur.getPortById === 'function' || typeof cur.getPorts === 'function' || typeof cur.createPort === 'function') return cur as Node;
-        cur = cur.parent;
-      }
-    } catch (e) {}
-    return null;
-  }
-
   private _computeEndpointPosition(endpoint: any): [number, number] {
     try {
       if (!endpoint) return [0, 0];
@@ -226,5 +290,45 @@ export class ConnectionPlugin {
       }
     } catch (e) {}
     return [0, 0];
+  }
+
+  // Helper: get pointer position relative to graph container/canvas
+  private _getPointerPos(e: any): [number, number] {
+    let px = e.x ?? e.canvasX ?? e.clientX;
+    let py = e.y ?? e.canvasY ?? e.clientY;
+    return [px, py];
+  }
+
+  // Helper: pick endpoint using only g-lite elementsFromBBox with a small search box around pointer
+  private _pickEndpointFromEvent(e: any): Node | Port | null | Promise<Node | Port | null> {
+    try {
+      if (!this.graph) return null;
+      const [px, py] = this._getPointerPos(e);
+      const doc = (this.graph as any).document;
+      if (!doc || typeof (doc as any).elementsFromBBox !== 'function') return null;
+
+      const r = this.opts.pickRadius || 10; // pick radius in canvas coords
+      const maybe: any = (doc as any).elementsFromBBox(px - r, py - r, px + r, py + r);
+
+      const pickFromArray = (elems: any[]): Node | Port | null => {
+        // Prefer Port over Node
+        for (const el of elems || []) {
+          const ctor = (el && (el.className || el.constructor?.name)) || '';
+          if (ctor === 'g-edge' || String(el.constructor?.name).toLowerCase().includes('edge')) continue;
+          if (typeof el.getAbsolutePosition === 'function') return el as Port;
+          if (typeof el.getPortById === 'function' || typeof el.getPorts === 'function' || typeof el.createPort === 'function') return el as Node;
+        }
+        return null;
+      };
+
+      if (maybe && typeof (maybe as any).then === 'function') {
+        // async result
+        return (maybe as Promise<any[]>).then((elems) => pickFromArray(elems || [])).catch(() => null);
+      }
+
+      const elems: any[] = (maybe as any[]) || [];
+      return pickFromArray(elems);
+    } catch (e) {}
+    return null;
   }
 }

@@ -410,26 +410,59 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
         if (typeof endpoint === 'string') {
           // support node:port syntax
           if (endpoint.includes(':')) {
-            const [nodeId] = endpoint.split(':');
+            const [nodeId, ...rest] = endpoint.split(':');
+            const portIdCandidate = rest.join(':');
             const node = graph && typeof graph.getNodeById === 'function' ? graph.getNodeById(nodeId) : null;
             if (node && typeof node.getPortById === 'function') {
-              const port = node.getPortById(endpoint); // Use full id directly
+              // try direct lookup with full id
+              let port = null;
+              try {
+                port = node.getPortById(endpoint);
+              } catch (e) {
+                port = null;
+              }
+              // fallback: scan ports for suffix match (in case registration used different id forms)
+              if (!port) {
+                try {
+                  const ports = typeof node.getPorts === 'function' ? node.getPorts() : [];
+                  for (const p of ports) {
+                    try {
+                      const pid = typeof p.getId === 'function' ? String(p.getId()) : '';
+                      if (pid === endpoint || pid.endsWith(':' + portIdCandidate) || pid === portIdCandidate) {
+                        port = p;
+                        break;
+                      }
+                    } catch (e) {}
+                  }
+                } catch (e) {}
+              }
+
               if (port) {
                 // Ensure port position is updated before connecting
-                if (typeof port.updatePosition === 'function') {
-                  port.updatePosition();
+                if (typeof (port as any).updatePosition === 'function') {
+                  try { (port as any).updatePosition(); } catch (e) {}
                 }
                 return port;
               }
             }
+
+            // if node exists but port not yet found, also try to query document by id
+            try {
+              const rootDoc = graph && graph.document ? graph.document : (globalThis as any).document;
+              if (rootDoc && typeof rootDoc.getElementById === 'function') {
+                const el = rootDoc.getElementById(endpoint);
+                if (el) return el;
+              }
+            } catch (e) {}
+
             return null;
           }
-          
+
           // 普通节点ID
           if (graph && typeof graph.getNodeById === 'function') {
             return graph.getNodeById(endpoint);
           }
-          
+
           // fallback: try ancestor documentElement getElementById
           try {
             const rootDoc = graph && graph.document ? graph.document : (globalThis as any).document;
@@ -438,7 +471,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
             }
           } catch (e) {}
         }
-        
+
         return null;
       };
 
