@@ -27,7 +27,8 @@ npm install @antv/ge
 ## 快速开始
 
 ```typescript
-import { Graph } from '@antv/ge';
+import { Graph, Node, Edge } from '@antv/ge';
+import { Rect, Circle } from '@antv/g-lite';
 
 // 创建图编辑器实例（类似创建 canvas 元素）
 const graph = new Graph({
@@ -43,6 +44,7 @@ graph.addEventListener('ready', () => {
     id: 'node1',
     x: 100,
     y: 100,
+    shape: Rect,
     style: {
       width: 100,
       height: 40,
@@ -60,9 +62,9 @@ graph.addEventListener('ready', () => {
     id: 'node2',
     x: 300,
     y: 100,
+    shape: Circle,
     style: {
-      width: 100,
-      height: 40,
+      r: 40,
       fill: '#fff',
       stroke: '#000',
       label: 'Node 2'
