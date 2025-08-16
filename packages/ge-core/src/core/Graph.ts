@@ -99,13 +99,35 @@ export class Graph extends Canvas {
 
     // Create nodes
     data.nodes.forEach((nodeData) => {
-      const node = new Node(nodeData);
-      this.appendChild(node);
+      try {
+        // 如果 shape 是字符串，尝试从 graph 的 customElements 中解析为 ctor
+        try {
+          if (nodeData && typeof nodeData.shape === 'string') {
+            const ctor = (this as any).customElements?.get?.(nodeData.shape);
+            if (ctor) nodeData = { ...nodeData, shape: ctor };
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        const node = new Node(nodeData);
+        this.appendChild(node);
+      } catch (e) {}
     });
 
     // Create edges
     data.edges.forEach((edgeData) => {
       try {
+        // 如果 edge shape 是字符串，尝试从 graph 的 customElements 中解析为 ctor
+        try {
+          if (edgeData && typeof edgeData.shape === 'string') {
+            const ctor = (this as any).customElements?.get?.(edgeData.shape);
+            if (ctor) edgeData = { ...edgeData, shape: ctor };
+          }
+        } catch (e) {
+          // ignore
+        }
+
         const edge = new Edge(edgeData);
         this.appendChild(edge);
       } catch (e: any) {
@@ -159,6 +181,17 @@ export class Graph extends Canvas {
    * Add a node to the graph
    */
   addNode(nodeData: any): Node {
+    try {
+      if (nodeData && typeof nodeData.shape === 'string') {
+        try {
+          const ctor = (this as any).customElements?.get?.(nodeData.shape);
+          if (ctor) nodeData = { ...nodeData, shape: ctor };
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {}
+
     const node = new Node(nodeData);
     this.appendChild(node);
     // register happens in appendChild
@@ -199,6 +232,17 @@ export class Graph extends Canvas {
     if (!sourceNode || !targetNode) {
       throw new Error('Source or target node does not exist');
     }
+
+    try {
+      if (edgeData && typeof edgeData.shape === 'string') {
+        try {
+          const ctor = (this as any).customElements?.get?.(edgeData.shape);
+          if (ctor) edgeData = { ...edgeData, shape: ctor };
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {}
 
     const edge = new Edge(edgeData);
     this.appendChild(edge);
