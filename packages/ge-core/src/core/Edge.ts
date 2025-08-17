@@ -54,12 +54,10 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   private _onSourceMoved: any = null;
   private _onTargetMoved: any = null;
   // markers
-  private startMarker: DisplayObject | null = null;
-  private endMarker: DisplayObject | null = null;
-  private startMarkerCfg: NonNullable<EdgeStyleProps['startMarker']> = {};
-  private endMarkerCfg: NonNullable<EdgeStyleProps['endMarker']> = {};
   private startMarkerObj: EdgeMarker | null = null;
   private endMarkerObj: EdgeMarker | null = null;
+  private startMarkerCfg: NonNullable<EdgeStyleProps['startMarker']> = {};
+  private endMarkerCfg: NonNullable<EdgeStyleProps['endMarker']> = {};
   private labelOffset: number = 0;
   
   constructor(config: EdgeConfig) {
@@ -85,25 +83,25 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     const defaultColor = style.stroke || '#000';
     this.startMarkerCfg = {
       enabled: !!(style.startMarker && style.startMarker.enabled),
-      type: (style.startMarker && style.startMarker.type) || 'circle',
+      // removed `type` field; prefer `shape` only
       size: (style.startMarker && style.startMarker.size) ?? 4,
       fill: (style.startMarker && style.startMarker.fill) ?? defaultColor,
       stroke: (style.startMarker && style.startMarker.stroke) ?? defaultColor,
       lineWidth: (style.startMarker && style.startMarker.lineWidth) ?? (style.lineWidth || 1),
       // allow registry name passthrough
       // @ts-ignore
-      shape: style.startMarker ? ((style.startMarker as any).shape || (style.startMarker as any).typeName) : undefined,
+      shape: style.startMarker ? ((style.startMarker as any).shape || (style.startMarker as any).typeName || 'circle') : 'circle',
     };
     this.endMarkerCfg = {
       enabled: style.endMarker?.enabled !== false, // 默认启用终点箭头
-      type: (style.endMarker && style.endMarker.type) || 'triangle',
+      // removed `type` field; prefer `shape` only
       size: (style.endMarker && style.endMarker.size) ?? 6,
       fill: (style.endMarker && style.endMarker.fill) ?? defaultColor,
       stroke: (style.endMarker && style.endMarker.stroke) ?? defaultColor,
       lineWidth: (style.endMarker && style.endMarker.lineWidth) ?? (style.lineWidth || 1),
       // allow registry name passthrough
       // @ts-ignore
-      shape: style.endMarker ? ((style.endMarker as any).shape || (style.endMarker as any).typeName) : undefined,
+      shape: style.endMarker ? ((style.endMarker as any).shape || (style.endMarker as any).typeName || 'triangle') : 'triangle',
     };
     
     this.primaryShape = this.createPrimaryShape({
@@ -123,27 +121,23 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     // Create markers if enabled using EdgeMarker abstraction
     this.startMarkerObj = this.startMarkerCfg.enabled ? new EdgeMarker({
       enabled: this.startMarkerCfg.enabled,
-      type: (this.startMarkerCfg.type as any) || 'circle',
       size: this.startMarkerCfg.size,
       fill: this.startMarkerCfg.fill,
       stroke: this.startMarkerCfg.stroke,
       lineWidth: this.startMarkerCfg.lineWidth,
       layout: this.startMarkerCfg.layout,
       // pass registry name/ctor under unified 'shape' field used by EdgeMarker
-      shape: (this.startMarkerCfg as any).shape || (this.startMarkerCfg as any).typeName,
+      shape: (this.startMarkerCfg as any).shape,
     }, this) : null;
     this.endMarkerObj = this.endMarkerCfg.enabled ? new EdgeMarker({
       enabled: this.endMarkerCfg.enabled,
-      type: (this.endMarkerCfg.type as any) || 'triangle',
       size: this.endMarkerCfg.size,
       fill: this.endMarkerCfg.fill,
       stroke: this.endMarkerCfg.stroke,
       lineWidth: this.endMarkerCfg.lineWidth,
       layout: this.endMarkerCfg.layout,
-      shape: (this.endMarkerCfg as any).shape || (this.endMarkerCfg as any).typeName,
+      shape: (this.endMarkerCfg as any).shape,
     }, this) : null;
-    this.startMarker = this.startMarkerObj ? this.startMarkerObj.getDisplayObject() : null;
-    this.endMarker = this.endMarkerObj ? this.endMarkerObj.getDisplayObject() : null;
     
     // Create the edge label
     this.label = new Text({
@@ -158,8 +152,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     
     // Add children to the group: line -> markers -> label
     super.appendChild(this.primaryShape);
-    if (this.startMarker) super.appendChild(this.startMarker);
-    if (this.endMarker) super.appendChild(this.endMarker);
+    if (this.startMarkerObj) super.appendChild(this.startMarkerObj);
+    if (this.endMarkerObj) super.appendChild(this.endMarkerObj);
     super.appendChild(this.label);
   }
   
