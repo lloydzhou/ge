@@ -1,6 +1,6 @@
 import { CustomElement, Circle, DisplayObject } from '@antv/g-lite';
-import { resolveCtor } from '../utils/shapeResolver';
-import type { BasePortStyleProps } from '../types';
+import { resolveCtor } from '../../utils/shapeResolver';
+import type { BasePortStyleProps } from '../../types';
 
 export interface PortStyleProps extends BasePortStyleProps {
   r?: number;

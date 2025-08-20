@@ -1,10 +1,16 @@
 import { CustomElement, Line, Text, DisplayObject, Polyline } from '@antv/g-lite';
-import { resolveCtor } from '../utils/shapeResolver';
-import type { EdgeLayoutOptions, Vec2 } from '../utils/edgeLayout';
-import { computeAnchor } from '../utils/edgeLayout';
-import type { BaseEdgeStyleProps } from '../types';
+import { resolveCtor } from '../../utils/shapeResolver';
+import type { EdgeLayoutOptions, Vec2 } from '../../utils/edgeLayout';
+import { computeAnchor } from '../../utils/edgeLayout';
+import { computeAnchorForShape } from '../../utils/nodeAnchor';
+import type { BaseEdgeStyleProps } from '../../types';
 import { EdgeMarker } from './EdgeMarker';
-import type { DisplayObjectConfigWithShape } from '../types';
+import type { DisplayObjectConfigWithShape } from '../../types';
+import type { EdgeRouter } from './EdgeRouter';
+import { NormalRouter } from './EdgeRouter';
+import type { EdgeConnector } from './EdgeConnector';
+import { NormalConnector } from './EdgeConnector';
+import { EdgeTool } from './EdgeTool';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -14,6 +20,10 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
   labelFill?: string;
   labelFontSize?: number;
   labelOffset?: number; // offset along normal for label
+  router?: EdgeRouter; // 路由器
+  connector?: EdgeConnector; // 连接器
+  vertices?: Vec2[]; // 中间点
+  tools?: any[]; // 边上工具（暂时使用 any 类型避免循环依赖）
   startMarker?: {
     enabled?: boolean;
     type?: 'none' | 'circle' | 'triangle';
@@ -46,7 +56,7 @@ export interface EdgeConfig {
 }
 
 export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyleProps> {
-  private primaryShape: T;
+  private primaryShape: T | null = null;
   private label: Text;
   private data: any;
   private sourceNode: any = null;
@@ -59,6 +69,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   private startMarkerCfg: NonNullable<EdgeStyleProps['startMarker']> = {};
   private endMarkerCfg: NonNullable<EdgeStyleProps['endMarker']> = {};
   private labelOffset: number = 0;
+  // tools
+  private tools: EdgeTool[] = [];
   
   constructor(config: EdgeConfig) {
     super({
@@ -76,6 +88,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       label: '',
       labelFill: '#000',
       labelFontSize: 12,
+      router: new NormalRouter(), // 默认使用直线路由器
+      connector: new NormalConnector(), // 默认使用普通连接器
       ...(config.style || {})
     } as EdgeStyleProps;
     this.labelOffset = Number(style.labelOffset ?? 0);
@@ -104,19 +118,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       shape: style.endMarker ? ((style.endMarker as any).shape || (style.endMarker as any).typeName || 'triangle') : 'triangle',
     };
     
-    this.primaryShape = this.createPrimaryShape({
-      ...config,
-      id: `${config.id}-primary`,
-      style: {
-        x1: 0,
-        y1: 0,
-        x2: 0,
-        y2: 0,
-        stroke: style.stroke,
-        lineWidth: style.lineWidth,
-        lineDash: style.lineDash
-      }
-    });
+    this.primaryShape = null as unknown as T; // 初始化为空，在 updatePositionFromNodes 中创建
     
     // Create markers if enabled using EdgeMarker abstraction
     this.startMarkerObj = this.startMarkerCfg.enabled ? new EdgeMarker({
@@ -150,11 +152,24 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       }
     });
     
-    // Add children to the group: line -> markers -> label
-    super.appendChild(this.primaryShape);
+    // Add children to the group: markers -> label
+    // primaryShape 将在 updatePositionFromNodes 中动态创建和添加
     if (this.startMarkerObj) super.appendChild(this.startMarkerObj);
     if (this.endMarkerObj) super.appendChild(this.endMarkerObj);
     super.appendChild(this.label);
+    
+    // Create tools if provided
+    if (style.tools && Array.isArray(style.tools)) {
+      style.tools.forEach(toolConfig => {
+        try {
+          const tool = new EdgeTool(toolConfig, this as any);
+          this.tools.push(tool);
+          super.appendChild(tool);
+        } catch (e) {
+          console.warn('Failed to create edge tool:', e);
+        }
+      });
+    }
   }
   
   protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): T {
@@ -257,6 +272,11 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
 
   private getEdgePoints(): Vec2[] {
+    // 如果 primaryShape 不存在，返回默认值
+    if (!this.primaryShape) {
+      return [[0, 0], [0, 0]];
+    }
+    
     if (this.primaryShape instanceof Line) {
       const x1 = Number(this.primaryShape.style.x1) || 0;
       const y1 = Number(this.primaryShape.style.y1) || 0;
@@ -312,9 +332,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       // 如果两个端点都是节点，计算边缘交点
       let finalX1 = x1, finalY1 = y1, finalX2 = x2, finalY2 = y2;
       
-      if (this.sourceNode && typeof this.sourceNode.getPrimaryShape === 'function' &&
-          this.targetNode && typeof this.targetNode.getPrimaryShape === 'function') {
-        
+      if (this.sourceNode && typeof this.sourceNode.getPrimaryShape === 'function') {
         // 计算从源节点到目标节点的方向
         const dx = x2 - x1;
         const dy = y2 - y1;
@@ -331,26 +349,43 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
             finalY1 = sourceEdge[1];
           }
           
-          // 计算目标节点边缘交点（方向相反）
-          const targetEdge = this.getNodeEdgePoint(this.targetNode, -dirX, -dirY);
-          if (targetEdge) {
-            finalX2 = targetEdge[0];
-            finalY2 = targetEdge[1];
+          // 如果目标节点也是真实节点，计算目标节点边缘交点（方向相反）
+          if (this.targetNode && typeof this.targetNode.getPrimaryShape === 'function') {
+            const targetEdge = this.getNodeEdgePoint(this.targetNode, -dirX, -dirY);
+            if (targetEdge) {
+              finalX2 = targetEdge[0];
+              finalY2 = targetEdge[1];
+            }
           }
         }
       }
 
-      if (this.primaryShape instanceof Line) {
-        this.primaryShape.attr({ x1: finalX1, y1: finalY1, x2: finalX2, y2: finalY2 });
-      } else if (this.primaryShape instanceof Polyline) {
-        this.primaryShape.attr({
-          points: [
-            [finalX1, finalY1],
-            [(finalX1 + finalX2) / 2, (finalY1 + finalY2) / 2],
-            [finalX2, finalY2],
-          ],
-        });
+      // 使用 router 计算路径点
+      const router = this.data.style?.router || new NormalRouter();
+      const vertices = this.data.style?.vertices || [];
+      const rawPoints: Vec2[] = [[finalX1, finalY1], [finalX2, finalY2]];
+      const routedPoints = router.route(rawPoints, vertices);
+
+      // 使用 connector 创建或更新 primaryShape
+      const connector = this.data.style?.connector || new NormalConnector();
+      const style = {
+        stroke: this.data.style?.stroke || '#000',
+        lineWidth: this.data.style?.lineWidth || 1,
+        lineDash: this.data.style?.lineDash || [],
+      };
+
+      // 移除旧的 primaryShape
+      if (this.primaryShape) {
+        try {
+          super.removeChild(this.primaryShape);
+        } catch (e) {
+          // ignore
+        }
       }
+
+      // 创建新的 primaryShape
+      this.primaryShape = connector.connect(routedPoints, style) as T;
+      super.appendChild(this.primaryShape);
 
       // update markers after primary shape laid out
       this.updateMarkers();
@@ -372,76 +407,117 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     const shape = node.getPrimaryShape();
     const [nodeX, nodeY] = node.getPosition();
 
-    if (shape && shape.style) {
-      if (shape.nodeName === 'circle') {
-        // 圆形：计算射线与圆的交点
-        const r = shape.style.r || 0;
-        const cx = nodeX + (shape.style.cx || 0);
-        const cy = nodeY + (shape.style.cy || 0);
-        
-        return [cx + dirX * r, cy + dirY * r];
-      } 
-      else if (shape.nodeName === 'rect') {
-        // 矩形：计算射线与矩形边界的交点
-        const x = nodeX + (shape.style.x || 0);
-        const y = nodeY + (shape.style.y || 0);
-        const width = shape.style.width || 0;
-        const height = shape.style.height || 0;
-        
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
-        
-        // 计算射线与矩形四边的交点，选择最近的
-        const intersections: [number, number][] = [];
-        
-        // 右边 (x = x + width)
-        if (dirX > 0) {
-          const t = (x + width - centerX) / dirX;
-          const intersectY = centerY + dirY * t;
-          if (intersectY >= y && intersectY <= y + height) {
-            intersections.push([x + width, intersectY]);
-          }
-        }
-        
-        // 左边 (x = x)
-        if (dirX < 0) {
-          const t = (x - centerX) / dirX;
-          const intersectY = centerY + dirY * t;
-          if (intersectY >= y && intersectY <= y + height) {
-            intersections.push([x, intersectY]);
-          }
-        }
-        
-        // 下边 (y = y + height)
-        if (dirY > 0) {
-          const t = (y + height - centerY) / dirY;
-          const intersectX = centerX + dirX * t;
-          if (intersectX >= x && intersectX <= x + width) {
-            intersections.push([intersectX, y + height]);
-          }
-        }
-        
-        // 上边 (y = y)
-        if (dirY < 0) {
-          const t = (y - centerY) / dirY;
-          const intersectX = centerX + dirX * t;
-          if (intersectX >= x && intersectX <= x + width) {
-            intersections.push([intersectX, y]);
-          }
-        }
-        
-        // 返回最近的交点（通常只有一个有效交点）
-        if (intersections.length > 0) {
-          return intersections[0];
-        }
-        
-        // 如果没有找到交点，返回中心点
-        return [centerX, centerY];
-      }
-    }
+    // 使用 computeAnchorForShape 计算边缘点
+    // 构造角度布局参数
+    const angleRad = Math.atan2(dirY, dirX);
+    const angleDeg = angleRad * 180 / Math.PI;
     
-    // 其他形状或无法计算时，返回节点中心
-    return [nodeX, nodeY];
+    try {
+      // 尝试使用 computeAnchorForShape 计算边缘点
+      const nodeStyle = node.data?.style || {};
+      const [x, y] = computeAnchorForShape(shape, { name: 'angle', args: { angle: angleDeg } }, nodeStyle);
+      // 将相对坐标转换为绝对坐标
+      return [nodeX + x, nodeY + y];
+    } catch (e) {
+      // 如果计算失败，退回到之前的实现
+      if (shape && shape.style) {
+        if (shape.nodeName === 'circle') {
+          // 圆形：计算射线与圆的交点
+          const r = shape.style.r || 0;
+          const cx = nodeX + (shape.style.cx || 0);
+          const cy = nodeY + (shape.style.cy || 0);
+          
+          return [cx + dirX * r, cy + dirY * r];
+        } 
+        else if (shape.nodeName === 'ellipse') {
+          // 椭圆：计算射线与椭圆的交点
+          const cx = nodeX + (shape.style.cx || 0);
+          const cy = nodeY + (shape.style.cy || 0);
+          const rx = shape.style.rx || shape.style.r || 0;
+          const ry = shape.style.ry || shape.style.r || 0;
+          
+          // 归一化方向向量
+          const length = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (length === 0) return [cx, cy];
+          
+          const dx = dirX / length;
+          const dy = dirY / length;
+          
+          // 计算射线与椭圆的交点
+          // 椭圆方程: (x-cx)²/rx² + (y-cy)²/ry² = 1
+          // 射线方程: x = cx + t*dx, y = cy + t*dy
+          // 代入得到: (t*dx)²/rx² + (t*dy)²/ry² = 1
+          // 整理得到: t²*(dx²/rx² + dy²/ry²) = 1
+          // 解得: t = 1/sqrt(dx²/rx² + dy²/ry²)
+          
+          const a = dx * dx / (rx * rx) + dy * dy / (ry * ry);
+          if (a === 0) return [cx, cy];
+          
+          const t = 1 / Math.sqrt(a);
+          return [cx + t * dx, cy + t * dy];
+        }
+        else if (shape.nodeName === 'rect') {
+          // 矩形：计算射线与矩形边界的交点
+          const x = nodeX + (shape.style.x || 0);
+          const y = nodeY + (shape.style.y || 0);
+          const width = shape.style.width || 0;
+          const height = shape.style.height || 0;
+          
+          const centerX = x + width / 2;
+          const centerY = y + height / 2;
+          
+          // 计算射线与矩形四边的交点，选择最近的
+          const intersections: [number, number][] = [];
+          
+          // 右边 (x = x + width)
+          if (dirX > 0) {
+            const t = (x + width - centerX) / dirX;
+            const intersectY = centerY + dirY * t;
+            if (intersectY >= y && intersectY <= y + height) {
+              intersections.push([x + width, intersectY]);
+            }
+          }
+          
+          // 左边 (x = x)
+          if (dirX < 0) {
+            const t = (x - centerX) / dirX;
+            const intersectY = centerY + dirY * t;
+            if (intersectY >= y && intersectY <= y + height) {
+              intersections.push([x, intersectY]);
+            }
+          }
+          
+          // 下边 (y = y + height)
+          if (dirY > 0) {
+            const t = (y + height - centerY) / dirY;
+            const intersectX = centerX + dirX * t;
+            if (intersectX >= x && intersectX <= x + width) {
+              intersections.push([intersectX, y + height]);
+            }
+          }
+          
+          // 上边 (y = y)
+          if (dirY < 0) {
+            const t = (y - centerY) / dirY;
+            const intersectX = centerX + dirX * t;
+            if (intersectX >= x && intersectX <= x + width) {
+              intersections.push([intersectX, y]);
+            }
+          }
+          
+          // 返回最近的交点（通常只有一个有效交点）
+          if (intersections.length > 0) {
+            return intersections[0];
+          }
+          
+          // 如果没有找到交点，返回中心点
+          return [centerX, centerY];
+        }
+      }
+      
+      // 其他形状或无法计算时，返回节点中心
+      return [nodeX, nodeY];
+    }
   }
   
   /**
@@ -475,7 +551,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   /**
    * Get the primary shape
    */
-  getPrimaryShape(): T {
+  getPrimaryShape(): T | null {
     return this.primaryShape;
   }
   

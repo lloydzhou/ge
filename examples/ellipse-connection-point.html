@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ellipse Node Connection Point Example</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    
+    #container {
+      border: 1px solid #ccc;
+      width: 800px;
+      height: 600px;
+    }
+    
+    .controls {
+      margin: 10px 0;
+    }
+    
+    button {
+      margin-right: 10px;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ellipse Node Connection Point Example</h1>
+  <p>This example demonstrates improved connection point calculation for ellipse nodes.</p>
+  <div id="container"></div>
+
+  <script src="../node_modules/@antv/g-lite/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-svg/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-annotation/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-dragndrop/dist/index.umd.min.js"></script>
+  <script src="../packages/ge-core/dist/index.umd.min.js"></script>
+  <script>
+    const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
+    const { Graph, Node, Edge, ConnectionPlugin } = window.GE;
+
+    const renderer = new window.G.SVG.Renderer()
+    renderer.registerPlugin(new Annotation.Plugin());
+    renderer.registerPlugin(new Dragndrop.Plugin());
+    
+    // Create a graph
+    const graph = new Graph({
+      container: document.getElementById('container'),
+      width: 800,
+      height: 600,
+      renderer,
+    });
+
+    // Wait for canvas to be ready before adding elements
+    graph.ready.then(() => {
+      console.log('Graph ready, creating nodes and edges...');
+
+      const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
+      graph.installPlugin(conn);
+      // graph.uninstallAllPlugins();
+      
+      // Create ellipse nodes
+      const ellipseNode1 = new Node({
+        id: 'ellipse1',
+        x: 200,
+        y: 200,
+        shape: Ellipse,
+        style: {
+          cx: 0,
+          cy: 0,
+          rx: 60,
+          ry: 40,
+          fill: '#1890ff',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Ellipse Node 1',
+          labelFill: '#fff',
+          labelFontSize: 14
+        }
+      });
+
+      const ellipseNode2 = new Node({
+        id: 'ellipse2',
+        x: 500,
+        y: 200,
+        shape: Ellipse,
+        style: {
+          cx: 0,
+          cy: 0,
+          rx: 60,
+          ry: 40,
+          fill: '#ff0000',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Ellipse Node 2',
+          labelFill: '#fff',
+          labelFontSize: 14
+        }
+      });
+
+      // Add the nodes to the graph
+      graph.appendChild(ellipseNode1);
+      graph.appendChild(ellipseNode2);
+
+      // Create edges between ellipse nodes
+      const edge1 = new Edge({
+        id: 'edge1',
+        source: ellipseNode1,
+        target: ellipseNode2,
+        style: {
+          stroke: '#000',
+          lineWidth: 2,
+          router: new window.GE.NormalRouter(),
+          connector: new window.GE.NormalConnector()
+        }
+      });
+
+      graph.appendChild(edge1);
+
+      // Create mixed nodes (ellipse and circle)
+      const circleNode = new Node({
+        id: 'circle',
+        x: 350,
+        y: 350,
+        shape: Circle,
+        style: {
+          r: 30,
+          fill: '#00ff00',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Circle Node',
+          labelFill: '#000',
+          labelFontSize: 12
+        }
+      });
+
+      graph.appendChild(circleNode);
+
+      const edge2 = new Edge({
+        id: 'edge2',
+        source: ellipseNode1,
+        target: circleNode,
+        style: {
+          stroke: '#00aa00',
+          lineWidth: 2,
+          router: new window.GE.NormalRouter(),
+          connector: new window.GE.NormalConnector()
+        }
+      });
+
+      graph.appendChild(edge2);
+
+      console.log('Graph with ellipse nodes and improved connection points created');
+    });
+   </script>
+ </body>
+ </html>

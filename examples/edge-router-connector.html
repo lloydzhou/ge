@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edge Router and Connector Example</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    
+    #container {
+      border: 1px solid #ccc;
+      width: 800px;
+      height: 600px;
+    }
+    
+    .controls {
+      margin: 10px 0;
+    }
+    
+    button {
+      margin-right: 10px;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Edge Router and Connector Example</h1>
+  <div class="controls">
+    <h3>Router Types:</h3>
+    <button id="normal">Normal Router</button>
+    <button id="orthogonal">Orthogonal Router</button>
+    <button id="manhattan">Manhattan Router</button>
+    
+    <h3>Connector Types:</h3>
+    <button id="normal-connector">Normal Connector</button>
+    <button id="polyline-connector">Polyline Connector</button>
+    <button id="smooth-connector">Smooth Connector</button>
+    <button id="rounded-connector">Rounded Connector</button>
+    
+    <h3>Vertices:</h3>
+    <button id="addVertices">Add Vertices</button>
+    <button id="clearVertices">Clear Vertices</button>
+  </div>
+  <div id="container"></div>
+
+  <script src="../node_modules/@antv/g-lite/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-svg/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-annotation/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-plugin-dragndrop/dist/index.umd.min.js"></script>
+  <script src="../packages/ge-core/dist/index.umd.min.js"></script>
+  <script>
+    console.log('window.GE:', window.GE);
+    
+    const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
+    const { Graph, Node, Edge, ConnectionPlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, 
+            NormalConnector, PolylineConnector, SmoothConnector, RoundedConnector } = window.GE;
+
+    const renderer = new window.G.SVG.Renderer()
+    renderer.registerPlugin(new Annotation.Plugin());
+    renderer.registerPlugin(new Dragndrop.Plugin());
+    
+    // Create a graph
+    const graph = new Graph({
+      container: document.getElementById('container'),
+      width: 800,
+      height: 600,
+      renderer,
+    });
+
+    // Wait for canvas to be ready before adding elements
+    graph.ready.then(() => {
+      console.log('Graph ready, creating nodes and edges...');
+
+      const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
+      graph.installPlugin(conn);
+      
+      // Create nodes
+      const node1 = new Node({
+        id: 'node1',
+        x: 100,
+        y: 100,
+        shape: Circle,
+        style: {
+          r: 30,
+          fill: '#1890ff',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Node 1',
+          labelFill: '#fff',
+          labelFontSize: 14
+        }
+      });
+
+      const node2 = new Node({
+        id: 'node2',
+        x: 300,
+        y: 200,
+        shape: Rect,
+        style: {
+          width: 80,
+          height: 40,
+          fill: '#fff',
+          stroke: '#000',
+          lineWidth: 1,
+          radius: 4,
+          label: 'Node 2',
+          labelFill: '#000',
+          labelFontSize: 12
+        }
+      });
+
+      const node3 = new Node({
+        id: 'node3',
+        x: 500,
+        y: 100,
+        shape: Circle,
+        style: {
+          r: 30,
+          fill: '#ff0000',
+          stroke: '#000',
+          lineWidth: 2,
+          label: 'Node 3',
+          labelFill: '#fff',
+          labelFontSize: 14
+        }
+      });
+
+      // Add the nodes to the graph
+      graph.appendChild(node1);
+      graph.appendChild(node2);
+      graph.appendChild(node3);
+
+      // Create edges with different routers
+      const edge1 = new Edge({
+        id: 'edge1',
+        source: node1,
+        target: node2,
+        style: {
+          stroke: '#000',
+          lineWidth: 2,
+          router: new NormalRouter(),
+          connector: new NormalConnector()
+        }
+      });
+
+      const edge2 = new Edge({
+        id: 'edge2',
+        source: node2,
+        target: node3,
+        style: {
+          stroke: '#00aa00',
+          lineWidth: 2,
+          router: new OrthogonalRouter(),
+          connector: new PolylineConnector()
+        }
+      });
+
+      graph.appendChild(edge1);
+      graph.appendChild(edge2);
+
+      // Setup control buttons for router types
+      document.getElementById('normal').addEventListener('click', () => {
+        edge1.data.style.router = new NormalRouter();
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('orthogonal').addEventListener('click', () => {
+        edge1.data.style.router = new OrthogonalRouter();
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('manhattan').addEventListener('click', () => {
+        edge1.data.style.router = new ManhattanRouter();
+        edge1.updatePositionFromNodes();
+      });
+
+      // Setup control buttons for connector types
+      document.getElementById('normal-connector').addEventListener('click', () => {
+        edge1.data.style.connector = new NormalConnector();
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('polyline-connector').addEventListener('click', () => {
+        edge1.data.style.connector = new PolylineConnector();
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('smooth-connector').addEventListener('click', () => {
+        edge1.data.style.connector = new SmoothConnector();
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('rounded-connector').addEventListener('click', () => {
+        edge1.data.style.connector = new RoundedConnector();
+        edge1.updatePositionFromNodes();
+      });
+
+      // Setup control buttons for vertices
+      document.getElementById('addVertices').addEventListener('click', () => {
+        // 添加中间点
+        edge1.data.style.vertices = [[200, 150]];
+        edge1.updatePositionFromNodes();
+      });
+
+      document.getElementById('clearVertices').addEventListener('click', () => {
+        // 清除中间点
+        edge1.data.style.vertices = [];
+        edge1.updatePositionFromNodes();
+      });
+
+      console.log('Graph with router and connector example created');
+    });
+   </script>
+ </body>
+ </html>

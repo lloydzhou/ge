@@ -1,7 +1,7 @@
 import type { Graph } from '../core/Graph';
-import { Edge } from '../core/Edge';
-import type { Port } from '../core/Port';
-import type { Node } from '../core/Node';
+import { Edge } from '../core/edge/Edge';
+import type { Port } from '../core/port/Port';
+import type { Node } from '../core/node/Node';
 
 export interface ConnectionPluginOptions {
   defaultEdgeStyle?: any;
@@ -55,6 +55,9 @@ export class ConnectionPlugin {
       this.virtualTarget = null;
       this.startEndpoint = null;
       this.startPos = null;
+      
+      // Restore text selection
+      this._restoreTextSelection();
     };
 
     this._onPointerDown = (e: any) => {
@@ -78,6 +81,9 @@ export class ConnectionPlugin {
               });
               if (this.graph) this.graph.appendChild(this.tempEdge);
               try { this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget); } catch (e) {}
+              
+              // Prevent text selection during connection
+              this._preventTextSelection();
             } catch (err) {
               // ignore
             }
@@ -111,6 +117,9 @@ export class ConnectionPlugin {
           } catch (err) {
             console.error && console.error('[connection] failed create tempEdge', err);
           }
+          
+          // Prevent text selection during connection
+          this._preventTextSelection();
         }
       } catch (err) {
         // ignore
@@ -249,9 +258,11 @@ export class ConnectionPlugin {
     // parameter included for API symmetry
     void graph;
     try {
-      (this.graph as any).removeEventListener('pointerdown', this._onPointerDown as EventListener);
-      (this.graph as any).removeEventListener('pointermove', this._onPointerMove as EventListener);
-      (this.graph as any).removeEventListener('pointerup', this._onPointerUp as EventListener);
+      if (this.graph) {
+        (this.graph as any).removeEventListener('pointerdown', this._onPointerDown as EventListener);
+        (this.graph as any).removeEventListener('pointermove', this._onPointerMove as EventListener);
+        (this.graph as any).removeEventListener('pointerup', this._onPointerUp as EventListener);
+      }
     } catch (e) {
       // ignore
     }
@@ -259,11 +270,19 @@ export class ConnectionPlugin {
     try {
       if (this.tempEdge && this.graph) this.graph.removeChild(this.tempEdge);
     } catch (err) {}
+    
+    // Reset all properties to initial state
     this.graph = null;
     this.startEndpoint = null;
     this.tempEdge = null;
     this.virtualTarget = null;
     this.startPos = null;
+    this._onPointerDown = null;
+    this._onPointerUp = null;
+    this._onPointerMove = null;
+    
+    // Restore text selection
+    this._restoreTextSelection();
   }
 
   private _computeEndpointPosition(endpoint: any): [number, number] {
@@ -274,7 +293,9 @@ export class ConnectionPlugin {
         const shape = endpoint.getPrimaryShape();
         const [nodeX, nodeY] = endpoint.getPosition();
         if (shape && shape.style) {
-          if (shape.nodeName === 'circle') {
+          // 对于所有节点类型，都返回节点中心位置
+          // Edge 类会在 getNodeEdgePoint 中计算准确的边缘交点
+          if (shape.nodeName === 'circle' || shape.nodeName === 'ellipse') {
             const cx = shape.style.cx || 0;
             const cy = shape.style.cy || 0;
             return [nodeX + cx, nodeY + cy];
@@ -286,6 +307,7 @@ export class ConnectionPlugin {
             return [nodeX + x + width / 2, nodeY + y + height / 2];
           }
         }
+        // 其他形状返回节点中心
         return [nodeX, nodeY];
       }
     } catch (e) {}
@@ -330,5 +352,85 @@ export class ConnectionPlugin {
       return pickFromArray(elems);
     } catch (e) {}
     return null;
+  }
+  
+  // Prevent text selection during connection
+  private _preventTextSelection() {
+    try {
+      if (this.graph) {
+        // Try to get container from graph config
+        const config = (this.graph as any).getConfig?.();
+        const container = config?.container;
+        if (container) {
+          if (typeof container === 'string') {
+            // container is a selector string
+            const element = document.querySelector(container);
+            if (element) {
+              (element as any).style.userSelect = 'none';
+              (element as any).style.webkitUserSelect = 'none';
+              (element as any).style.MozUserSelect = 'none';
+              (element as any).style.msUserSelect = 'none';
+            }
+          } else if (container instanceof HTMLElement) {
+            // container is an HTMLElement
+            (container as any).style.userSelect = 'none';
+            (container as any).style.webkitUserSelect = 'none';
+            (container as any).style.MozUserSelect = 'none';
+            (container as any).style.msUserSelect = 'none';
+          }
+        } else {
+          // Try to get container from document
+          const doc = (this.graph as any).document;
+          if (doc && doc.ownerDocument && doc.ownerDocument.body) {
+            (doc.ownerDocument.body as any).style.userSelect = 'none';
+            (doc.ownerDocument.body as any).style.webkitUserSelect = 'none';
+            (doc.ownerDocument.body as any).style.MozUserSelect = 'none';
+            (doc.ownerDocument.body as any).style.msUserSelect = 'none';
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  // Restore text selection after connection
+  private _restoreTextSelection() {
+    try {
+      if (this.graph) {
+        // Try to get container from graph config
+        const config = (this.graph as any).getConfig?.();
+        const container = config?.container;
+        if (container) {
+          if (typeof container === 'string') {
+            // container is a selector string
+            const element = document.querySelector(container);
+            if (element) {
+              (element as any).style.userSelect = '';
+              (element as any).style.webkitUserSelect = '';
+              (element as any).style.MozUserSelect = '';
+              (element as any).style.msUserSelect = '';
+            }
+          } else if (container instanceof HTMLElement) {
+            // container is an HTMLElement
+            (container as any).style.userSelect = '';
+            (container as any).style.webkitUserSelect = '';
+            (container as any).style.MozUserSelect = '';
+            (container as any).style.msUserSelect = '';
+          }
+        } else {
+          // Try to get container from document
+          const doc = (this.graph as any).document;
+          if (doc && doc.ownerDocument && doc.ownerDocument.body) {
+            (doc.ownerDocument.body as any).style.userSelect = '';
+            (doc.ownerDocument.body as any).style.webkitUserSelect = '';
+            (doc.ownerDocument.body as any).style.MozUserSelect = '';
+            (doc.ownerDocument.body as any).style.msUserSelect = '';
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { Canvas, CustomEvent } from '@antv/g-lite';
 import type { GraphData } from '../types';
-import { Node } from './Node';
-import { Edge } from './Edge';
+import { Node } from './node/Node';
+import { Edge } from './edge/Edge';
 
 export class Graph extends Canvas {
   private nodesById: Map<string, Node> = new Map();

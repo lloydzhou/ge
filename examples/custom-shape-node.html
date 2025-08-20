@@ -29,7 +29,7 @@
   <script src="../packages/ge-core/dist/index.umd.min.js"></script>
   <script>
     const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
-    const { Graph, Node, Edge, ConnectionPlugin } = window.GE;
+    const { Graph, Node, Edge, ConnectionPlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, NormalConnector, PolylineConnector } = window.GE;
 
     const renderer = new window.G.SVG.Renderer()
     renderer.registerPlugin(new Annotation.Plugin());

@@ -1,8 +1,8 @@
 import { CustomElement, Rect, Text, DisplayObject } from '@antv/g-lite';
-import { resolveCtor } from '../utils/shapeResolver';
-import type { BaseNodeStyleProps, DisplayObjectConfigWithShape } from '../types';
-import { Port, PortLayoutOptions } from './Port';
-import { computeAnchorForShape } from '../utils/nodeAnchor';
+import { resolveCtor } from '../../utils/shapeResolver';
+import type { BaseNodeStyleProps, DisplayObjectConfigWithShape } from '../../types';
+import { Port, PortLayoutOptions } from '../port/Port';
+import { computeAnchorForShape } from '../../utils/nodeAnchor';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
