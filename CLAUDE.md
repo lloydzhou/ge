@@ -632,7 +632,7 @@ Node / Port / Edge (纯数据+渲染，无交互逻辑)
 2. **子类只调用父类方法**
    - Node: `connectedCallback()` 中调用 `super._initInteraction()`
    - Port: `connectedCallback()` 中调用 `super._initInteraction()`
-   - Edge: 不需要交互（不继承 GEInteractiveElement）
+   - Edge: 继承 GEInteractiveElement 但不使用交互功能（仅使用 primaryShape 管理）
 
 3. **插件处理实际逻辑**
    - MovePlugin 监听 `node:dragstart/drag/dragend` 事件，移动节点
