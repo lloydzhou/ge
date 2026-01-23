@@ -39,7 +39,7 @@
   <script src="../packages/ge-core/dist/index.umd.min.js"></script>
   <script>
     const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
-    const { Graph, Node, Edge, ConnectionPlugin } = window.GE;
+    const { Graph, Node, Edge, ConnectionPlugin, MovePlugin } = window.GE;
 
     const renderer = new window.G.SVG.Renderer()
     renderer.registerPlugin(new Annotation.Plugin());
@@ -58,8 +58,11 @@
       console.log('Graph ready, creating nodes and edges...');
 
       const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
-      graph.installPlugin(conn);
-      // graph.uninstallAllPlugins();
+      graph.use(conn);
+
+      // Enable node movement
+      const move = new MovePlugin();
+      graph.use(move);
       
       // Create ellipse nodes
       const ellipseNode1 = new Node({
@@ -78,7 +81,9 @@
           label: 'Ellipse Node 1',
           labelFill: '#fff',
           labelFontSize: 14
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       const ellipseNode2 = new Node({
@@ -97,7 +102,9 @@
           label: 'Ellipse Node 2',
           labelFill: '#fff',
           labelFontSize: 14
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       // Add the nodes to the graph
@@ -133,7 +140,9 @@
           label: 'Circle Node',
           labelFill: '#000',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       graph.appendChild(circleNode);

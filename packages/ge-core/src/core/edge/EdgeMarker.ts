@@ -22,9 +22,9 @@ export type EdgeAnchor = {
 
 export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
   private cfg: EdgeMarkerOptions;
-  private host: any = null;
+  private host: DisplayObject | null = null;
 
-  constructor(cfg: EdgeMarkerOptions, host?: any) {
+  constructor(cfg: EdgeMarkerOptions, host?: DisplayObject | null) {
     super({ className: 'g-edge-marker' });
     this.cfg = cfg || {};
     this.host = host;

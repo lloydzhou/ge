@@ -16,11 +16,6 @@ export class RendererPluginAdapter {
     if (typeof this.renderer.registerPlugin === 'function') {
       this.renderer.registerPlugin(this.pluginInstance);
     }
-
-    // Optional: bridge some events from renderer/plugin to graph.eventBus
-    if (this.pluginInstance && this.pluginInstance.on && graph && graph.eventBus) {
-      // no-op: depends on plugin implementation
-    }
   }
 
   uninstall(graph: any) {

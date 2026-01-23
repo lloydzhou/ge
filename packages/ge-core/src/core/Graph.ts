@@ -1,27 +1,140 @@
 import { Canvas, CustomEvent } from '@antv/g-lite';
-import type { GraphData } from '../types';
+import type { GraphData, GraphOptions, NodeData, EdgeData, RenderingPlugin, RenderingPluginContext, Command } from '../types';
+import type { GEDataTransfer } from '../types/events';
+import { GEInteractionType } from '../types/events';
 import { Node } from './node/Node';
 import { Edge } from './edge/Edge';
+import { Port } from './port/Port';
+import { CommandHistory } from './CommandHistory';
+import { AnchorRegistry, type NodeAnchorFunction, type EdgeAnchorFunction } from './anchor/Anchor';
 
 export class Graph extends Canvas {
   private nodesById: Map<string, Node> = new Map();
   private edgesById: Map<string, Edge> = new Map();
-  public eventBus: EventTarget = new EventTarget();
-  public plugins: Map<string, any> = new Map();
+  public commandHistory: CommandHistory;
+  public anchorRegistry: AnchorRegistry;
 
-  constructor(config: any) {
+  constructor(config: GraphOptions) {
     super(config);
+    // Initialize command history
+    this.commandHistory = new CommandHistory(this, 100);
+    // Initialize anchor registry
+    this.anchorRegistry = new AnchorRegistry();
     // expose renderer if provided so plugins can access it
     try {
       if (config && config.renderer) {
         (this as any).renderer = config.renderer;
       }
     } catch (e) {}
+
+    // Add graph reference to context so plugins can access it
+    (this.context as any).graph = this;
+  }
+
+  // ============================================
+  // Plugin Management (directly using Canvas's renderingPlugins)
+  // ============================================
+
+  /**
+   * Apply a plugin to the graph
+   * Plugin is added to Canvas's renderingPlugins array and receives RenderingPluginContext
+   * @param plugin - Plugin with apply(context, runtime) method
+   * @returns this for chaining
+   */
+  use(plugin: RenderingPlugin): this {
+    if (!plugin) {
+      console.warn('Invalid plugin: plugin is undefined or null');
+      return this;
+    }
+
+    try {
+      // Add to Canvas's renderingPlugins array
+      if (this.context?.renderingPlugins) {
+        this.context.renderingPlugins.push(plugin);
+      }
+
+      // Call plugin's apply method with RenderingPluginContext
+      const runtime = (this as any).globalRuntime;
+      plugin.apply(this.context as RenderingPluginContext, runtime);
+    } catch (e) {
+      console.error(`Failed to apply plugin ${plugin.name || 'unknown'}:`, e);
+    }
+
+    return this;
   }
 
   /**
-   * Register a node reference in the lightweight registry
+   * Remove a plugin from the graph
+   * @param pluginName - Name of the plugin to remove
+   * @returns this for chaining
    */
+  dispose(pluginName: string): this {
+    if (!this.context?.renderingPlugins) {
+      console.warn('Plugin system not available');
+      return this;
+    }
+
+    const index = this.context.renderingPlugins.findIndex((p) => (p as any).name === pluginName);
+    if (index === -1) {
+      console.warn(`Plugin "${pluginName}" not found`);
+      return this;
+    }
+
+    try {
+      const plugin = this.context.renderingPlugins[index] as any;
+      // Call plugin's destroy method if it exists
+      if (typeof plugin.destroy === 'function') {
+        plugin.destroy();
+      }
+      // Remove from renderingPlugins array
+      this.context.renderingPlugins.splice(index, 1);
+    } catch (e) {
+      console.error(`Failed to dispose plugin ${pluginName}:`, e);
+    }
+
+    return this;
+  }
+
+  /**
+   * Get a plugin by name
+   */
+  getPlugin(name: string): RenderingPlugin | undefined {
+    if (!this.context?.renderingPlugins) return undefined;
+    return this.context.renderingPlugins.find((p) => (p as any).name === name);
+  }
+
+  /**
+   * Get all plugins
+   */
+  getPlugins(): RenderingPlugin[] {
+    if (!this.context?.renderingPlugins) return [];
+    return this.context.renderingPlugins;
+  }
+
+  /**
+   * Remove all plugins
+   */
+  disposeAllPlugins(): this {
+    if (!this.context?.renderingPlugins) return this;
+
+    // Collect plugin names first to avoid modification during iteration
+    const pluginsWithNames = this.context.renderingPlugins
+      .map((p, i) => ({ plugin: p, name: (p as any).name, index: i }))
+      .filter(({ name }) => name);
+
+    // Dispose in reverse order to maintain proper cleanup
+    for (let i = pluginsWithNames.length - 1; i >= 0; i--) {
+      const { name } = pluginsWithNames[i];
+      this.dispose(name);
+    }
+
+    return this;
+  }
+
+  // ============================================
+  // Registry Management
+  // ============================================
+
   registerNode(node: Node): void {
     try {
       const id = node.getId();
@@ -58,6 +171,75 @@ export class Graph extends Canvas {
     }
   }
 
+  // ============================================
+  // Anchor Management
+  // ============================================
+
+  /**
+   * Register a custom NodeAnchor
+   * @param name - Anchor name (e.g., 'custom-top')
+   * @param fn - Anchor function
+   */
+  registerNodeAnchor(name: string, fn: NodeAnchorFunction): this {
+    this.anchorRegistry.registerNodeAnchor(name, fn);
+    return this;
+  }
+
+  /**
+   * Register a custom EdgeAnchor
+   * @param name - Anchor name (e.g., 'quarter')
+   * @param fn - Anchor function
+   */
+  registerEdgeAnchor(name: string, fn: EdgeAnchorFunction): this {
+    this.anchorRegistry.registerEdgeAnchor(name, fn);
+    return this;
+  }
+
+  /**
+   * Register both NodeAnchor and EdgeAnchor (same function)
+   * @param name - Anchor name
+   * @param fn - Anchor function
+   */
+  registerAnchor(name: string, fn: NodeAnchorFunction | EdgeAnchorFunction): this {
+    this.anchorRegistry.registerNodeAnchor(name, fn as NodeAnchorFunction);
+    this.anchorRegistry.registerEdgeAnchor(name, fn as EdgeAnchorFunction);
+    return this;
+  }
+
+  /**
+   * Get a NodeAnchor function by name or definition
+   */
+  getNodeAnchor(definition: string | { name: string; args?: any }): NodeAnchorFunction | undefined {
+    if (typeof definition === 'string') {
+      return this.anchorRegistry.getNodeAnchor(definition);
+    }
+    return this.anchorRegistry.resolveNodeAnchor(definition);
+  }
+
+  /**
+   * Get an EdgeAnchor function by name or definition
+   */
+  getEdgeAnchor(definition: string | { name: string; args?: any }): EdgeAnchorFunction | undefined {
+    if (typeof definition === 'string') {
+      return this.anchorRegistry.getEdgeAnchor(definition);
+    }
+    return this.anchorRegistry.resolveEdgeAnchor(definition);
+  }
+
+  /**
+   * List all registered NodeAnchors
+   */
+  listNodeAnchors(): string[] {
+    return this.anchorRegistry.listNodeAnchors();
+  }
+
+  /**
+   * List all registered EdgeAnchors
+   */
+  listEdgeAnchors(): string[] {
+    return this.anchorRegistry.listEdgeAnchors();
+  }
+
   // Override appendChild/removeChild to keep registry in sync
   appendChild(child: any): any {
     const res = super.appendChild(child);
@@ -85,6 +267,10 @@ export class Graph extends Canvas {
     }
     return res;
   }
+
+  // ============================================
+  // Data Management
+  // ============================================
 
   /**
    * Load graph data
@@ -177,109 +363,22 @@ export class Graph extends Canvas {
     return { nodes, edges };
   }
 
-  /**
-   * Add a node to the graph
-   */
-  addNode(nodeData: any): Node {
-    try {
-      if (nodeData && typeof nodeData.shape === 'string') {
-        try {
-          const ctor = (this as any).customElements?.get?.(nodeData.shape);
-          if (ctor) nodeData = { ...nodeData, shape: ctor };
-        } catch (e) {
-          // ignore
-        }
-      }
-    } catch (e) {}
+  // ============================================
+  // Element Access
+  // ============================================
 
-    const node = new Node(nodeData);
-    this.appendChild(node);
-    // register happens in appendChild
-    return node;
-  }
-
-  /**
-   * Remove a node from the graph
-   */
-  removeNode(nodeId: string): void {
-    const node = this.getNodeById(nodeId) as Node;
-    if (node) {
-      // Remove connected edges first
-      const connectedEdges: Edge[] = [];
-      this.document.querySelectorAll('g-edge').forEach((edge: any) => {
-        if (edge.getSource() === nodeId || edge.getTarget() === nodeId) {
-          connectedEdges.push(edge);
-        }
-      });
-
-      connectedEdges.forEach((edge) => {
-        this.removeChild(edge);
-      });
-
-      // Remove node
-      this.removeChild(node);
-    }
-  }
-
-  /**
-   * Add an edge to the graph
-   */
-  addEdge(edgeData: any): Edge {
-    // Verify that source and target nodes exist
-    const sourceNode = this.getNodeById(edgeData.source) as Node;
-    const targetNode = this.getNodeById(edgeData.target) as Node;
-
-    if (!sourceNode || !targetNode) {
-      throw new Error('Source or target node does not exist');
-    }
-
-    try {
-      if (edgeData && typeof edgeData.shape === 'string') {
-        try {
-          const ctor = (this as any).customElements?.get?.(edgeData.shape);
-          if (ctor) edgeData = { ...edgeData, shape: ctor };
-        } catch (e) {
-          // ignore
-        }
-      }
-    } catch (e) {}
-
-    const edge = new Edge(edgeData);
-    this.appendChild(edge);
-    return edge;
-  }
-
-  /**
-   * Remove an edge from the graph
-   */
-  removeEdge(edgeId: string): void {
-    const edge = this.getEdgeById(edgeId) as Edge;
-    if (edge) {
-      this.removeChild(edge);
-    }
-  }
-
-  /**
-   * Get a node by id
-   */
   getNodeById(id: string): Node | undefined {
     const fromMap = this.nodesById.get(id);
     if (fromMap) return fromMap as Node;
     return this.document.getElementById(id) as Node;
   }
 
-  /**
-   * Get an edge by id
-   */
   getEdgeById(id: string): Edge | undefined {
     const fromMap = this.edgesById.get(id);
     if (fromMap) return fromMap as Edge;
     return this.document.getElementById(id) as Edge;
   }
 
-  /**
-   * Get all nodes
-   */
   getNodes(): Node[] {
     const nodes: Node[] = [];
     this.nodesById.forEach((n) => nodes.push(n));
@@ -291,9 +390,6 @@ export class Graph extends Canvas {
     return nodes;
   }
 
-  /**
-   * Get all edges
-   */
   getEdges(): Edge[] {
     const edges: Edge[] = [];
     this.edgesById.forEach((e) => edges.push(e));
@@ -305,41 +401,43 @@ export class Graph extends Canvas {
     return edges;
   }
 
-  /**
-   * Install a GE plugin. Plugin must implement { name:string, install(graph), uninstall(graph) }
-   */
-  installPlugin(plugin: any): void {
-    if (!plugin || !plugin.name) return;
-    try {
-      if (typeof plugin.install === 'function') {
-        plugin.install(this);
-      }
-      this.plugins.set(plugin.name, plugin);
-    } catch (e) {
-      console.warn('Failed to install plugin', plugin.name, e);
-    }
+  // ============================================
+  // Command History (Undo/Redo)
+  // ============================================
+
+  async executeCommand(command: Command): Promise<void> {
+    return this.commandHistory.execute(command);
   }
 
-  /**
-   * Uninstall a plugin by name
-   */
-  uninstallPlugin(name: string): void {
-    const plugin = this.plugins.get(name);
-    if (!plugin) return;
-    try {
-      if (typeof plugin.uninstall === 'function') {
-        plugin.uninstall(this);
-      }
-    } catch (e) {
-      console.warn('Failed to uninstall plugin', name, e);
-    }
-    this.plugins.delete(name);
+  async undo(): Promise<void> {
+    return this.commandHistory.undo();
   }
 
-  /**
-   * Uninstall all plugins
-   */
-  uninstallAllPlugins(): void {
-    Array.from(this.plugins.keys()).forEach((name) => this.uninstallPlugin(name));
+  async redo(): Promise<void> {
+    return this.commandHistory.redo();
+  }
+
+  canUndo(): boolean {
+    return this.commandHistory.canUndo();
+  }
+
+  canRedo(): boolean {
+    return this.commandHistory.canRedo();
+  }
+
+  clearHistory(): void {
+    this.commandHistory.clear();
+  }
+
+  // ============================================
+  // Cleanup
+  // ============================================
+
+  destroy(cleanUp?: boolean, skipTriggerEvent?: boolean): void {
+    // Dispose all plugins first
+    this.disposeAllPlugins();
+
+    // Call parent destroy
+    super.destroy(cleanUp, skipTriggerEvent);
   }
 }

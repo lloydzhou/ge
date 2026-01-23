@@ -56,7 +56,7 @@
     console.log('window.GE:', window.GE);
     
     const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
-    const { Graph, Node, Edge, ConnectionPlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, 
+    const { Graph, Node, Edge, ConnectionPlugin, MovePlugin, NormalRouter, OrthogonalRouter, ManhattanRouter,
             NormalConnector, PolylineConnector, SmoothConnector, RoundedConnector } = window.GE;
 
     const renderer = new window.G.SVG.Renderer()
@@ -76,7 +76,11 @@
       console.log('Graph ready, creating nodes and edges...');
 
       const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
-      graph.installPlugin(conn);
+      graph.use(conn);
+
+      // Enable node movement
+      const move = new MovePlugin();
+      graph.use(move);
       
       // Create nodes
       const node1 = new Node({
@@ -92,7 +96,9 @@
           label: 'Node 1',
           labelFill: '#fff',
           labelFontSize: 14
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       const node2 = new Node({
@@ -110,7 +116,9 @@
           label: 'Node 2',
           labelFill: '#000',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       const node3 = new Node({
@@ -126,7 +134,9 @@
           label: 'Node 3',
           labelFill: '#fff',
           labelFontSize: 14
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       // Add the nodes to the graph
@@ -164,51 +174,51 @@
 
       // Setup control buttons for router types
       document.getElementById('normal').addEventListener('click', () => {
-        edge1.data.style.router = new NormalRouter();
+        edge1.getData().style.router = new NormalRouter();
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('orthogonal').addEventListener('click', () => {
-        edge1.data.style.router = new OrthogonalRouter();
+        edge1.getData().style.router = new OrthogonalRouter();
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('manhattan').addEventListener('click', () => {
-        edge1.data.style.router = new ManhattanRouter();
+        edge1.getData().style.router = new ManhattanRouter();
         edge1.updatePositionFromNodes();
       });
 
       // Setup control buttons for connector types
       document.getElementById('normal-connector').addEventListener('click', () => {
-        edge1.data.style.connector = new NormalConnector();
+        edge1.getData().style.connector = new NormalConnector();
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('polyline-connector').addEventListener('click', () => {
-        edge1.data.style.connector = new PolylineConnector();
+        edge1.getData().style.connector = new PolylineConnector();
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('smooth-connector').addEventListener('click', () => {
-        edge1.data.style.connector = new SmoothConnector();
+        edge1.getData().style.connector = new SmoothConnector();
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('rounded-connector').addEventListener('click', () => {
-        edge1.data.style.connector = new RoundedConnector();
+        edge1.getData().style.connector = new RoundedConnector();
         edge1.updatePositionFromNodes();
       });
 
       // Setup control buttons for vertices
       document.getElementById('addVertices').addEventListener('click', () => {
         // 添加中间点
-        edge1.data.style.vertices = [[200, 150]];
+        edge1.getData().style.vertices = [[200, 150]];
         edge1.updatePositionFromNodes();
       });
 
       document.getElementById('clearVertices').addEventListener('click', () => {
         // 清除中间点
-        edge1.data.style.vertices = [];
+        edge1.getData().style.vertices = [];
         edge1.updatePositionFromNodes();
       });
 

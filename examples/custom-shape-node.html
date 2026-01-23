@@ -29,7 +29,7 @@
   <script src="../packages/ge-core/dist/index.umd.min.js"></script>
   <script>
     const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
-    const { Graph, Node, Edge, ConnectionPlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, NormalConnector, PolylineConnector } = window.GE;
+    const { Graph, Node, Edge, ConnectionPlugin, MovePlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, NormalConnector, PolylineConnector } = window.GE;
 
     const renderer = new window.G.SVG.Renderer()
     renderer.registerPlugin(new Annotation.Plugin());
@@ -53,7 +53,11 @@
       console.log('Graph ready, creating nodes and edges...');
 
       const conn = new ConnectionPlugin({ defaultEdgeStyle: { stroke: '#888', lineWidth: 1 } });
-      graph.installPlugin(conn);
+      graph.use(conn);
+
+      // Enable node movement
+      const move = new MovePlugin();
+      graph.use(move);
       
       // Create a circle node using registry name
       const circleNode = new Node({
@@ -71,7 +75,9 @@
           label: 'Circle Node',
           labelFill: '#fff',
           labelFontSize: 14
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       // Create another circle node using ctor directly
@@ -88,7 +94,9 @@
           label: 'Custom Circle',
           labelFill: '#fff',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       // Add the nodes to the graph
@@ -110,7 +118,9 @@
           label: 'Rect Node',
           labelFill: '#000',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
 
       // Add the node to the graph
@@ -183,7 +193,9 @@
           label: 'Polygon Node',
           labelFill: '#000',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
       graph.appendChild(polygonNode);
       // Ports on polygon using angles that may hit vertices or edges
@@ -208,7 +220,9 @@
           label: 'Ellipse Node',
           labelFill: '#fff',
           labelFontSize: 12
-        }
+        },
+        // 使节点可拖拽
+        draggable: true
       });
       graph.appendChild(ellipseNode);
       ellipseNode.createPort({ id: 'ellipse-top', layout: 'top', shape: 'custom-port' });

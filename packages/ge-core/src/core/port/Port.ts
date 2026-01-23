@@ -1,6 +1,8 @@
-import { CustomElement, Circle, DisplayObject } from '@antv/g-lite';
+import { Circle, DisplayObject } from '@antv/g-lite';
 import { resolveCtor } from '../../utils/shapeResolver';
-import type { BasePortStyleProps } from '../../types';
+import type { BasePortStyleProps, PortData, PortLayoutOptions } from '../../types';
+import type { Node } from '../node/Node';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface PortStyleProps extends BasePortStyleProps {
   r?: number;
@@ -11,39 +13,18 @@ export interface PortStyleProps extends BasePortStyleProps {
   y?: number;
 }
 
-export type PortLayoutOptions =
-  | 'top'
-  | 'bottom'
-  | 'left'
-  | 'right'
-  | {
-      name: 'angle';
-      args: {
-        angle: number; // 0-360 degrees
-      };
-    }
-  | {
-      name: 'absolute';
-      args: {
-        x: number;
-        y: number;
-      };
-    };
-
-export interface PortConfig {
-  id: string; // unique id, may be namespaced by node e.g. `${nodeId}:${portId}`
-  parentId?: string;
-  shape?: string | Function;
-  style?: PortStyleProps;
-  layout?: PortLayoutOptions;
-  [key: string]: any;
+export interface PortConfig extends PortData {
+  [key: string]: unknown;
 }
 
-export class Port extends CustomElement<PortStyleProps> {
+export class Port extends GEInteractiveElement<PortStyleProps> {
   private circle: DisplayObject | null = null;
-  private data: any;
-  public owner: any = null; // parent node reference
+  private data: PortConfig;
+  public owner: Node | null = null; // parent node reference
   private layout: PortLayoutOptions | undefined;
+
+  // Port 默认支持连线（与 Node 不同，Node 默认不支持）
+  protected _defaultSourceConnectable = true;
 
   constructor(config: PortConfig) {
     super({
@@ -209,7 +190,7 @@ export class Port extends CustomElement<PortStyleProps> {
   /**
    * Get the port data
    */
-  getData(): any {
+  getData(): PortConfig {
     return this.data;
   }
 
@@ -242,8 +223,41 @@ export class Port extends CustomElement<PortStyleProps> {
   connectedCallback() {
     // Initialize port when connected to DOM
     console.log('Port connected:', this.data.id);
+
+    // Initialize interaction event listeners (handled by parent)
+    super._initInteraction();
+
+    // Apply cursor style (Port 默认支持连线，显示 crosshair)
+    this._applyCursorStyle();
+
     // Synchronously update position to avoid edge connection issues
     this.updatePosition();
+  }
+
+  /**
+   * Port 默认支持连线，显示 crosshair
+   */
+  private _applyCursorStyle(): void {
+    let cursor = 'default';
+
+    const isSourceConnectable = this._isSourceConnectable();
+    const isTargetConnectable = this._isTargetConnectable();
+
+    // Port 主要是连线
+    if (isSourceConnectable) {
+      cursor = 'crosshair';
+    } else if (isTargetConnectable) {
+      cursor = 'pointer';
+    }
+
+    // Apply cursor to the circle
+    try {
+      if (this.circle && typeof (this.circle as any).style === 'object') {
+        (this.circle as any).style.cursor = cursor;
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   disconnectedCallback() {
