@@ -76,6 +76,9 @@ export class ConnectionPlugin implements RenderingPlugin {
     // Handle connect:start - start creating a connection
     this._onConnectStart = (e: any) => {
       try {
+        // Clean up any existing temp edge first
+        cleanupTemp();
+
         const { source, x, y } = e.detail;
         if (!source) return;
 
@@ -103,11 +106,10 @@ export class ConnectionPlugin implements RenderingPlugin {
             this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget);
           }
         } catch (err) {
-          console.error('[ConnectionPlugin] failed create tempEdge', err);
           cleanupTemp();
         }
       } catch (err) {
-        console.error('[ConnectionPlugin] connect:start error', err);
+        // ignore
       }
     };
 
@@ -190,11 +192,11 @@ export class ConnectionPlugin implements RenderingPlugin {
             this.context.graph.appendChild(edge);
             edge.connectTo(this.startEndpoint, target);
           } catch (err) {
-            console.error('[ConnectionPlugin] appendChild failed', err);
+            // ignore
           }
         }
       } catch (err) {
-        console.error('[ConnectionPlugin] connect:end error', err);
+        // ignore
       } finally {
         cleanupTemp();
       }
@@ -206,7 +208,7 @@ export class ConnectionPlugin implements RenderingPlugin {
       (this.context.graph as any).addEventListener('connect:drag', this._onConnectDrag as EventListener);
       (this.context.graph as any).addEventListener('connect:end', this._onConnectEnd as EventListener);
     } catch (e) {
-      console.error('[ConnectionPlugin] failed to attach listeners', e);
+      // ignore
     }
   }
 

@@ -66,6 +66,11 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
   private _handlePointerDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
 
+    // 防止重复触发：如果已经在拖拽中，忽略后续的 pointerdown
+    if (this._isDragging) {
+      return;
+    }
+
     const dragType = this._determineDragType();
     if (dragType) {
       this._startDrag(e, dragType);
@@ -111,12 +116,30 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
   // ============================================
 
   /**
-   * 根据交互类型获取事件名称前缀
+   * 根据交互类型获取事件名称后缀
    * @param type 交互类型
-   * @returns 事件前缀 ('node' 或 'connect')
+   * @returns 事件后缀 ('dragstart/drag/dragend' 或 'start/drag/end')
    */
-  protected _getEventPrefix(type: GEInteractionType): string {
+  protected _getEventPrefix(type: GEInteractionType | string): string {
+    // 处理枚举和字符串两种情况
+    if (typeof type === 'string') {
+      return type === GEInteractionType.NODE_DRAG ? 'node' : 'connect';
+    }
     return type === GEInteractionType.NODE_DRAG ? 'node' : 'connect';
+  }
+
+  /**
+   * 根据交互类型获取事件名称后缀
+   * @param type 交互类型
+   * @returns 事件后缀 ('dragstart/drag/dragend' 或 'start/drag/end')
+   */
+  protected _getEventSuffix(type: GEInteractionType | string): string {
+    // NODE_DRAG 使用 dragstart/drag/dragend（MovePlugin 兼容）
+    // CONNECTION 使用 start/drag/end（ConnectionPlugin）
+    if (typeof type === 'string') {
+      return type === GEInteractionType.NODE_DRAG ? 'dragstart' : 'start';
+    }
+    return type === GEInteractionType.NODE_DRAG ? 'dragstart' : 'start';
   }
 
   /**
@@ -165,7 +188,13 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    * @param type 拖拽类型
    */
   protected _startDrag(e: PointerEvent, type: GEInteractionType): void {
+    // 立即设置拖拽状态，防止重复触发
     this._isDragging = true;
+
+    // 阻止事件冒泡，避免触发父元素的拖拽逻辑
+    // 例如：Port 触发连线时，不会触发 Node 的移动
+    //       Node 触发连线时，不会触发 MovePlugin 的节点移动
+    e.stopPropagation();
     this._dragType = type;
     this._pointerId = e.pointerId;
     this._dataTransfer = this._createDataTransfer();
@@ -180,6 +209,7 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
     this._dataTransfer.setData('ge/startY', canvasY);
 
     const prefix = this._getEventPrefix(type);
+    const suffix = this._getEventSuffix(type);
 
     const eventDetail = {
       type,
@@ -191,7 +221,7 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
     };
 
     const dragStartEvent = (e as any).clone();
-    (dragStartEvent as any).type = `${prefix}:dragstart`;
+    (dragStartEvent as any).type = `${prefix}:${suffix}`;
     (dragStartEvent as any).detail = eventDetail;
 
     this.dispatchEvent(dragStartEvent);
@@ -215,7 +245,7 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
     const canvasY = (e as any).canvasY ?? e.clientY;
     const prefix = this._getEventPrefix(this._dragType!);
 
-    // 派发 drag 事件（使用 clone() 避免事件对象被复用）
+    // 派发 drag 事件（pointermove 始终使用 'drag' 后缀）
     const dragEvent = (e as any).clone();
     (dragEvent as any).type = `${prefix}:drag`;
     (dragEvent as any).detail = {
@@ -258,8 +288,10 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
       detail.connected = false;
     }
 
+    // pointerup 始终使用 'end' 后缀（NODE_DRAG 用 'dragend'，CONNECTION 用 'end'）
+    const endSuffix = this._dragType === GEInteractionType.NODE_DRAG ? 'dragend' : 'end';
     const dragEndEvent = (e as any).clone();
-    (dragEndEvent as any).type = `${prefix}:end`;
+    (dragEndEvent as any).type = `${prefix}:${endSuffix}`;
     (dragEndEvent as any).detail = detail;
 
     // 清理状态
@@ -307,7 +339,9 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    */
   protected _cancelDrag(): void {
     const prefix = this._getEventPrefix(this._dragType || GEInteractionType.NODE_DRAG);
-    const dragEndEvent = new CustomEvent(`${prefix}:end`, {
+    // pointercancel 始终使用 'end' 后缀（NODE_DRAG 用 'dragend'，CONNECTION 用 'end'）
+    const endSuffix = (this._dragType || GEInteractionType.NODE_DRAG) === GEInteractionType.NODE_DRAG ? 'dragend' : 'end';
+    const dragEndEvent = new CustomEvent(`${prefix}:${endSuffix}`, {
       detail: {
         type: this._dragType || GEInteractionType.NODE_DRAG,
         source: this,

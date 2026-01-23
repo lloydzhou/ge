@@ -514,9 +514,6 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
   
   connectedCallback() {
-    // Initialize edge when connected to DOM
-    console.log('Edge connected:', this.data.id);
-
     // Give a bit more time for nodes to be registered and ports to be created
     setTimeout(() => this._tryConnect(), 10);
   }
@@ -560,9 +557,6 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
   
   disconnectedCallback() {
-    // Cleanup when edge is removed from DOM
-    console.log('Edge disconnected:', this.data.id);
-
     // Remove event listeners directly from source and target nodes (DOM API style)
     try {
       if (this.sourceNode && typeof this.sourceNode.removeEventListener === 'function' && this._onSourceMoved) {

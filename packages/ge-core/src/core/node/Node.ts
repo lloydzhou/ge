@@ -180,9 +180,6 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
   }
 
   connectedCallback() {
-    // Initialize node when connected to DOM
-    console.log('Node connected:', this.data.id);
-
     // Initialize interaction event listeners
     this._initInteraction();
 
@@ -234,9 +231,6 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
   }
 
   disconnectedCallback() {
-    // Cleanup when node is removed from DOM
-    console.log('Node disconnected:', this.data.id);
-
     // Unregister from Graph
     try {
       const graph = this.ownerDocument as any;

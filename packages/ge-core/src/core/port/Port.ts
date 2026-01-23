@@ -221,9 +221,6 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
   }
 
   connectedCallback() {
-    // Initialize port when connected to DOM
-    console.log('Port connected:', this.data.id);
-
     // Initialize interaction event listeners (handled by parent)
     super._initInteraction();
 
@@ -262,6 +259,5 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
 
   disconnectedCallback() {
     // Cleanup when port is removed from DOM
-    console.log('Port disconnected:', this.data.id);
   }
 }

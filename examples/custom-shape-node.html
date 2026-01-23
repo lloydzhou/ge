@@ -77,7 +77,10 @@
           labelFontSize: 14
         },
         // 使节点可拖拽
-        draggable: true
+        draggable: true,
+        // 使节点可作为连线源和目标
+        sourceConnectable: true,
+        targetConnectable: true
       });
 
       // Create another circle node using ctor directly
@@ -96,7 +99,10 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true
+        draggable: true,
+        // 使节点可作为连线源和目标
+        sourceConnectable: true,
+        targetConnectable: true
       });
 
       // Add the nodes to the graph
@@ -120,7 +126,10 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true
+        draggable: true,
+        // 使节点可作为连线源和目标
+        sourceConnectable: true,
+        targetConnectable: true
       });
 
       // Add the node to the graph
@@ -195,7 +204,10 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true
+        draggable: true,
+        // 使节点可作为连线源和目标
+        sourceConnectable: true,
+        targetConnectable: true
       });
       graph.appendChild(polygonNode);
       // Ports on polygon using angles that may hit vertices or edges
@@ -222,7 +234,10 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true
+        draggable: true,
+        // 使节点可作为连线源和目标
+        sourceConnectable: true,
+        targetConnectable: true
       });
       graph.appendChild(ellipseNode);
       ellipseNode.createPort({ id: 'ellipse-top', layout: 'top', shape: 'custom-port' });
