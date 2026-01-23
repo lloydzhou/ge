@@ -1,6 +1,7 @@
-import { Circle, CustomElement } from '@antv/g-lite';
+import { Circle, CustomElement, type DisplayObject } from '@antv/g-lite';
 import type { Vec2 } from '../../utils/edgeLayout';
 import type { Edge } from './Edge';
+import type { BaseStyleProps } from '../../types';
 
 export interface EdgeToolOptions {
   // 工具的类型
@@ -8,16 +9,16 @@ export interface EdgeToolOptions {
   // 工具的位置
   position?: Vec2;
   // 工具的样式
-  style?: any;
-  // 其他配置选项
-  [key: string]: any;
+  style?: BaseStyleProps;
+  // 工具的偏移量
+  offset?: number;
 }
 
 export class EdgeTool extends CustomElement<EdgeToolOptions> {
   private edge: Edge | null = null;
-  private innerShape: any = null;
+  private innerShape: DisplayObject | null = null;
 
-  constructor(options: EdgeToolOptions, edge: any) {
+  constructor(options: EdgeToolOptions, edge: Edge) {
     super({
       className: 'g-edge-tool',
       ...options

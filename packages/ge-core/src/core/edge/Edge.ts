@@ -2,15 +2,19 @@ import { CustomElement, Line, Text, DisplayObject, Polyline } from '@antv/g-lite
 import { resolveCtor } from '../../utils/shapeResolver';
 import type { EdgeLayoutOptions, Vec2 } from '../../utils/edgeLayout';
 import { computeAnchor } from '../../utils/edgeLayout';
-import { computeAnchorForShape } from '../../utils/nodeAnchor';
-import type { BaseEdgeStyleProps } from '../../types';
+import { resolveAnchorFunction } from '../../utils/nodeAnchor';
+import type { BaseEdgeStyleProps, EdgeData, EdgeMarkerConfig } from '../../types';
 import { EdgeMarker } from './EdgeMarker';
 import type { DisplayObjectConfigWithShape } from '../../types';
 import type { EdgeRouter } from './EdgeRouter';
-import { NormalRouter } from './EdgeRouter';
+import { NormalRouter, OrthogonalRouter, ManhattanRouter } from './EdgeRouter';
 import type { EdgeConnector } from './EdgeConnector';
 import { NormalConnector } from './EdgeConnector';
 import { EdgeTool } from './EdgeTool';
+import type { Node } from '../node/Node';
+import type { Port } from '../port/Port';
+import type { Graph } from '../../core/Graph';
+import type { NodeAnchorArgs } from '../../utils/nodeAnchor';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -23,46 +27,25 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
   router?: EdgeRouter; // 路由器
   connector?: EdgeConnector; // 连接器
   vertices?: Vec2[]; // 中间点
-  tools?: any[]; // 边上工具（暂时使用 any 类型避免循环依赖）
-  startMarker?: {
-    enabled?: boolean;
-    type?: 'none' | 'circle' | 'triangle';
-    size?: number;
-    fill?: string;
-    stroke?: string;
-    lineWidth?: number;
-    layout?: EdgeLayoutOptions; // optional layout on edge
-    shape?: string | Function; // registry name or ctor
-  };
-  endMarker?: {
-    enabled?: boolean;
-    type?: 'none' | 'circle' | 'triangle';
-    size?: number;
-    fill?: string;
-    stroke?: string;
-    lineWidth?: number;
-    layout?: EdgeLayoutOptions; // optional layout on edge
-    shape?: string | Function; // registry name or ctor
-  };
+  tools?: EdgeTool[]; // 边上工具
+  startMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
+  endMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
 }
 
-export interface EdgeConfig {
-  id: string;
-  shape?: string | Function;
-  source: string | any; // 支持字符串ID或直接对象引用(Node/Port)
-  target: string | any; // 支持字符串ID或直接对象引用(Node/Port)  
-  style?: EdgeStyleProps;
-  [key: string]: any;
+export interface EdgeConfig extends EdgeData {
+  [key: string]: unknown;
 }
+
+export type EdgeEndpoint = string | Node | Port;
 
 export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyleProps> {
   private primaryShape: T | null = null;
   private label: Text;
-  private data: any;
-  private sourceNode: any = null;
-  private targetNode: any = null;
-  private _onSourceMoved: any = null;
-  private _onTargetMoved: any = null;
+  private data: EdgeConfig;
+  private sourceNode: EdgeEndpoint = null;
+  private targetNode: EdgeEndpoint = null;
+  private _onSourceMoved: ((e: Event) => void) | null = null;
+  private _onTargetMoved: ((e: Event) => void) | null = null;
   // markers
   private startMarkerObj: EdgeMarker | null = null;
   private endMarkerObj: EdgeMarker | null = null;
@@ -103,8 +86,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       stroke: (style.startMarker && style.startMarker.stroke) ?? defaultColor,
       lineWidth: (style.startMarker && style.startMarker.lineWidth) ?? (style.lineWidth || 1),
       // allow registry name passthrough
-      // @ts-ignore
-      shape: style.startMarker ? ((style.startMarker as any).shape || (style.startMarker as any).typeName || 'circle') : 'circle',
+      shape: style.startMarker?.shape ?? style.startMarker?.typeName ?? 'circle',
     };
     this.endMarkerCfg = {
       enabled: style.endMarker?.enabled !== false, // 默认启用终点箭头
@@ -114,8 +96,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       stroke: (style.endMarker && style.endMarker.stroke) ?? defaultColor,
       lineWidth: (style.endMarker && style.endMarker.lineWidth) ?? (style.lineWidth || 1),
       // allow registry name passthrough
-      // @ts-ignore
-      shape: style.endMarker ? ((style.endMarker as any).shape || (style.endMarker as any).typeName || 'triangle') : 'triangle',
+      shape: style.endMarker?.shape ?? style.endMarker?.typeName ?? 'triangle',
     };
     
     this.primaryShape = null as unknown as T; // 初始化为空，在 updatePositionFromNodes 中创建
@@ -129,7 +110,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       lineWidth: this.startMarkerCfg.lineWidth,
       layout: this.startMarkerCfg.layout,
       // pass registry name/ctor under unified 'shape' field used by EdgeMarker
-      shape: (this.startMarkerCfg as any).shape,
+      shape: this.startMarkerCfg.shape,
     }, this) : null;
     this.endMarkerObj = this.endMarkerCfg.enabled ? new EdgeMarker({
       enabled: this.endMarkerCfg.enabled,
@@ -138,7 +119,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       stroke: this.endMarkerCfg.stroke,
       lineWidth: this.endMarkerCfg.lineWidth,
       layout: this.endMarkerCfg.layout,
-      shape: (this.endMarkerCfg as any).shape,
+      shape: this.endMarkerCfg.shape,
     }, this) : null;
     
     // Create the edge label
@@ -162,7 +143,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     if (style.tools && Array.isArray(style.tools)) {
       style.tools.forEach(toolConfig => {
         try {
-          const tool = new EdgeTool(toolConfig, this as any);
+          const tool = new EdgeTool(toolConfig, this);
           this.tools.push(tool);
           super.appendChild(tool);
         } catch (e) {
@@ -172,12 +153,11 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     }
   }
   
-  protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): T {
+  protected createPrimaryShape(config: DisplayObjectConfigWithShape<unknown>): T {
     // This method should be overridden by subclasses to create the appropriate shape
     // For the base Edge class, we default to Line
-    // try resolving a registered ctor from config.primaryShapeType if provided
-    // @ts-ignore
-    const ptype = (config as any).shape;
+    // try resolving a registered ctor from config.shape if provided
+    const ptype = config.shape;
     const ctor = resolveCtor(this, ptype);
     if (ctor) {
       try { return new ctor(config) as unknown as T; } catch (e) {}
@@ -188,62 +168,61 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   /**
    * Connect edge to source and target node objects
    */
-  connectTo(sourceNode: any, targetNode: any) {
-    // Unsubscribe previous listeners
-    if (this._onSourceMoved && this.sourceNode) {
-      const busParent = this._findGraphParent();
-      if (busParent && busParent.eventBus) {
-        busParent.eventBus.removeEventListener('node:moved', this._onSourceMoved);
-      }
+  connectTo(sourceNode: EdgeEndpoint, targetNode: EdgeEndpoint): void {
+    // Remove previous listeners from old source/target nodes
+    if (this.sourceNode && typeof this.sourceNode.removeEventListener === 'function') {
+      this.sourceNode.removeEventListener('node:moved', this._onSourceMoved);
     }
-    if (this._onTargetMoved && this.targetNode) {
-      const busParent = this._findGraphParent();
-      if (busParent && busParent.eventBus) {
-        busParent.eventBus.removeEventListener('node:moved', this._onTargetMoved);
-      }
+    if (this.targetNode && typeof this.targetNode.removeEventListener === 'function') {
+      this.targetNode.removeEventListener('node:moved', this._onTargetMoved);
     }
 
     this.sourceNode = sourceNode;
     this.targetNode = targetNode;
 
-    // Setup listeners to update when nodes move
-    const graph = this._findGraphParent();
-    if (graph && graph.eventBus) {
-      this._onSourceMoved = (e: any) => {
-        if (!this.sourceNode) return;
-        if (e.detail?.id === this.sourceNode.getId()) {
-          this.updatePositionFromNodes();
-        }
-      };
-      this._onTargetMoved = (e: any) => {
-        if (!this.targetNode) return;
-        if (e.detail?.id === this.targetNode.getId()) {
-          this.updatePositionFromNodes();
-        }
-      };
-      graph.eventBus.addEventListener('node:moved', this._onSourceMoved);
-      graph.eventBus.addEventListener('node:moved', this._onTargetMoved);
+    // Setup listeners directly on source and target nodes (DOM API style)
+    this._onSourceMoved = this._handleSourceMoved.bind(this);
+    this._onTargetMoved = this._handleTargetMoved.bind(this);
+
+    // Helper: get the actual target to listen on (Node, or Port's owner Node)
+    const getEventTarget = (endpoint: EdgeEndpoint): EdgeEndpoint | null => {
+      if (!endpoint || typeof endpoint !== 'object') return null;
+      // If endpoint is a Port, listen to its owner Node instead
+      if (typeof (endpoint as Port).getAbsolutePosition === 'function') {
+        const port = endpoint as Port;
+        return port.owner || port;
+      }
+      return endpoint;
+    };
+
+    const sourceEventTarget = getEventTarget(sourceNode);
+    const targetEventTarget = getEventTarget(targetNode);
+
+    if (sourceEventTarget && typeof sourceEventTarget.addEventListener === 'function') {
+      sourceEventTarget.addEventListener('node:moved', this._onSourceMoved);
+    }
+    if (targetEventTarget && typeof targetEventTarget.addEventListener === 'function') {
+      targetEventTarget.addEventListener('node:moved', this._onTargetMoved);
     }
 
     // Initial update
     this.updatePositionFromNodes();
   }
 
-  private _findGraphParent(): any {
-    try {
-      let parent: any = this.parent;
-      while (parent) {
-        if (parent.constructor && parent.constructor.name === 'Graph') {
-          return parent;
-        }
-        parent = parent.parent;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
+  /**
+   * Handle source node moved event
+   */
+  private _handleSourceMoved(e: Event): void {
+    this.updatePositionFromNodes();
   }
-  
+
+  /**
+   * Handle target node moved event
+   */
+  private _handleTargetMoved(e: Event): void {
+    this.updatePositionFromNodes();
+  }
+
   /**
    * Position the label in the center of the primary shape
    * Uses bounding box to calculate the center position
@@ -285,7 +264,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       return [[x1, y1], [x2, y2]];
     }
     if (this.primaryShape instanceof Polyline) {
-      const pts = (this.primaryShape.style as any).points as number[][] | undefined;
+      const polylineStyle = this.primaryShape.style as { points?: number[][] };
+      const pts = polylineStyle.points;
       if (Array.isArray(pts) && pts.length >= 2) return pts as Vec2[];
     }
     // fallback: try bbox center for both ends (degenerate)
@@ -304,67 +284,153 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
    */
   updatePositionFromNodes(): void {
     try {
-      const getEndpointPosition = (endpoint: any): [number, number] => {
-        // If it's a port, use its absolute position
-        if (endpoint && typeof endpoint.getAbsolutePosition === 'function') {
-          return endpoint.getAbsolutePosition();
+      /**
+       * 获取端点的连接点位置
+       * 统一处理 Node 和 Port，都基于 primaryShape 计算锚点
+       *
+       * @param endpoint - 当前端点（source 或 target）
+       * @param otherEndpoint - 另一端点
+       * @param suggestedDir - Router 建议的方向（可选）
+       * @returns 锚点位置（相对于画布原点）
+       */
+      const getEndpointPosition = (
+        endpoint: EdgeEndpoint,
+        otherEndpoint: EdgeEndpoint,
+        suggestedDir?: Vec2
+      ): [number, number] => {
+        // 第一步：统一获取 primaryShape 和 position
+        let primaryShape: DisplayObject | null = null;
+        let position: [number, number] = [0, 0];
+
+        if (typeof endpoint === 'string') {
+          return [0, 0];
         }
-        
-        // If it's a node, get its edge position (closest point on border)
-        if (endpoint && typeof endpoint.getPrimaryShape === 'function') {
-           const [nodeX, nodeY] = endpoint.getPosition(); // 获取节点在图中的位置
-          
-           return [nodeX, nodeY]; // 先返回节点中心，稍后计算边缘交点
+
+        // 尝试作为 Port 处理
+        if (typeof (endpoint as Port).getAbsolutePosition === 'function') {
+          const port = endpoint as Port;
+          primaryShape = port.circle || (port as any).getPrimaryShape?.();
+          position = (port as any).getPosition?.() || (port as Port).getAbsolutePosition();
         }
-        
-        // Final fallback: use node position or [0,0]
-        if (endpoint && typeof endpoint.getPosition === 'function') {
-          const pos = endpoint.getPosition();
-          return [pos[0] || 0, pos[1] || 0];
+        // 尝试作为 Node 处理
+        else if (typeof (endpoint as Node).getPrimaryShape === 'function') {
+          const node = endpoint as Node;
+          primaryShape = node.getPrimaryShape();
+          position = node.getPosition();
         }
-        
-        return [0, 0];
+        // 兜底：尝试获取 position
+        else if (typeof (endpoint as Node).getPosition === 'function') {
+          position = (endpoint as Node).getPosition();
+        }
+
+        if (!primaryShape) {
+          return position;
+        }
+
+        // 第二步：确定方向向量
+        // 优先使用 Router 建议的方向，否则使用节点中心之间的方向
+        let dirNorm: [number, number];
+        if (suggestedDir) {
+          // 使用 Router 建议的方向
+          const dist = Math.sqrt(suggestedDir[0] ** 2 + suggestedDir[1] ** 2);
+          dirNorm = dist > 0
+            ? [suggestedDir[0] / dist, suggestedDir[1] / dist]
+            : [0, 0];
+        } else {
+          // 使用节点中心之间的方向
+          const otherPos = this._getEndpointCenter(otherEndpoint);
+          const direction: [number, number] = [
+            otherPos[0] - position[0],
+            otherPos[1] - position[1]
+          ];
+          const dist = Math.sqrt(direction[0] ** 2 + direction[1] ** 2);
+          dirNorm = dist > 0
+            ? [direction[0] / dist, direction[1] / dist]
+            : [0, 0];
+        }
+
+        // 第三步：根据形状类型选择合适的锚点
+        // 检测形状类型：
+        // 1. 优先使用 nodeName（如果明确是 circle/ellipse/rect）
+        // 2. nodeName 不明确时，使用长宽比作为启发式判断
+        const isCircleByType = primaryShape.nodeName === 'circle' || primaryShape.nodeName === 'ellipse';
+        const isRectByType = primaryShape.nodeName === 'rect';
+
+        // 只有当 nodeName 不明确时，才使用长宽比判断
+        let isCircle = isCircleByType;
+        if (!isCircleByType && !isRectByType) {
+          const bounds = primaryShape.getLocalBounds?.();
+          if (bounds) {
+            const width = bounds.max[0] - bounds.min[0];
+            const height = bounds.max[1] - bounds.min[1];
+            const ratio = width / (height || 1);
+            isCircle = ratio >= 0.75 && ratio <= 1.33;
+          }
+        }
+
+        let anchorFn: ((shape: DisplayObject) => [number, number]) | null = null;
+
+        if (isCircle) {
+          // 圆形/椭圆：使用角度锚点
+          const angle = Math.atan2(dirNorm[1], dirNorm[0]) * 180 / Math.PI;
+          anchorFn = resolveAnchorFunction({
+            name: 'angle',
+            args: { angle }
+          } as any);
+        } else {
+          // 矩形：使用 midSide（基于方向选择最近侧）
+          anchorFn = resolveAnchorFunction({
+            name: 'midSide',
+            args: { direction: dirNorm }
+          } as any);
+        }
+
+        // 第四步：计算并返回锚点位置
+        if (anchorFn) {
+          const [x, y] = anchorFn(primaryShape);
+          return [x + position[0], y + position[1]];
+        }
+
+        return position;
       };
 
-      const [x1, y1] = getEndpointPosition(this.sourceNode);
-      const [x2, y2] = getEndpointPosition(this.targetNode);
+      // 统一流程：
+      // 1. 询问 Router 的方向建议（如果有）
+      // 2. 计算源节点锚点（基于 Router 的方向建议）
+      // 3. 计算目标节点锚点（基于 Router 的方向建议）
+      // 4. 用锚点位置调用 router.route()
+      // 5. 完成
 
-      // 如果两个端点都是节点，计算边缘交点
-      let finalX1 = x1, finalY1 = y1, finalX2 = x2, finalY2 = y2;
-      
-      if (this.sourceNode && typeof this.sourceNode.getPrimaryShape === 'function') {
-        // 计算从源节点到目标节点的方向
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance > 0) {
-          const dirX = dx / distance;
-          const dirY = dy / distance;
-          
-          // 计算源节点边缘交点
-          const sourceEdge = this.getNodeEdgePoint(this.sourceNode, dirX, dirY);
-          if (sourceEdge) {
-            finalX1 = sourceEdge[0];
-            finalY1 = sourceEdge[1];
-          }
-          
-          // 如果目标节点也是真实节点，计算目标节点边缘交点（方向相反）
-          if (this.targetNode && typeof this.targetNode.getPrimaryShape === 'function') {
-            const targetEdge = this.getNodeEdgePoint(this.targetNode, -dirX, -dirY);
-            if (targetEdge) {
-              finalX2 = targetEdge[0];
-              finalY2 = targetEdge[1];
-            }
-          }
-        }
-      }
-
-      // 使用 router 计算路径点
       const router = this.data.style?.router || new NormalRouter();
       const vertices = this.data.style?.vertices || [];
-      const rawPoints: Vec2[] = [[finalX1, finalY1], [finalX2, finalY2]];
-      const routedPoints = router.route(rawPoints, vertices);
+
+      // 获取节点中心位置
+      const sourceCenter = this._getEndpointCenter(this.sourceNode);
+      const targetCenter = this._getEndpointCenter(this.targetNode);
+
+      // 询问 Router 的方向建议（如果有）
+      let sourceDir: Vec2 | undefined;
+      let targetDir: Vec2 | undefined;
+      if (router.getStartDirection && router.getEndDirection) {
+        sourceDir = router.getStartDirection(sourceCenter, targetCenter);
+        targetDir = router.getEndDirection(sourceCenter, targetCenter);
+      }
+
+      // 根据方向建议计算锚点位置
+      const [x1, y1] = getEndpointPosition(
+        this.sourceNode,
+        this.targetNode,
+        sourceDir
+      );
+      const [x2, y2] = getEndpointPosition(
+        this.targetNode,
+        this.sourceNode,
+        targetDir
+      );
+
+      // 用锚点位置进行路由
+      const anchorPoints: Vec2[] = [[x1, y1], [x2, y2]];
+      const finalPoints = router.route(anchorPoints, vertices);
 
       // 使用 connector 创建或更新 primaryShape
       const connector = this.data.style?.connector || new NormalConnector();
@@ -384,7 +450,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       }
 
       // 创建新的 primaryShape
-      this.primaryShape = connector.connect(routedPoints, style) as T;
+      this.primaryShape = connector.connect(finalPoints, style) as T;
       super.appendChild(this.primaryShape);
 
       // update markers after primary shape laid out
@@ -397,129 +463,21 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
 
   /**
-   * 计算节点边缘与给定方向射线的交点
+   * 获取端点的中心位置（用于计算方向向量）
    */
-  private getNodeEdgePoint(node: any, dirX: number, dirY: number): [number, number] | null {
-    if (!node || typeof node.getPrimaryShape !== 'function') {
-      return null;
+  private _getEndpointCenter(endpoint: EdgeEndpoint): [number, number] {
+    if (typeof endpoint === 'string') {
+      return [0, 0];
     }
-
-    const shape = node.getPrimaryShape();
-    const [nodeX, nodeY] = node.getPosition();
-
-    // 使用 computeAnchorForShape 计算边缘点
-    // 构造角度布局参数
-    const angleRad = Math.atan2(dirY, dirX);
-    const angleDeg = angleRad * 180 / Math.PI;
-    
-    try {
-      // 尝试使用 computeAnchorForShape 计算边缘点
-      const nodeStyle = node.data?.style || {};
-      const [x, y] = computeAnchorForShape(shape, { name: 'angle', args: { angle: angleDeg } }, nodeStyle);
-      // 将相对坐标转换为绝对坐标
-      return [nodeX + x, nodeY + y];
-    } catch (e) {
-      // 如果计算失败，退回到之前的实现
-      if (shape && shape.style) {
-        if (shape.nodeName === 'circle') {
-          // 圆形：计算射线与圆的交点
-          const r = shape.style.r || 0;
-          const cx = nodeX + (shape.style.cx || 0);
-          const cy = nodeY + (shape.style.cy || 0);
-          
-          return [cx + dirX * r, cy + dirY * r];
-        } 
-        else if (shape.nodeName === 'ellipse') {
-          // 椭圆：计算射线与椭圆的交点
-          const cx = nodeX + (shape.style.cx || 0);
-          const cy = nodeY + (shape.style.cy || 0);
-          const rx = shape.style.rx || shape.style.r || 0;
-          const ry = shape.style.ry || shape.style.r || 0;
-          
-          // 归一化方向向量
-          const length = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (length === 0) return [cx, cy];
-          
-          const dx = dirX / length;
-          const dy = dirY / length;
-          
-          // 计算射线与椭圆的交点
-          // 椭圆方程: (x-cx)²/rx² + (y-cy)²/ry² = 1
-          // 射线方程: x = cx + t*dx, y = cy + t*dy
-          // 代入得到: (t*dx)²/rx² + (t*dy)²/ry² = 1
-          // 整理得到: t²*(dx²/rx² + dy²/ry²) = 1
-          // 解得: t = 1/sqrt(dx²/rx² + dy²/ry²)
-          
-          const a = dx * dx / (rx * rx) + dy * dy / (ry * ry);
-          if (a === 0) return [cx, cy];
-          
-          const t = 1 / Math.sqrt(a);
-          return [cx + t * dx, cy + t * dy];
-        }
-        else if (shape.nodeName === 'rect') {
-          // 矩形：计算射线与矩形边界的交点
-          const x = nodeX + (shape.style.x || 0);
-          const y = nodeY + (shape.style.y || 0);
-          const width = shape.style.width || 0;
-          const height = shape.style.height || 0;
-          
-          const centerX = x + width / 2;
-          const centerY = y + height / 2;
-          
-          // 计算射线与矩形四边的交点，选择最近的
-          const intersections: [number, number][] = [];
-          
-          // 右边 (x = x + width)
-          if (dirX > 0) {
-            const t = (x + width - centerX) / dirX;
-            const intersectY = centerY + dirY * t;
-            if (intersectY >= y && intersectY <= y + height) {
-              intersections.push([x + width, intersectY]);
-            }
-          }
-          
-          // 左边 (x = x)
-          if (dirX < 0) {
-            const t = (x - centerX) / dirX;
-            const intersectY = centerY + dirY * t;
-            if (intersectY >= y && intersectY <= y + height) {
-              intersections.push([x, intersectY]);
-            }
-          }
-          
-          // 下边 (y = y + height)
-          if (dirY > 0) {
-            const t = (y + height - centerY) / dirY;
-            const intersectX = centerX + dirX * t;
-            if (intersectX >= x && intersectX <= x + width) {
-              intersections.push([intersectX, y + height]);
-            }
-          }
-          
-          // 上边 (y = y)
-          if (dirY < 0) {
-            const t = (y - centerY) / dirY;
-            const intersectX = centerX + dirX * t;
-            if (intersectX >= x && intersectX <= x + width) {
-              intersections.push([intersectX, y]);
-            }
-          }
-          
-          // 返回最近的交点（通常只有一个有效交点）
-          if (intersections.length > 0) {
-            return intersections[0];
-          }
-          
-          // 如果没有找到交点，返回中心点
-          return [centerX, centerY];
-        }
-      }
-      
-      // 其他形状或无法计算时，返回节点中心
-      return [nodeX, nodeY];
+    if (typeof (endpoint as Port).getAbsolutePosition === 'function') {
+      return (endpoint as Port).getAbsolutePosition();
     }
+    if (typeof (endpoint as Node).getPosition === 'function') {
+      return (endpoint as Node).getPosition();
+    }
+    return [0, 0];
   }
-  
+
   /**
    * Get the edge ID
    */
@@ -530,21 +488,21 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   /**
    * Get the source node ID or object
    */
-  getSource(): string | any {
+  getSource(): EdgeEndpoint {
     return this.data.source;
   }
-  
+
   /**
    * Get the target node ID or object
    */
-  getTarget(): string | any {
+  getTarget(): EdgeEndpoint {
     return this.data.target;
   }
   
   /**
    * Get the edge data
    */
-  getData(): any {
+  getData(): EdgeConfig {
     return this.data;
   }
   
@@ -556,93 +514,25 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
   
   connectedCallback() {
-    // Initialize edge when connected to DOM
-    console.log('Edge connected:', this.data.id);
-
     // Give a bit more time for nodes to be registered and ports to be created
     setTimeout(() => this._tryConnect(), 10);
   }
 
   private _tryConnect() {
     try {
-      const graph = this._findGraphParent();
-      let sourceNode = null;
-      let targetNode = null;
+      const graph = this.ownerDocument as any;
+      let sourceNode: EdgeEndpoint | null = null;
+      let targetNode: EdgeEndpoint | null = null;
 
-      const resolveEndpoint = (endpoint: any) => {
+      const resolveEndpoint = (endpoint: EdgeEndpoint): EdgeEndpoint | null => {
         // 如果已经是对象(Node或Port)，直接返回
-        if (endpoint && typeof endpoint === 'object' && (
-          typeof endpoint.getId === 'function' || 
-          typeof endpoint.getPrimaryShape === 'function' ||
-          typeof endpoint.getAbsolutePosition === 'function'
-        )) {
+        if (endpoint && typeof endpoint === 'object') {
           return endpoint;
         }
 
-        // 如果是字符串，解析ID
+        // 如果是字符串ID，使用 Graph.getElementById()
         if (typeof endpoint === 'string') {
-          // support node:port syntax
-          if (endpoint.includes(':')) {
-            const [nodeId, ...rest] = endpoint.split(':');
-            const portIdCandidate = rest.join(':');
-            const node = graph && typeof graph.getNodeById === 'function' ? graph.getNodeById(nodeId) : null;
-            if (node && typeof node.getPortById === 'function') {
-              // try direct lookup with full id
-              let port = null;
-              try {
-                port = node.getPortById(endpoint);
-              } catch (e) {
-                port = null;
-              }
-              // fallback: scan ports for suffix match (in case registration used different id forms)
-              if (!port) {
-                try {
-                  const ports = typeof node.getPorts === 'function' ? node.getPorts() : [];
-                  for (const p of ports) {
-                    try {
-                      const pid = typeof p.getId === 'function' ? String(p.getId()) : '';
-                      if (pid === endpoint || pid.endsWith(':' + portIdCandidate) || pid === portIdCandidate) {
-                        port = p;
-                        break;
-                      }
-                    } catch (e) {}
-                  }
-                } catch (e) {}
-              }
-
-              if (port) {
-                // Ensure port position is updated before connecting
-                if (typeof (port as any).updatePosition === 'function') {
-                  try { (port as any).updatePosition(); } catch (e) {}
-                }
-                return port;
-              }
-            }
-
-            // if node exists but port not yet found, also try to query document by id
-            try {
-              const rootDoc = graph && graph.document ? graph.document : (globalThis as any).document;
-              if (rootDoc && typeof rootDoc.getElementById === 'function') {
-                const el = rootDoc.getElementById(endpoint);
-                if (el) return el;
-              }
-            } catch (e) {}
-
-            return null;
-          }
-
-          // 普通节点ID
-          if (graph && typeof graph.getNodeById === 'function') {
-            return graph.getNodeById(endpoint);
-          }
-
-          // fallback: try ancestor documentElement getElementById
-          try {
-            const rootDoc = graph && graph.document ? graph.document : (globalThis as any).document;
-            if (rootDoc && typeof rootDoc.getElementById === 'function') {
-              return rootDoc.getElementById(endpoint);
-            }
-          } catch (e) {}
+          return graph.getElementById(endpoint);
         }
 
         return null;
@@ -659,9 +549,6 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
           target: this.data.target,
           sourceNode,
           targetNode,
-          sourceType: typeof this.data.source,
-          targetType: typeof this.data.target,
-          graphNodes: graph ? Array.from(graph.nodesById?.keys() || []) : [],
         });
       }
     } catch (e) {
@@ -670,25 +557,36 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   }
   
   disconnectedCallback() {
-    // Cleanup when edge is removed from DOM
-    console.log('Edge disconnected:', this.data.id);
-    // remove event listeners
+    // Remove event listeners directly from source and target nodes (DOM API style)
     try {
-      const graph = this._findGraphParent();
-      if (graph && graph.eventBus) {
-        if (this._onSourceMoved) graph.eventBus.removeEventListener('node:moved', this._onSourceMoved);
-        if (this._onTargetMoved) graph.eventBus.removeEventListener('node:moved', this._onTargetMoved);
+      if (this.sourceNode && typeof this.sourceNode.removeEventListener === 'function' && this._onSourceMoved) {
+        this.sourceNode.removeEventListener('node:moved', this._onSourceMoved);
+        this._onSourceMoved = null;
+      }
+      if (this.targetNode && typeof this.targetNode.removeEventListener === 'function' && this._onTargetMoved) {
+        this.targetNode.removeEventListener('node:moved', this._onTargetMoved);
+        this._onTargetMoved = null;
       }
     } catch (e) {
-      // ignore
+      console.warn('Error removing event listeners:', e);
     }
 
-    // dispose markers
+    // Clear node references
+    this.sourceNode = null;
+    this.targetNode = null;
+
+    // Dispose markers
     try {
-      if (this.startMarkerObj) this.startMarkerObj.dispose();
-      if (this.endMarkerObj) this.endMarkerObj.dispose();
+      if (this.startMarkerObj) {
+        this.startMarkerObj.dispose();
+        this.startMarkerObj = null;
+      }
+      if (this.endMarkerObj) {
+        this.endMarkerObj.dispose();
+        this.endMarkerObj = null;
+      }
     } catch (e) {
-      // ignore
+      console.warn('Error disposing markers:', e);
     }
   }
 }

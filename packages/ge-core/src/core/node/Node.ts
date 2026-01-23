@@ -1,8 +1,9 @@
-import { CustomElement, Rect, Text, DisplayObject } from '@antv/g-lite';
+import { Rect, Text, DisplayObject, CustomEvent } from '@antv/g-lite';
 import { resolveCtor } from '../../utils/shapeResolver';
-import type { BaseNodeStyleProps, DisplayObjectConfigWithShape } from '../../types';
-import { Port, PortLayoutOptions } from '../port/Port';
-import { computeAnchorForShape } from '../../utils/nodeAnchor';
+import type { BaseNodeStyleProps, DisplayObjectConfigWithShape, NodeData, PortLayoutOptions } from '../../types';
+import { Port } from '../port/Port';
+import { resolveAnchorFunction } from '../../utils/nodeAnchor';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
@@ -16,20 +17,15 @@ export interface NodeStyleProps extends BaseNodeStyleProps {
   labelFontSize?: number;
 }
 
-export interface NodeConfig {
-  id: string;
-  x?: number;
-  y?: number;
-  shape?: string | Function;
-  style?: NodeStyleProps;
-  [key: string]: any;
+export interface NodeConfig extends NodeData {
+  [key: string]: unknown;
 }
 
-export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyleProps> {
+export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<NodeStyleProps> {
   private primaryShape: T;
   private label: Text;
-  private data: any;
-  private portsById: Map<string, any> = new Map();
+  private data: NodeConfig;
+  private portsById: Map<string, Port> = new Map();
 
   constructor(config: NodeConfig) {
     super({
@@ -44,9 +40,12 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
       super.setPosition(config.x, config.y);
     }
 
-    // pass through shape but cast to any to avoid DisplayObjectConfig excess property error
-    // @ts-ignore
-    this.primaryShape = this.createPrimaryShape(({ ...(config as any), id: `${config.id}-primary`, shape: config.shape } as any));
+    // pass through shape to createPrimaryShape
+    this.primaryShape = this.createPrimaryShape({
+      ...(config as Record<string, unknown>),
+      id: `${config.id}-primary`,
+      shape: config.shape
+    } as DisplayObjectConfigWithShape);
 
     // Create the node label
     this.label = new Text({
@@ -85,49 +84,22 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
   
   /**
    * Position the label in the center of the primary shape
-   * Uses shape style when possible, otherwise falls back to bbox size
+   * Uses DisplayObject's getLocalBounds() for consistent positioning
    */
   private positionLabel(): void {
     try {
-      const shape: any = this.primaryShape as any;
-      const style = shape.style || {};
+      const shape = this.primaryShape;
 
-      // For Circle, center is at (cx, cy)
-      if (shape.nodeName === 'circle') {
-        const cx = style.cx || 0;
-        const cy = style.cy || 0;
-        this.label.setLocalPosition([cx, cy]);
-        return;
-      }
-
-      // For Rect, center is at (x + width/2, y + height/2)
-      if (shape.nodeName === 'rect') {
-        const x = style.x || 0;
-        const y = style.y || 0;
-        const width = style.width || 0;
-        const height = style.height || 0;
-        this.label.setLocalPosition([x + width / 2, y + height / 2]);
-        return;
-      }
-
-      // Fallback for other shapes using local bounds
-      let bounds: any = null;
+      // Use getLocalBounds() from DisplayObject to get the center position
       if (typeof shape.getLocalBounds === 'function') {
-        try {
-          bounds = shape.getLocalBounds();
-        } catch (e) {
-          bounds = null;
-        }
-      }
-
-      if (bounds) {
+        const bounds = shape.getLocalBounds();
         const centerX = (bounds.min[0] + bounds.max[0]) / 2;
         const centerY = (bounds.min[1] + bounds.max[1]) / 2;
         this.label.setLocalPosition([centerX, centerY]);
         return;
       }
 
-      // Final fallback
+      // Fallback: use style dimensions
       const nodeStyle = this.data?.style || {};
       this.label.setLocalPosition([(nodeStyle.width || 100) / 2, (nodeStyle.height || 40) / 2]);
     } catch (error) {
@@ -145,40 +117,12 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
   }
   
   /**
-   * Get the node position as [x, y]
-   */
-  getPosition(): [number, number] {
-    try {
-      // Try to get position from properties first
-      const x = Number((this as any).x) || Number(this.data?.x) || 0;
-      const y = Number((this as any).y) || Number(this.data?.y) || 0;
-      
-      // If we have valid position data, use it
-      if (x !== 0 || y !== 0) {
-        return [x, y];
-      }
-      
-      // Fallback: try to get position from transform matrix
-      const transform = this.getLocalTransform();
-      if (transform && Array.isArray(transform) && transform.length >= 13) {
-        // mat4 format: [m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33]
-        // Translation is at indices 12 and 13 (or 4 and 5 in some formats)
-        return [transform[12] || 0, transform[13] || 0];
-      }
-      
-      return [x, y];
-    } catch (e) {
-      // Final fallback
-      const x = Number(this.data?.x) || 0;
-      const y = Number(this.data?.y) || 0;
-      return [x, y];
-    }
-  }
-
-  /**
    * Get the node data
+   *
+   * Note: getPosition() is provided by DisplayObject (parent class)
+   * and returns [x, y] coordinates directly.
    */
-  getData(): any {
+  getData(): NodeConfig {
     return this.data;
   }
   
@@ -189,7 +133,7 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
     return this.primaryShape;
   }
   
-  createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: any; [key: string]: any } = {}): Port {
+  createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: BaseNodeStyleProps; [key: string]: unknown } = {}): Port {
     const portId = portConfig.id ? String(portConfig.id) : `port-${Math.random().toString(36).slice(2, 9)}`;
     const fullId = portId.includes(':') ? portId : `${this.getId()}:${portId}`;
 
@@ -236,48 +180,35 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
   }
 
   connectedCallback() {
-    // Initialize node when connected to DOM
-    console.log('Node connected:', this.data.id);
-    
-    // Try to find enclosing Graph instance and register
+    // Initialize interaction event listeners
+    this._initInteraction();
+
+    // Apply cursor style based on interaction capabilities
+    this._applyCursorStyleTo(this.primaryShape);
+
+    // Register with Graph
     try {
-      let parent: any = this.parent;
-      while (parent) {
-        if (parent.constructor && parent.constructor.name === 'Graph') {
-          // register if available
-          if (typeof parent.registerNode === 'function') {
-            parent.registerNode(this as any);
-          }
-          break;
-        }
-        parent = parent.parent;
+      const graph = this.ownerDocument as any;
+      if (typeof graph.registerNode === 'function') {
+        graph.registerNode(this as any);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  disconnectedCallback() {
+    // Unregister from Graph
+    try {
+      const graph = this.ownerDocument as any;
+      if (typeof graph.unregisterNode === 'function') {
+        graph.unregisterNode(this as any);
       }
     } catch (e) {
       // ignore
     }
 
-    // label positioning removed from connectedCallback to avoid double layout
-  }
-  
-  disconnectedCallback() {
-    // Cleanup when node is removed from DOM
-    console.log('Node disconnected:', this.data.id);
-    // Try to unregister from Graph
-    try {
-      let parent: any = this.parent;
-      while (parent) {
-        if (parent.constructor && parent.constructor.name === 'Graph') {
-          if (typeof parent.unregisterNode === 'function') {
-            parent.unregisterNode(this as any);
-          }
-          break;
-        }
-        parent = parent.parent;
-      }
-    } catch (e) {
-      // ignore
-    }
-    // unregister ports
+    // Unregister ports
     try {
       this.portsById.forEach((p) => {
         if (p && typeof p.getId === 'function') {
@@ -319,20 +250,10 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
       yNum = Number((this as any).y) || 0;
     }
 
-    // After moving, notify graph via eventBus if available
+    // After moving, dispatch event to self (DOM API style)
     try {
-      let parent: any = this.parent;
-      while (parent) {
-        if (parent.constructor && parent.constructor.name === 'Graph') {
-          const bus = parent.eventBus as EventTarget;
-          if (bus) {
-            const ev = new CustomEvent('node:moved', { detail: { id: this.getId(), x: xNum, y: yNum } });
-            bus.dispatchEvent(ev as unknown as Event);
-          }
-          break;
-        }
-        parent = parent.parent;
-      }
+      const ev = new CustomEvent('node:moved', { detail: { id: this.getId(), x: xNum, y: yNum } });
+      this.dispatchEvent(ev);
     } catch (e) {
       // ignore
     }
@@ -351,15 +272,23 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
    * Compute a point on or around the primary shape according to a PortLayoutOptions.
    * Returns coordinates in the same local coordinate space used by the primary shape styles.
    * Useful for positioning ports and node tools consistently.
+   *
+   * Uses the new Anchor preset system via resolveAnchorFunction.
    */
   public computeAnchorForLayout(layout?: PortLayoutOptions): [number, number] {
     const shape: any = this.primaryShape as any;
     const nodeStyle = this.data?.style || {};
     try {
-      return computeAnchorForShape(shape, layout as any, nodeStyle);
+      // Use the new Anchor preset system
+      const anchorFn = resolveAnchorFunction(layout);
+      if (anchorFn) {
+        return anchorFn(shape);
+      }
+      // Fallback to center
+      return [Number(nodeStyle.width || 100) / 2, Number(nodeStyle.height || 40) / 2];
     } catch (e) {
       try {
-        // fallback to center
+        // fallback to center using getLocalBounds
         if (shape && typeof (shape as any).getLocalBounds === 'function') {
           const bounds: any = (this.primaryShape as any).getLocalBounds();
           const centerX = (bounds.min[0] + bounds.max[0]) / 2;
@@ -370,6 +299,7 @@ export class Node<T extends DisplayObject = Rect> extends CustomElement<NodeStyl
       return [Number(nodeStyle.width || 100) / 2, Number(nodeStyle.height || 40) / 2];
     }
   }
+
 }
 
 // legacy specific node classes removed in favor of registry-based 'shape' option

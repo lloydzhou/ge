@@ -119,10 +119,12 @@ graph.appendChild(node);
 graph.removeChild(node);
 
 // 获取节点 - 类似 document.getElementById
-const foundNode = graph.getElementById('my-node');
+const foundNode = graph.document.getElementById('my-node');
+// 或者使用更快的注册表查找
+const foundNode2 = graph.getNodeById('my-node');
 
 // 查询节点 - 类似 document.querySelectorAll
-const nodes = graph.querySelectorAll('g-node');
+const nodes = graph.document.querySelectorAll('g-node');
 ```
 
 ### 2. 属性操作
@@ -184,131 +186,211 @@ node.removeChild(label);
 ### 1. 自定义节点类型
 
 ```typescript
-// 创建自定义节点类
-class CustomNode extends Node {
-  constructor(config) {
-    super(config);
-    
-    // 添加自定义元素
-    this.rect = new Rect({
-      style: {
-        width: config.style.width,
-        height: config.style.height,
-        fill: config.style.fill
-      }
-    });
-    
-    this.label = new Text({
-      style: {
-        text: config.style.label,
-        fill: '#000'
-      }
-    });
-    
-    // 组织元素结构
-    this.appendChild(this.rect);
-    this.appendChild(this.label);
-    
-    // 添加交互
-    this.addEventListener('click', this.onClick.bind(this));
-  }
-  
-  onClick(event) {
-    console.log('Custom node clicked:', this.id);
-  }
-}
+// 方式1: 使用 shape 注册自定义元素
+import { Rect } from '@antv/g-lite';
 
-// 使用自定义节点
-const customNode = new CustomNode({
-  id: 'custom-1',
+graph.customElements.define('custom-rect', Rect);
+
+const node = new Node({
+  id: 'n1',
+  shape: 'custom-rect',
   x: 100,
   y: 100,
   style: {
-    width: 120,
+    width: 100,
     height: 60,
-    fill: '#fff',
-    label: 'Custom Node'
+    fill: '#fff'
   }
+});
+
+graph.appendChild(node);
+
+// 方式2: 继承 Node 类
+class CustomNode extends Node {
+  constructor(config) {
+    super(config);
+    // 添加自定义逻辑
+  }
+}
+
+const customNode = new CustomNode({
+  id: 'n2',
+  x: 200,
+  y: 100
 });
 
 graph.appendChild(customNode);
 ```
 
-### 2. 数据绑定
+### 2. 自定义路由器
 
 ```typescript
-// 创建带有数据的节点
-const node = new Node({
-  id: 'data-node',
-  x: 100,
-  y: 100,
-  data: {
-    name: 'John',
-    age: 30,
-    department: 'Engineering'
-  },
+import type { EdgeRouter } from '@antv/ge';
+import type { Vec2 } from '@antv/ge';
+
+class MyRouter implements EdgeRouter {
+  route(points: Vec2[], vertices?: Vec2[]): Vec2[] {
+    // 自定义路由逻辑
+    return points;
+  }
+}
+
+const edge = new Edge({
+  id: 'e1',
+  source: 'n1',
+  target: 'n2',
   style: {
-    width: 120,
-    height: 80
+    router: new MyRouter()
   }
 });
-
-// 访问数据
-console.log(node.data.name); // 'John'
-
-// 更新数据
-node.data.age = 31;
 ```
 
-## 架构设计（更新）
+### 3. 自定义连接器
 
-项目采用模块化、可插拔的设计，核心按职责拆分：
+```typescript
+import type { EdgeConnector } from '@antv/ge';
+import { DisplayObject } from '@antv/g-lite';
+import type { BaseEdgeStyleProps } from '@antv/ge';
+
+class MyConnector implements EdgeConnector {
+  connect(points: Vec2[], style: BaseEdgeStyleProps): DisplayObject {
+    // 自定义图形生成
+    return new Line({
+      style: {
+        x1: points[0][0],
+        y1: points[0][1],
+        x2: points[1][0],
+        y2: points[1][1],
+        ...style
+      }
+    });
+  }
+}
+
+const edge = new Edge({
+  id: 'e1',
+  source: 'n1',
+  target: 'n2',
+  style: {
+    connector: new MyConnector()
+  }
+});
+```
+
+## 架构设计
+
+### 核心理念
+
+GE 以 **@antv/g-lite** 为渲染引擎，在其上抽象图编辑的"原语"（借鉴 antv/x6 的概念）。
+
+**关键类比**:
+- Canvas (DOM) + Context (ctx)
+- Graph (继承 Canvas) + 图编辑原语 (非可视化对象)
+
+### 三层架构
 
 ```
-@antv/ge/
-├── core/                # 核心实现（对外仍通过 packages/ge-core/src/index.ts 暴露）
-│   ├── Graph.ts         # 图容器（继承 Canvas）
-│   ├── Node.ts          # 节点（继承 CustomElement）
-│   ├── Edge.ts          # 边（继承 CustomElement）
-│   ├── Port.ts          # 端口（继承 CustomElement）
-│   └── EdgeMarker.ts    # 边端 marker 抽象（创建/更新/销毁）
-├── plugins/             # 插件系统（交互/工具）
-│   ├── ConnectionPlugin.ts
-│   ├── RendererPluginAdapter.ts
-│   └── ...
-├── utils/               # 工具函数（推荐直接引用）
-│   ├── shapeResolver.ts # 运行时 shape 解析（优先使用 graph.document.customElements）
-│   ├── edgeLayout.ts    # Edge 上的 anchor 计算（computeAnchor）
-│   └── nodeAnchor.ts    # Node/Port 通用的 anchor 计算（computeAnchorForShape）
-└── types/               # 类型定义与共享类型
+┌─────────────────────────────────────────────────────────┐
+│  Layer 3: GE 可视化元素 (继承 CustomElement)            │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │
+│  │  Graph  │ │  Node   │ │  Edge   │ │  Port   │      │
+│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘      │
+└───────┼───────────┼───────────┼───────────┼───────────┘
+        │           │           │           │
+┌───────┴───────────┴───────────┴───────────┴───────────┐
+│  Layer 2: GE 图编辑原语 (非可视化对象)                 │
+│  ┌─────────┐ ┌──────────┐ ┌──────────┐               │
+│  │ Router  │ │Connector │ │  Anchor  │               │
+│  │(路径计算)│ │(图形生成) │ │(锚点计算) │               │
+│  └─────────┘ └──────────┘ └──────────┘               │
+└───────┬───────────┬───────────┬───────────────────────┘
+        │           │           │
+┌───────┴───────────┴───────────┴───────────────────────┐
+│  Layer 1: @antv/g-lite (渲染引擎)                      │
+│  ┌─────────┐ ┌──────────────┐ ┌──────────────┐       │
+│  │ Canvas  │ │CustomElement │ │DisplayObject │       │
+│  └─────────┘ └──────────────┘ └──────────────┘       │
+└───────────────────────────────────────────────────────┘
 ```
 
-关键设计点：
-- 运行时 shape 注册与解析：优先使用 graph.document.customElements（支持按图隔离的自定义形状），API 接受 `shape?: string | Function`。
-- 去中心化布局计算：Edge 的 anchor（computeAnchor）和 Node 的 anchor（computeAnchorForShape）都放在 utils，Port/EdgeMarker/工具复用同一套计算，便于扩展和测试。
-- Marker 抽象（EdgeMarker）：负责 marker 的创建、朝向、位置更新与销毁，Edge 只负责提供 anchor。
-- 插件化：交互（连接、拖拽、对齐等）以插件形式实现，便于按需加载和替换实现。
+### Layer 1: @antv/g-lite
+
+GE 完全基于 @antv/g-lite 构建，复用其渲染能力：
+
+| g-lite | GE 对应 |
+|--------|--------|
+| Canvas | Graph (图容器) |
+| CustomElement | Node, Edge, Port (可视化元素) |
+| RenderingPlugin | 插件系统 |
+
+### Layer 2: 图编辑原语 (非可视化对象)
+
+这些是 **纯 JS 对象**，不继承 DisplayObject：
+
+| 原语 | 作用 | 示例 |
+|------|------|------|
+| Router | 计算边的路径点 | NormalRouter, OrthogonalRouter, ManhattanRouter |
+| Connector | 生成路径图形 | NormalConnector (Line), PolylineConnector (Polyline) |
+| Anchor | 计算连接点位置 | computeAnchor(shape, angle) |
+
+### Layer 3: 可视化元素
+
+继承 CustomElement，负责实际渲染：
+
+- **Graph**: 图容器，继承 Canvas，管理节点/边注册表
+- **Node**: 节点，包含 primaryShape、label、ports
+- **Edge**: 边，包含 path、label、markers，使用 Router + Connector
+- **Port**: 端口，节点上的连接桩
+
+### 文件结构
+
+```
+packages/ge-core/src/
+├── core/
+│   ├── Graph.ts              # 继承 Canvas，图容器
+│   ├── node/
+│   │   └── Node.ts            # 继承 CustomElement，节点基类
+│   ├── edge/
+│   │   ├── Edge.ts            # 继承 CustomElement，边基类
+│   │   ├── EdgeMarker.ts      # 箭头管理
+│   │   ├── EdgeRouter.ts      # 路由器接口和实现
+│   │   └── EdgeConnector.ts    # 连接器接口和实现
+│   ├── port/
+│   │   └── Port.ts            # 继承 CustomElement，端口
+│   └── CommandHistory.ts      # 撤销/重做
+├── utils/
+│   ├── edgeLayout.ts          # 锚点计算工具
+│   └── shapeResolver.ts       # 形状解析工具
+├── plugins/
+│   └── ConnectionPlugin.ts    # 连线插件
+└── types/
+    └── index.ts               # 类型定义
+```
 
 
-## 开发路线图（更新与优先级）
+## 开发路线图
 
-短期优先（当前迭代，1-2 周）
-- [ ] 类型巩固：将 `shape?: string|Function` 等类型统一到共享 types，移除临时的 any/ts-ignore。 (高)
-- [ ] 文档与示例：完善 README、examples，添加自定义 shape、port、marker 的使用示例并保证示例覆盖 polygon/ellipse/angle 等场景。(高)
-- [ ] 单元测试：为 utils（edgeLayout/nodeAnchor/shapeResolver）编写单元测试，覆盖关键几何和边界条件。(中)
+详细的开发计划请参考 [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
 
-中期计划（2-6 周）
-- [ ] 插件完善：使 ConnectionPlugin/Drag/Selection 等具备更完善的拾取与交互逻辑（包含异步拾取支持）。(中)
-- [ ] 性能与稳定性：解决内存泄漏、提高大图渲染性能、增加更多集成测试与基准测试。(中)
-- [ ] 类型导出与包入口：在包顶层导出常用 utils/types，改善外部使用体验。(中)
+**近期重点 (1-2 周):**
+- [ ] 配置 Jest 测试环境和测试脚本
+- [ ] 完善类型系统，移除临时 any/ts-ignore
+- [ ] 为核心工具函数编写单元测试
 
-长期目标（6 周以上）
-- [ ] 高级编辑功能：自动布局、控制点编辑、撤销/重做、快捷键与工具栏体系。(低)
-- [ ] 生态与集成：提供 React/Vue 封装、示例模板与官方教程。(低)
+**短期目标 (2-4 周):**
+- [ ] 实现 SelectionPlugin 和 DragPlugin
+- [ ] ConnectionPlugin 功能增强
+- [ ] 插件开发文档
 
-如果你同意，我可以马上：
-- 将 README 中的“高级用法”示例也替换为使用 `shape` 参数的版本（把 CustomNode 示例改为示范如何继承并使用 shape），并把上面文档里的要点进一步压缩成 API 摘要；或
-- 直接开始为 `computeAnchorForShape` 写单元测试（需要我先检查项目是否有测试框架，例如 jest 或 vitest）。
+**中期目标 (1-2 月):**
+- [ ] 性能优化与大图渲染支持
+- [ ] 撤销/重做系统完善
+- [ ] 布局算法集成
+
+**长期目标 (3+ 月):**
+- [ ] React/Vue 框架集成
+- [ ] 完整示例库和教程
+- [ ] 生态建设
 
 ## 与 DOM API 的对应关系
 

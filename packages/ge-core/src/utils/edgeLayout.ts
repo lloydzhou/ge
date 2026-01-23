@@ -1,4 +1,14 @@
-export type Vec2 = [number, number];
+/**
+ * Edge Anchor 工具模块
+ *
+ * 整合了所有 EdgeAnchor 预设，并提供了向后兼容的 computeAnchor 函数。
+ */
+
+import type { Vec2 } from './edgeLayout';
+
+// ============================================================================
+// 类型定义
+// ============================================================================
 
 export interface EdgeLayoutOffset {
   along?: number; // offset along tangent (pixels)
@@ -19,6 +29,140 @@ export interface EdgeAnchor {
   normal: Vec2; // normalized (left-hand normal)
 }
 
+// ============================================================================
+// EdgeAnchor 预设
+// ============================================================================
+
+function startAnchor(points: Vec2[]): EdgeAnchor {
+  const start = points[0] || [0, 0];
+  const end = points[points.length - 1] || [0, 0];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return {
+    x: start[0],
+    y: start[1],
+    tangent: len > 0 ? [dx / len, dy / len] : [1, 0],
+    normal: len > 0 ? [-dy / len, dx / len] : [0, 1]
+  };
+}
+
+function endAnchor(points: Vec2[]): EdgeAnchor {
+  const start = points[0] || [0, 0];
+  const end = points[points.length - 1] || [0, 0];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return {
+    x: end[0],
+    y: end[1],
+    tangent: len > 0 ? [dx / len, dy / len] : [1, 0],
+    normal: len > 0 ? [-dy / len, dx / len] : [0, 1]
+  };
+}
+
+function middleAnchor(points: Vec2[], offset?: EdgeLayoutOffset): EdgeAnchor {
+  if (points.length < 2) return startAnchor(points);
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  const midX = (start[0] + end[0]) / 2;
+  const midY = (start[1] + end[1]) / 2;
+
+  // 计算切向量（从起点到终点）
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const tangent = len > 0 ? [dx / len, dy / len] : [1, 0];
+  const normal = len > 0 ? [-dy / len, dx / len] : [0, 1];
+
+  let x = midX;
+  let y = midY;
+
+  // 应用偏移
+  if (offset && (offset.normal || offset.along)) {
+    x = midX + normal[0] * (offset.normal ?? 0) + tangent[0] * (offset.along ?? 0);
+    y = midY + normal[1] * (offset.normal ?? 0) + tangent[1] * (offset.along ?? 0);
+  }
+
+  return { x, y, tangent, normal };
+}
+
+function ratioAnchor(points: Vec2[], args?: { ratio?: number }): EdgeAnchor {
+  const ratio = args?.ratio ?? 0.5;
+  if (points.length < 2) return startAnchor(points);
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  const x = start[0] + (end[0] - start[0]) * ratio;
+  const y = start[1] + (end[1] - start[1]) * ratio;
+
+  // 计算切向量（保持方向）
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const tangent = len > 0 ? [dx / len, dy / len] : [1, 0];
+  const normal = len > 0 ? [-dy / len, dx / len] : [0, 1];
+
+  return { x, y, tangent, normal };
+}
+
+// ============================================================================
+// 公共接口
+// ============================================================================
+
+/**
+ * EdgeAnchor 预设类型
+ */
+export type EdgeAnchorPreset = 'start' | 'end' | 'middle' | 'ratio';
+
+/**
+ * EdgeAnchor 定义（支持字符串、对象、函数）
+ */
+export type EdgeAnchorDefinition =
+  | EdgeAnchorPreset
+  | { name: 'ratio'; args?: { ratio?: number } }
+  | { name: 'middle'; args?: EdgeLayoutOffset }
+  | ((points: Vec2[]) => EdgeAnchor);
+
+/**
+ * 解析 EdgeAnchor 定义为锚点函数
+ */
+export function resolveEdgeAnchorFunction(definition: EdgeAnchorDefinition): ((points: Vec2[]) => EdgeAnchor) | null {
+  if (typeof definition === 'string') {
+    switch (definition) {
+      case 'start': return startAnchor;
+      case 'end': return endAnchor;
+      case 'middle': return (pts) => middleAnchor(pts);
+      default: return null;
+    }
+  }
+
+  if (definition && typeof definition === 'object') {
+    if (definition.name === 'ratio') {
+      const ratio = definition.args?.ratio ?? 0.5;
+      return (pts) => ratioAnchor(pts, { ratio });
+    }
+    if (definition.name === 'middle') {
+      return (pts) => middleAnchor(pts, definition.args);
+    }
+  }
+
+  if (typeof definition === 'function') {
+    return definition;
+  }
+
+  return null;
+}
+
+/**
+ * Compute an anchor point along an edge's path.
+ * 此函数保留用于向后兼容，内部使用预设锚点系统。
+ *
+ * @param points - Array of [x, y] coordinates defining the edge path
+ * @param opts - Layout options for positioning the anchor
+ * @returns The computed anchor point with position, tangent, and normal vectors
+ */
 export function computeAnchor(points: Vec2[], opts: EdgeLayoutOptions = {}): EdgeAnchor {
   const fallback: Vec2[] = [[0, 0], [0, 0]];
   const pts: Vec2[] = (points && points.length >= 2 ? points : fallback) as Vec2[];
