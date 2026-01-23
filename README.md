@@ -279,94 +279,25 @@ const edge = new Edge({
 
 ## 架构设计
 
-### 核心理念
+GE 基于 **@antv/g-lite** 构建，采用**类 DOM 的 API 设计**：
 
-GE 以 **@antv/g-lite** 为渲染引擎，在其上抽象图编辑的"原语"（借鉴 antv/x6 的概念）。
-
-**关键类比**:
-- Canvas (DOM) + Context (ctx)
-- Graph (继承 Canvas) + 图编辑原语 (非可视化对象)
-
-### 三层架构
+- **Graph** → 类似 HTML 的 `document`，是图编辑器的容器
+- **Node/Edge/Port** → 类似 DOM 元素，可用 `appendChild`、`addEventListener` 等方法操作
+- **事件驱动** → 所有交互通过事件系统处理，插件可监听事件实现功能
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Layer 3: GE 可视化元素 (继承 CustomElement)            │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │
-│  │  Graph  │ │  Node   │ │  Edge   │ │  Port   │      │
-│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘      │
-└───────┼───────────┼───────────┼───────────┼───────────┘
-        │           │           │           │
-┌───────┴───────────┴───────────┴───────────┴───────────┐
-│  Layer 2: GE 图编辑原语 (非可视化对象)                 │
-│  ┌─────────┐ ┌──────────┐ ┌──────────┐               │
-│  │ Router  │ │Connector │ │  Anchor  │               │
-│  │(路径计算)│ │(图形生成) │ │(锚点计算) │               │
-│  └─────────┘ └──────────┘ └──────────┘               │
-└───────┬───────────┬───────────┬───────────────────────┘
-        │           │           │
-┌───────┴───────────┴───────────┴───────────────────────┐
-│  Layer 1: @antv/g-lite (渲染引擎)                      │
-│  ┌─────────┐ ┌──────────────┐ ┌──────────────┐       │
-│  │ Canvas  │ │CustomElement │ │DisplayObject │       │
-│  └─────────┘ └──────────────┘ └──────────────┘       │
-└───────────────────────────────────────────────────────┘
+继承关系:
+Canvas (@antv/g-lite)
+└── Graph
+
+CustomElement (@antv/g-lite)
+├── GEInteractiveElement (交互基类)
+│   ├── Node (节点)
+│   └── Port (端口)
+└── Edge (边)
 ```
 
-### Layer 1: @antv/g-lite
-
-GE 完全基于 @antv/g-lite 构建，复用其渲染能力：
-
-| g-lite | GE 对应 |
-|--------|--------|
-| Canvas | Graph (图容器) |
-| CustomElement | Node, Edge, Port (可视化元素) |
-| RenderingPlugin | 插件系统 |
-
-### Layer 2: 图编辑原语 (非可视化对象)
-
-这些是 **纯 JS 对象**，不继承 DisplayObject：
-
-| 原语 | 作用 | 示例 |
-|------|------|------|
-| Router | 计算边的路径点 | NormalRouter, OrthogonalRouter, ManhattanRouter |
-| Connector | 生成路径图形 | NormalConnector (Line), PolylineConnector (Polyline) |
-| Anchor | 计算连接点位置 | computeAnchor(shape, angle) |
-
-### Layer 3: 可视化元素
-
-继承 CustomElement，负责实际渲染：
-
-- **Graph**: 图容器，继承 Canvas，管理节点/边注册表
-- **Node**: 节点，包含 primaryShape、label、ports
-- **Edge**: 边，包含 path、label、markers，使用 Router + Connector
-- **Port**: 端口，节点上的连接桩
-
-### 文件结构
-
-```
-packages/ge-core/src/
-├── core/
-│   ├── Graph.ts              # 继承 Canvas，图容器
-│   ├── node/
-│   │   └── Node.ts            # 继承 CustomElement，节点基类
-│   ├── edge/
-│   │   ├── Edge.ts            # 继承 CustomElement，边基类
-│   │   ├── EdgeMarker.ts      # 箭头管理
-│   │   ├── EdgeRouter.ts      # 路由器接口和实现
-│   │   └── EdgeConnector.ts    # 连接器接口和实现
-│   ├── port/
-│   │   └── Port.ts            # 继承 CustomElement，端口
-│   └── CommandHistory.ts      # 撤销/重做
-├── utils/
-│   ├── edgeLayout.ts          # 锚点计算工具
-│   └── shapeResolver.ts       # 形状解析工具
-├── plugins/
-│   └── ConnectionPlugin.ts    # 连线插件
-└── types/
-    └── index.ts               # 类型定义
-```
-
+> 💡 **详细架构说明、事件系统、插件开发请参考 [CLAUDE.md](./CLAUDE.md)**
 
 ## 开发路线图
 
@@ -384,7 +315,6 @@ packages/ge-core/src/
 
 **中期目标 (1-2 月):**
 - [ ] 性能优化与大图渲染支持
-- [ ] 撤销/重做系统完善
 - [ ] 布局算法集成
 
 **长期目标 (3+ 月):**

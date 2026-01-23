@@ -447,9 +447,9 @@ layout: { name: 'absolute', args: { x: 10, y: 20 } }
 
 ### 7. 事件系统
 
-- 图上的内部 `eventBus` 用于跨组件事件（如 `node:moved`）
-- 元素上的标准类 DOM 事件（click, mouseenter 等）
-- 边监听 `node:moved` 事件以自动更新位置
+- 元素使用标准类 DOM 事件（click, mouseenter 等）
+- 使用 `dispatchEvent` 派发事件，`addEventListener` 监听事件
+- 边会监听相关节点事件以自动更新位置
 
 ---
 
@@ -471,10 +471,10 @@ layout: { name: 'absolute', args: { x: 10, y: 20 } }
 | 浏览器 API | GE 实现 | 说明 |
 |-------------|---------|------|
 | `draggable="true"` | `draggable: true` | 相同的属性名和行为 |
-| `dragstart` 事件 | `gedragstart` 事件 | 添加 'ge' 前缀避免冲突 |
-| `drag` 事件 | `gedrag` 事件 | 拖拽过程中触发 |
-| `drop` 事件 | `gedrop` 事件 | 在有效的放置目标上触发 |
-| `dragend` 事件 | `gedragend` 事件 | 拖拽完成后触发 |
+| `dragstart` 事件 | `node:dragstart` / `connect:start` | 节点拖拽或连线开始 |
+| `drag` 事件 | `node:drag` / `connect:drag` | 拖拽/连线过程中 |
+| `drop` 事件 | `connect:drop` | 连线放置到目标 |
+| `dragend` 事件 | `node:dragend` / `connect:end` | 拖拽/连线完成 |
 | `dataTransfer.setData()` | `GEDataTransfer.setData()` | 拖拽过程中的数据传递 |
 | `preventDefault()` | `preventDefault()` | 取消默认行为 |
 | `effectAllowed` | `effectAllowed` | 控制拖拽操作类型 |
@@ -517,27 +517,40 @@ layout: { name: 'absolute', args: { x: 10, y: 20 } }
 
 ```typescript
 // Graph 级别的统一事件处理（类似全局事件委托）
-graph.addEventListener('gedragstart', (e) => {
-  const { type, source } = e.detail;
-  if (type === GEInteractionType.NODE_DRAG) {
-    console.log('节点开始拖拽:', source.getId());
+graph.addEventListener('node:dragstart', (e) => {
+  const { source } = e.detail;
+  console.log('节点开始拖拽:', source.getId());
+});
+
+graph.addEventListener('node:drag', (e) => {
+  // 节点拖拽过程中
+  const { source, x, y } = e.detail;
+  console.log('节点移动到:', x, y);
+});
+
+graph.addEventListener('node:dragend', (e) => {
+  const { source } = e.detail;
+  console.log('节点拖拽结束:', source.getId());
+});
+
+graph.addEventListener('connect:start', (e) => {
+  const { source } = e.detail;
+  console.log('开始连线:', source.getId());
+});
+
+graph.addEventListener('connect:drag', (e) => {
+  // 连线拖拽：检测最近的锚点
+  const { x, y } = e.detail;
+  const nearest = findNearestEndpoint(x, y);
+  if (nearest) {
+    snapTo(nearest);
+    highlight(nearest);
   }
 });
 
-graph.addEventListener('gedrag', (e) => {
-  if (e.detail.type === GEInteractionType.CONNECTION) {
-    // 连线拖拽：检测最近的锚点
-    const nearest = findNearestEndpoint(e.detail.x, e.detail.y);
-    if (nearest) {
-      snapTo(nearest);
-      highlight(nearest);
-    }
-  }
-});
-
-graph.addEventListener('gedrop', (e) => {
-  const { type, source, target } = e.detail;
-  if (type === GEInteractionType.CONNECTION) {
+graph.addEventListener('connect:end', (e) => {
+  const { source, target } = e.detail;
+  if (target) {
     // 创建边
     graph.addEdge({
       id: `edge-${Date.now()}`,
@@ -697,8 +710,8 @@ MovePlugin/ConnectionPlugin 监听到事件
 
 边通过 `appendChild` 添加时自动连接到节点。边会:
 1. 通过 ID 或直接引用查找源/目标节点
-2. 订阅图的 eventBus 上的 `node:moved` 事件
-3. 节点移动时自动更新位置
+2. 监听相关节点的事件以自动更新位置
+3. 节点移动时自动更新边路径
 4. 在 `disconnectedCallback` 中清理监听器
 
 **关键**: 删除边/节点时，始终使用 `graph.removeChild()` 而非手动 DOM 操作。

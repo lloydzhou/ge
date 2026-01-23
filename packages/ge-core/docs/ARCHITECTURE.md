@@ -85,8 +85,9 @@ classDiagram
     class Graph {
         +nodesById: Map
         +edgesById: Map
-        +eventBus: EventTarget
-        +commandHistory: CommandHistory
+        +addEventListener()
+        +removeEventListener()
+        +dispatchEvent()
         +anchorRegistry: AnchorRegistry
         +registerNodeAnchor()
         +registerEdgeAnchor()
@@ -321,24 +322,23 @@ sequenceDiagram
     participant U as User
     participant N as Node
     participant G as Graph
-    participant E as EventBus
 
     U->>N: pointerdown (draggable=true)
     N->>N: _startDrag(NODE_DRAG)
-    N->>E: dispatch('node:dragstart')
-    E-->>G: on 'node:dragstart'
+    N->>N: dispatchEvent('node:dragstart')
+    N->>G: event bubbles up
     G->>G: _handleNodeDragStart()
 
     U->>N: pointermove
     N->>N: _handlePointerMove()
-    N->>E: dispatch('node:drag')
-    E-->>G: on 'node:drag'
+    N->>N: dispatchEvent('node:drag')
+    N->>G: event bubbles up
     G->>N: setPosition(deltaX, deltaY)
 
     U->>N: pointerup
     N->>N: _handlePointerUp()
-    N->>E: dispatch('node:dragend')
-    E-->>G: on 'node:dragend'
+    N->>N: dispatchEvent('node:dragend')
+    N->>G: event bubbles up
     G->>G: _handleNodeDragEnd()
 ```
 
@@ -348,27 +348,26 @@ sequenceDiagram
 sequenceDiagram
     participant U as User
     participant S as Source (Node/Port)
-    participant E as EventBus
     participant P as ConnectionPlugin
     participant T as Target (Node/Port)
 
     U->>S: pointerdown (sourceConnectable=true)
     S->>S: _startDrag(CONNECTION)
-    S->>E: dispatch('connect:start')
-    E-->>P: on 'connect:start'
+    S->>S: dispatchEvent('connect:start')
+    S->>P: event bubbles up
     P->>P: 创建临时边 (tempEdge)
 
     U->>S: pointermove
     S->>S: _handlePointerMove()
-    S->>E: dispatch('connect:drag', {x, y})
-    E-->>P: on 'connect:drag'
+    S->>S: dispatchEvent('connect:drag', {x, y})
+    S->>P: event bubbles up
     P->>P: 更新临时边位置
     P->>P: 磁力吸附检测
 
     U->>S: pointerup
     S->>S: _handlePointerUp()
-    S->>E: dispatch('connect:end', {x, y})
-    E-->>P: on 'connect:end'
+    S->>S: dispatchEvent('connect:end', {x, y})
+    S->>P: event bubbles up
     P->>P: 检测目标位置
     P->>T: _canConnectTo(source, target)
     T-->>P: 验证通过
@@ -508,6 +507,6 @@ graph TB
 | 组合模式 | Node 包含 primaryShape + label + ports | 灵活组合可视化元素 |
 | 策略模式 | Router/Connector/Anchor | 可替换的算法实现 |
 | 注册表模式 | AnchorRegistry, customElements | 可扩展的组件注册 |
-| 观察者模式 | EventBus, 事件派发 | 事件通信，解耦组件 |
+| 观察者模式 | DOM 事件系统 (addEventListener/dispatchEvent) | 事件通信，解耦组件 |
 | **事件发射器模式** | **Node/Port 派发事件** | **分离事件发射和处理** |
 | 插件模式 | RenderingPlugin | 功能扩展，ConnectionPlugin 处理连线 |

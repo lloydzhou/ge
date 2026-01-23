@@ -1,5 +1,5 @@
 import { CustomElement, DisplayObject, Circle, Polygon } from '@antv/g-lite';
-import type { Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 import type { EdgeLayoutOptions } from '../../utils/edgeLayout';
 import { resolveCtor } from '../../utils/shapeResolver';
 
@@ -27,7 +27,7 @@ export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
   constructor(cfg: EdgeMarkerOptions, host?: DisplayObject | null) {
     super({ className: 'g-edge-marker' });
     this.cfg = cfg || {};
-    this.host = host;
+    this.host = host ?? null;
 
     // create inner display object and append as child so EdgeMarker itself is a DisplayObject
     const inner = this.createInnerNode();

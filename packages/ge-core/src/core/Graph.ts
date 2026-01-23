@@ -1,23 +1,16 @@
 import { Canvas, CustomEvent } from '@antv/g-lite';
-import type { GraphData, GraphOptions, NodeData, EdgeData, RenderingPlugin, RenderingPluginContext, Command } from '../types';
-import type { GEDataTransfer } from '../types/events';
-import { GEInteractionType } from '../types/events';
+import type { GraphData, GraphOptions, RenderingPlugin, RenderingPluginContext } from '../types';
 import { Node } from './node/Node';
 import { Edge } from './edge/Edge';
-import { Port } from './port/Port';
-import { CommandHistory } from './CommandHistory';
 import { AnchorRegistry, type NodeAnchorFunction, type EdgeAnchorFunction } from './anchor/Anchor';
 
 export class Graph extends Canvas {
   private nodesById: Map<string, Node> = new Map();
   private edgesById: Map<string, Edge> = new Map();
-  public commandHistory: CommandHistory;
   public anchorRegistry: AnchorRegistry;
 
   constructor(config: GraphOptions) {
-    super(config);
-    // Initialize command history
-    this.commandHistory = new CommandHistory(this, 100);
+    super(config as any); // GraphOptions extends CanvasConfig but may have extra properties
     // Initialize anchor registry
     this.anchorRegistry = new AnchorRegistry();
     // expose renderer if provided so plugins can access it
@@ -25,7 +18,9 @@ export class Graph extends Canvas {
       if (config && config.renderer) {
         (this as any).renderer = config.renderer;
       }
-    } catch (e) {}
+    } catch (e) {
+      // ignore
+    }
 
     // Add graph reference to context so plugins can access it
     (this.context as any).graph = this;
@@ -57,7 +52,8 @@ export class Graph extends Canvas {
       const runtime = (this as any).globalRuntime;
       plugin.apply(this.context as RenderingPluginContext, runtime);
     } catch (e) {
-      console.error(`Failed to apply plugin ${plugin.name || 'unknown'}:`, e);
+      const pluginName = (plugin as any).name || 'unknown';
+      console.error(`Failed to apply plugin ${pluginName}:`, e);
     }
 
     return this;
@@ -296,9 +292,12 @@ export class Graph extends Canvas {
           // ignore
         }
 
-        const node = new Node(nodeData);
+        // Cast to NodeConfig (with index signature) from NodeData
+        const node = new Node(nodeData as any);
         this.appendChild(node);
-      } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
     });
 
     // Create edges
@@ -314,7 +313,8 @@ export class Graph extends Canvas {
           // ignore
         }
 
-        const edge = new Edge(edgeData);
+        // Cast to EdgeConfig (with index signature) from EdgeData
+        const edge = new Edge(edgeData as any);
         this.appendChild(edge);
       } catch (e: any) {
         // Skip edges with missing nodes
@@ -369,14 +369,14 @@ export class Graph extends Canvas {
 
   getNodeById(id: string): Node | undefined {
     const fromMap = this.nodesById.get(id);
-    if (fromMap) return fromMap as Node;
-    return this.document.getElementById(id) as Node;
+    if (fromMap) return fromMap as unknown as Node;
+    return this.document.getElementById(id) as unknown as Node;
   }
 
   getEdgeById(id: string): Edge | undefined {
     const fromMap = this.edgesById.get(id);
-    if (fromMap) return fromMap as Edge;
-    return this.document.getElementById(id) as Edge;
+    if (fromMap) return fromMap as unknown as Edge;
+    return this.document.getElementById(id) as unknown as Edge;
   }
 
   getNodes(): Node[] {
@@ -399,34 +399,6 @@ export class Graph extends Canvas {
       });
     }
     return edges;
-  }
-
-  // ============================================
-  // Command History (Undo/Redo)
-  // ============================================
-
-  async executeCommand(command: Command): Promise<void> {
-    return this.commandHistory.execute(command);
-  }
-
-  async undo(): Promise<void> {
-    return this.commandHistory.undo();
-  }
-
-  async redo(): Promise<void> {
-    return this.commandHistory.redo();
-  }
-
-  canUndo(): boolean {
-    return this.commandHistory.canUndo();
-  }
-
-  canRedo(): boolean {
-    return this.commandHistory.canRedo();
-  }
-
-  clearHistory(): void {
-    this.commandHistory.clear();
   }
 
   // ============================================

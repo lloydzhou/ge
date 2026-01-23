@@ -17,8 +17,22 @@ export interface PortConfig extends PortData {
   [key: string]: unknown;
 }
 
-export class Port extends GEInteractiveElement<PortStyleProps> {
-  private circle: DisplayObject | null = null;
+/**
+ * Port class with generic primaryShape support
+ *
+ * @template TShape - The display object type used as primary shape (defaults to Circle)
+ *
+ * @example
+ * // Using default Circle shape
+ * const port = new Port({ id: 'p1', layout: 'right' });
+ *
+ * // Using custom shape type
+ * const rectPort = new Port<Rect>({ id: 'p2', shape: Rect, ... });
+ *
+ * // Using registered shape name
+ * const customPort = new Port({ id: 'p3', shape: 'my-port-shape', ... });
+ */
+export class Port<TShape extends DisplayObject = Circle> extends GEInteractiveElement<TShape> {
   private data: PortConfig;
   public owner: Node | null = null; // parent node reference
   private layout: PortLayoutOptions | undefined;
@@ -46,45 +60,40 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
       ...config.style,
     };
 
-    // Try to create port shape immediately using config.shape (falls back to global registry),
-    // so ports are visible even before connectedCallback.
-    let initialShape: any = null;
+    // Create primaryShape using parent's abstract method
+    this.primaryShape = this.createPrimaryShape({
+      shape: config.shape,
+      style: {
+        r: Number(style.r ?? 3),
+        fill: style.fill,
+        stroke: style.stroke,
+        lineWidth: Number(style.lineWidth ?? 1),
+        cx: Number(style.x ?? 0),
+        cy: Number(style.y ?? 0),
+      },
+    });
+
+    // Add to group so it's visible immediately
     try {
-      const ctor = resolveCtor(this, config.shape as any);
-      if (ctor) {
-        try {
-          initialShape = new ctor({
-            style: {
-              r: Number(style.r ?? 3),
-              fill: style.fill,
-              stroke: style.stroke,
-              lineWidth: Number(style.lineWidth ?? 1),
-              cx: Number(style.x ?? 0),
-              cy: Number(style.y ?? 0),
-            },
-          });
-        } catch (e) {
-          initialShape = null;
-        }
+      super.appendChild(this.primaryShape);
+    } catch (e) {}
+  }
+
+  /**
+   * Create the primary shape (implements abstract method from GEInteractiveElement)
+   * Resolves shape from config.shape or defaults to Circle
+   */
+  protected createPrimaryShape(config: any): TShape {
+    const ptype = config.shape;
+    const ctor = resolveCtor(this, ptype as any);
+    if (ctor) {
+      try {
+        return new ctor(config) as unknown as TShape;
+      } catch (e) {
+        // fall through to default
       }
-    } catch (e) {}
-    if (!initialShape) {
-      initialShape = new Circle({
-        style: {
-          r: Number(style.r ?? 3),
-          fill: style.fill,
-          stroke: style.stroke,
-          lineWidth: Number(style.lineWidth ?? 1),
-          cx: Number(style.x ?? 0),
-          cy: Number(style.y ?? 0),
-        },
-      });
     }
-    this.circle = initialShape;
-    // Add to group so it's visible immediately; connectedCallback will skip creation if already present
-    try {
-      super.appendChild(this.circle as any);
-    } catch (e) {}
+    return new Circle(config) as unknown as TShape;
   }
 
   public updatePosition(): void {
@@ -99,9 +108,9 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
         if (Array.isArray(p) && p.length >= 2) {
           const pos = { x: Number(p[0] || 0), y: Number(p[1] || 0) };
           try {
-            if (this.circle && (this.circle as any).style) {
-              (this.circle as any).style.cx = pos.x;
-              (this.circle as any).style.cy = pos.y;
+            if (this.primaryShape && (this.primaryShape as any).style) {
+              (this.primaryShape as any).style.cx = pos.x;
+              (this.primaryShape as any).style.cy = pos.y;
             }
           } catch (e) {}
           return;
@@ -118,10 +127,10 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
     let pos = { x: 0, y: 0 };
 
     if (shape.nodeName === 'rect') {
-      const w = shape.style.width || 0;
-      const h = shape.style.height || 0;
-      const x = shape.style.x || 0;
-      const y = shape.style.y || 0;
+      const w = Number(shape.style.width || 0);
+      const h = Number(shape.style.height || 0);
+      const x = Number(shape.style.x || 0);
+      const y = Number(shape.style.y || 0);
       if (typeof this.layout === 'string') {
         switch (this.layout) {
           case 'top':
@@ -141,9 +150,10 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
     }
 
     if (shape.nodeName === 'circle') {
-      const cx = shape.style.cx || 0;
-      const cy = shape.style.cy || 0;
-      const r = shape.style.r || 0;
+      const circleStyle = (shape.style as any);
+      const cx = Number(circleStyle.cx || 0);
+      const cy = Number(circleStyle.cy || 0);
+      const r = Number(circleStyle.r || 0);
       if (typeof this.layout === 'string') {
         switch (this.layout) {
           case 'top':
@@ -173,9 +183,9 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
     }
 
     try {
-      if (this.circle && (this.circle as any).style) {
-        (this.circle as any).style.cx = pos.x;
-        (this.circle as any).style.cy = pos.y;
+      if (this.primaryShape && (this.primaryShape as any).style) {
+        (this.primaryShape as any).style.cx = pos.x;
+        (this.primaryShape as any).style.cy = pos.y;
       }
     } catch (e) {}
   }
@@ -199,8 +209,8 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
    */
   getRelativePosition(): [number, number] {
     try {
-      const cx = Number((this.circle as any)?.style?.cx) || 0;
-      const cy = Number((this.circle as any)?.style?.cy) || 0;
+      const cx = Number((this.primaryShape as any)?.style?.cx) || 0;
+      const cy = Number((this.primaryShape as any)?.style?.cy) || 0;
       return [cx, cy];
     } catch (e) {
       return [0, 0];
@@ -225,7 +235,7 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
     super._initInteraction();
 
     // Apply cursor style (Port 默认支持连线，显示 crosshair)
-    this._applyCursorStyleTo(this.circle);
+    this._applyCursorStyleTo(this.primaryShape);
 
     // Synchronously update position to avoid edge connection issues
     this.updatePosition();

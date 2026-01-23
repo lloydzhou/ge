@@ -1,5 +1,5 @@
-import { Circle, CustomElement, type DisplayObject } from '@antv/g-lite';
-import type { Vec2 } from '../../utils/edgeLayout';
+import { Circle, CustomElement, type DisplayObject, type Cursor } from '@antv/g-lite';
+import type { Vec2 } from '../../types';
 import type { Edge } from './Edge';
 import type { BaseStyleProps } from '../../types';
 
@@ -22,7 +22,7 @@ export class EdgeTool extends CustomElement<EdgeToolOptions> {
     super({
       className: 'g-edge-tool',
       ...options
-    });
+    } as any);
     this.edge = edge;
     this.createToolShape();
   }
@@ -40,9 +40,9 @@ export class EdgeTool extends CustomElement<EdgeToolOptions> {
             fill: '#333',
             stroke: '#fff',
             lineWidth: 1,
-            cursor: 'move',
+            cursor: 'move' as Cursor,
             ...style
-          }
+          } as any
         });
         break;
       default:
@@ -54,7 +54,7 @@ export class EdgeTool extends CustomElement<EdgeToolOptions> {
             stroke: '#fff',
             lineWidth: 1,
             ...style
-          }
+          } as any
         });
     }
 

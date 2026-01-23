@@ -1,4 +1,4 @@
-import type { Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 
 export interface EdgeRouter {
   /**

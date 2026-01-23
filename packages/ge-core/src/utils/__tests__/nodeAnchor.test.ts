@@ -167,8 +167,8 @@ describe('resolveAnchorFunction', () => {
       const rect = createRect(0, 0, 100, 60);
       const anchorFn = resolveAnchorFunction({ name: 'angle', args: { angle: 180 } });
       const result = anchorFn!(rect);
-      expect(result[0]).toBe(0);   // 左边
-      expect(result[1]).toBe(30);  // 垂直中心
+      expect(result[0]).toBeCloseTo(0, 10);   // 左边 (浮点精度)
+      expect(result[1]).toBeCloseTo(30, 10);  // 垂直中心
     });
 
     test('angle -90° (270°) - 应该从矩形顶部连出', () => {

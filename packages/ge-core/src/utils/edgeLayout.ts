@@ -4,7 +4,7 @@
  * 整合了所有 EdgeAnchor 预设，并提供了向后兼容的 computeAnchor 函数。
  */
 
-import type { Vec2 } from './edgeLayout';
+import type { Vec2 } from '../types';
 
 // ============================================================================
 // 类型定义
@@ -73,8 +73,8 @@ function middleAnchor(points: Vec2[], offset?: EdgeLayoutOffset): EdgeAnchor {
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const len = Math.sqrt(dx * dx + dy * dy);
-  const tangent = len > 0 ? [dx / len, dy / len] : [1, 0];
-  const normal = len > 0 ? [-dy / len, dx / len] : [0, 1];
+  const tangent: Vec2 = len > 0 ? [dx / len, dy / len] : [1, 0];
+  const normal: Vec2 = len > 0 ? [-dy / len, dx / len] : [0, 1];
 
   let x = midX;
   let y = midY;
@@ -101,8 +101,8 @@ function ratioAnchor(points: Vec2[], args?: { ratio?: number }): EdgeAnchor {
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const len = Math.sqrt(dx * dx + dy * dy);
-  const tangent = len > 0 ? [dx / len, dy / len] : [1, 0];
-  const normal = len > 0 ? [-dy / len, dx / len] : [0, 1];
+  const tangent: Vec2 = len > 0 ? [dx / len, dy / len] : [1, 0];
+  const normal: Vec2 = len > 0 ? [-dy / len, dx / len] : [0, 1];
 
   return { x, y, tangent, normal };
 }

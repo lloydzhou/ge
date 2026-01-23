@@ -1,5 +1,5 @@
-import { Line, Polyline, Path, type DisplayObject } from '@antv/g-lite';
-import type { Vec2 } from '../../utils/edgeLayout';
+import { Line, Polyline, type DisplayObject, type LineStyleProps, type PolylineStyleProps } from '@antv/g-lite';
+import type { Vec2 } from '../../types';
 import type { BaseEdgeStyleProps } from '../../types';
 
 export interface EdgeConnector {
@@ -17,6 +17,8 @@ export interface EdgeConnector {
  */
 export class NormalConnector implements EdgeConnector {
   connect(points: Vec2[], style: BaseEdgeStyleProps): DisplayObject {
+    const baseStyle: BaseEdgeStyleProps = style || {};
+
     if (points.length < 2) {
       return new Line({
         style: {
@@ -24,11 +26,11 @@ export class NormalConnector implements EdgeConnector {
           y1: 0,
           x2: 0,
           y2: 0,
-          ...style
-        }
+          ...baseStyle
+        } as LineStyleProps
       });
     }
-    
+
     const [start, end] = [points[0], points[points.length - 1]];
     return new Line({
       style: {
@@ -36,8 +38,8 @@ export class NormalConnector implements EdgeConnector {
         y1: start[1],
         x2: end[0],
         y2: end[1],
-        ...style
-      }
+        ...baseStyle
+      } as LineStyleProps
     });
   }
 }
@@ -47,11 +49,12 @@ export class NormalConnector implements EdgeConnector {
  */
 export class PolylineConnector implements EdgeConnector {
   connect(points: Vec2[], style: BaseEdgeStyleProps): DisplayObject {
+    const baseStyle: BaseEdgeStyleProps = style || {};
     return new Polyline({
       style: {
         points,
-        ...style
-      }
+        ...baseStyle
+      } as PolylineStyleProps
     });
   }
 }
@@ -66,14 +69,14 @@ export class SmoothConnector implements EdgeConnector {
       const normal = new NormalConnector();
       return normal.connect(points, style);
     }
-    
+
     // 使用 Polyline 作为简化实现
     // 在实际应用中，这里可以实现更复杂的贝塞尔曲线算法
     return new Polyline({
       style: {
         points,
         ...style
-      }
+      } as PolylineStyleProps
     });
   }
 }
@@ -94,16 +97,16 @@ export class RoundedConnector implements EdgeConnector {
       const normal = new NormalConnector();
       return normal.connect(points, style);
     }
-    
+
     // 在实际应用中，这里可以实现带圆角的路径算法
     // 目前我们只是简单地使用 Polyline，但会记录 radius 值以备将来使用
     console.log(`RoundedConnector with radius: ${this.radius}`);
-    
+
     return new Polyline({
       style: {
         points,
         ...style
-      }
+      } as PolylineStyleProps
     });
   }
 }

@@ -9,10 +9,10 @@ import type { RenderingPlugin, RenderingPluginContext } from '../types';
 import { Edge } from '../core/edge/Edge';
 import type { Port } from '../core/port/Port';
 import type { Node } from '../core/node/Node';
-import type { EdgeStyleProps } from '../types';
+import type { BaseEdgeStyleProps } from '../types';
 
 export interface ConnectionPluginOptions {
-  defaultEdgeStyle?: Partial<EdgeStyleProps>;
+  defaultEdgeStyle?: Partial<BaseEdgeStyleProps>;
   snapToPorts?: boolean; // snap to nearby ports during drag
   snapDistance?: number; // distance in canvas coordinates for snapping
 }
@@ -40,19 +40,18 @@ export class ConnectionPlugin implements RenderingPlugin {
   /**
    * Apply plugin to graph (following Canvas's plugin.apply pattern)
    */
-  apply(context: RenderingPluginContext, runtime?: any): void {
+  apply(context: RenderingPluginContext, _runtime?: any): void {
     this.context = context;
-    const graph = (context as any).graph;
 
     // Virtual endpoint factory: lightweight object with position methods
     const createVirtualEndpoint = (x = 0, y = 0) => {
       let vx = x;
       let vy = y;
       return {
-        getAbsolutePosition() {
+        getAbsolutePosition(): [number, number] {
           return [vx, vy];
         },
-        getPosition() {
+        getPosition(): [number, number] {
           return [vx, vy];
         },
         setPosition(nx: number, ny: number) {
@@ -65,7 +64,7 @@ export class ConnectionPlugin implements RenderingPlugin {
     const cleanupTemp = () => {
       try {
         if (this.tempEdge && (this.context as any)?.graph) {
-          this.context.graph.removeChild(this.tempEdge);
+          (this.context as any).graph.removeChild(this.tempEdge);
         }
       } catch (err) {}
       this.tempEdge = null;
@@ -79,7 +78,7 @@ export class ConnectionPlugin implements RenderingPlugin {
         // Clean up any existing temp edge first
         cleanupTemp();
 
-        const { source, x, y } = e.detail;
+        const { source } = e.detail;
         if (!source) return;
 
         this.startEndpoint = source;
@@ -92,18 +91,18 @@ export class ConnectionPlugin implements RenderingPlugin {
         this.tempEdge = new Edge({
           id: `tmp-edge-${Math.random().toString(36).slice(2, 9)}`,
           source: this.startEndpoint,
-          target: this.virtualTarget,
+          target: this.virtualTarget as any,
           style: {
             ...(this.opts.defaultEdgeStyle || {}),
             stroke: '#999',
-            strokeDasharray: '5,5',
-          }
+            lineDash: [5, 5],
+          } as any
         });
 
         try {
           if ((this.context as any)?.graph) {
-            this.context.graph.appendChild(this.tempEdge);
-            this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget);
+            (this.context as any).graph.appendChild(this.tempEdge);
+            this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget as any);
           }
         } catch (err) {
           cleanupTemp();
@@ -189,8 +188,8 @@ export class ConnectionPlugin implements RenderingPlugin {
 
         if ((this.context as any)?.graph) {
           try {
-            this.context.graph.appendChild(edge);
-            edge.connectTo(this.startEndpoint, target);
+            (this.context as any).graph.appendChild(edge);
+            edge.connectTo(this.startEndpoint as any, target as any);
           } catch (err) {
             // ignore
           }
@@ -204,9 +203,9 @@ export class ConnectionPlugin implements RenderingPlugin {
 
     // Attach event listeners to graph
     try {
-      (this.context.graph as any).addEventListener('connect:start', this._onConnectStart as EventListener);
-      (this.context.graph as any).addEventListener('connect:drag', this._onConnectDrag as EventListener);
-      (this.context.graph as any).addEventListener('connect:end', this._onConnectEnd as EventListener);
+      ((this.context as any).graph as any).addEventListener('connect:start', this._onConnectStart as EventListener);
+      ((this.context as any).graph as any).addEventListener('connect:drag', this._onConnectDrag as EventListener);
+      ((this.context as any).graph as any).addEventListener('connect:end', this._onConnectEnd as EventListener);
     } catch (e) {
       // ignore
     }
@@ -218,9 +217,9 @@ export class ConnectionPlugin implements RenderingPlugin {
   destroy(): void {
     try {
       if ((this.context as any)?.graph) {
-        (this.context.graph as any).removeEventListener('connect:start', this._onConnectStart as EventListener);
-        (this.context.graph as any).removeEventListener('connect:drag', this._onConnectDrag as EventListener);
-        (this.context.graph as any).removeEventListener('connect:end', this._onConnectEnd as EventListener);
+        ((this.context as any).graph as any).removeEventListener('connect:start', this._onConnectStart as EventListener);
+        ((this.context as any).graph as any).removeEventListener('connect:drag', this._onConnectDrag as EventListener);
+        ((this.context as any).graph as any).removeEventListener('connect:end', this._onConnectEnd as EventListener);
       }
     } catch (e) {
       // ignore
@@ -229,7 +228,7 @@ export class ConnectionPlugin implements RenderingPlugin {
     // Remove temp edge if any
     try {
       if (this.tempEdge && (this.context as any)?.graph) {
-        this.context.graph.removeChild(this.tempEdge);
+        (this.context as any).graph.removeChild(this.tempEdge);
       }
     } catch (err) {}
 
@@ -283,7 +282,7 @@ export class ConnectionPlugin implements RenderingPlugin {
     try {
       if (!(this.context as any)?.graph) return null;
 
-      const graph = this.context.graph;
+      const graph = (this.context as any).graph;
       const snapDistance = this.opts.snapDistance || 10;
 
       // Check all ports
@@ -315,7 +314,7 @@ export class ConnectionPlugin implements RenderingPlugin {
     try {
       if (!(this.context as any)?.graph) return null;
 
-      const graph = this.context.graph;
+      const graph = (this.context as any).graph;
       const snapDistance = this.opts.snapDistance || 10;
 
       // Check all ports first (prefer ports over nodes)

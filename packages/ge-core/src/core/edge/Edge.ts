@@ -1,20 +1,19 @@
-import { CustomElement, Line, Text, DisplayObject, Polyline } from '@antv/g-lite';
+import { Line, Text, DisplayObject, Polyline } from '@antv/g-lite';
 import { resolveCtor } from '../../utils/shapeResolver';
-import type { EdgeLayoutOptions, Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 import { computeAnchor } from '../../utils/edgeLayout';
 import { resolveAnchorFunction } from '../../utils/nodeAnchor';
 import type { BaseEdgeStyleProps, EdgeData, EdgeMarkerConfig } from '../../types';
 import { EdgeMarker } from './EdgeMarker';
 import type { DisplayObjectConfigWithShape } from '../../types';
 import type { EdgeRouter } from './EdgeRouter';
-import { NormalRouter, OrthogonalRouter, ManhattanRouter } from './EdgeRouter';
+import { NormalRouter } from './EdgeRouter';
 import type { EdgeConnector } from './EdgeConnector';
 import { NormalConnector } from './EdgeConnector';
-import { EdgeTool } from './EdgeTool';
+import { EdgeTool, type EdgeToolOptions } from './EdgeTool';
 import type { Node } from '../node/Node';
 import type { Port } from '../port/Port';
-import type { Graph } from '../../core/Graph';
-import type { NodeAnchorArgs } from '../../utils/nodeAnchor';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -27,7 +26,7 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
   router?: EdgeRouter; // 路由器
   connector?: EdgeConnector; // 连接器
   vertices?: Vec2[]; // 中间点
-  tools?: EdgeTool[]; // 边上工具
+  tools?: EdgeToolOptions[]; // 边上工具
   startMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
   endMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
 }
@@ -36,10 +35,26 @@ export interface EdgeConfig extends EdgeData {
   [key: string]: unknown;
 }
 
-export type EdgeEndpoint = string | Node | Port;
+export type EdgeEndpoint = string | Node | Port | null;
 
-export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyleProps> {
-  private primaryShape: T | null = null;
+/**
+ * Edge class with generic path support
+ *
+ * Edge extends GEInteractiveElement like Node and Port, using path
+ * as its primary shape.
+ *
+ * @template TPath - The display object type used as path shape (defaults to Line)
+ *
+ * @example
+ * // Using default Line path
+ * const edge = new Edge({ id: 'e1', source: 'n1', target: 'n2' });
+ *
+ * // Using custom connector type
+ * const pathEdge = new Edge<Path>({ id: 'e2', source: 'n1', target: 'n2',
+ *   style: { connector: new SmoothConnector() }
+ * });
+ */
+export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveElement<TPath> {
   private label: Text;
   private data: EdgeConfig;
   private sourceNode: EdgeEndpoint = null;
@@ -99,7 +114,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       shape: style.endMarker?.shape ?? style.endMarker?.typeName ?? 'triangle',
     };
     
-    this.primaryShape = null as unknown as T; // 初始化为空，在 updatePositionFromNodes 中创建
+    this.primaryShape = null as unknown as TPath; // 初始化为空，在 updatePositionFromNodes 中创建
     
     // Create markers if enabled using EdgeMarker abstraction
     this.startMarkerObj = this.startMarkerCfg.enabled ? new EdgeMarker({
@@ -143,7 +158,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     if (style.tools && Array.isArray(style.tools)) {
       style.tools.forEach(toolConfig => {
         try {
-          const tool = new EdgeTool(toolConfig, this);
+          const tool = new EdgeTool(toolConfig as EdgeToolOptions, this as any);
           this.tools.push(tool);
           super.appendChild(tool);
         } catch (e) {
@@ -153,16 +168,22 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     }
   }
   
-  protected createPrimaryShape(config: DisplayObjectConfigWithShape<unknown>): T {
+  /**
+   * Create the primary path shape
+   * For Edge, this is called by updatePositionFromNodes using the connector
+   * @param config - Configuration for the shape
+   * @returns The path shape object
+   */
+  protected createPrimaryShape(config: DisplayObjectConfigWithShape<unknown>): TPath {
     // This method should be overridden by subclasses to create the appropriate shape
     // For the base Edge class, we default to Line
     // try resolving a registered ctor from config.shape if provided
     const ptype = config.shape;
     const ctor = resolveCtor(this, ptype);
     if (ctor) {
-      try { return new ctor(config) as unknown as T; } catch (e) {}
+      try { return new ctor(config) as unknown as TPath; } catch (e) {}
     }
-    return new Line(config) as unknown as T;
+    return new Line(config as any) as unknown as TPath;
   }
 
   /**
@@ -170,11 +191,11 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
    */
   connectTo(sourceNode: EdgeEndpoint, targetNode: EdgeEndpoint): void {
     // Remove previous listeners from old source/target nodes
-    if (this.sourceNode && typeof this.sourceNode.removeEventListener === 'function') {
-      this.sourceNode.removeEventListener('node:moved', this._onSourceMoved);
+    if (this.sourceNode && typeof this.sourceNode === 'object') {
+      (this.sourceNode as Node).removeEventListener?.('node:moved', this._onSourceMoved as any);
     }
-    if (this.targetNode && typeof this.targetNode.removeEventListener === 'function') {
-      this.targetNode.removeEventListener('node:moved', this._onTargetMoved);
+    if (this.targetNode && typeof this.targetNode === 'object') {
+      (this.targetNode as Node).removeEventListener?.('node:moved', this._onTargetMoved as any);
     }
 
     this.sourceNode = sourceNode;
@@ -198,11 +219,11 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
     const sourceEventTarget = getEventTarget(sourceNode);
     const targetEventTarget = getEventTarget(targetNode);
 
-    if (sourceEventTarget && typeof sourceEventTarget.addEventListener === 'function') {
-      sourceEventTarget.addEventListener('node:moved', this._onSourceMoved);
+    if (sourceEventTarget && typeof sourceEventTarget === 'object') {
+      (sourceEventTarget as Node).addEventListener?.('node:moved', this._onSourceMoved as any);
     }
-    if (targetEventTarget && typeof targetEventTarget.addEventListener === 'function') {
-      targetEventTarget.addEventListener('node:moved', this._onTargetMoved);
+    if (targetEventTarget && typeof targetEventTarget === 'object') {
+      (targetEventTarget as Node).addEventListener?.('node:moved', this._onTargetMoved as any);
     }
 
     // Initial update
@@ -212,14 +233,14 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   /**
    * Handle source node moved event
    */
-  private _handleSourceMoved(e: Event): void {
+  private _handleSourceMoved(_e: Event): void {
     this.updatePositionFromNodes();
   }
 
   /**
    * Handle target node moved event
    */
-  private _handleTargetMoved(e: Event): void {
+  private _handleTargetMoved(_e: Event): void {
     this.updatePositionFromNodes();
   }
 
@@ -309,18 +330,20 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
         // 尝试作为 Port 处理
         if (typeof (endpoint as Port).getAbsolutePosition === 'function') {
           const port = endpoint as Port;
-          primaryShape = port.circle || (port as any).getPrimaryShape?.();
+          primaryShape = (port as any).circle || (port as any).getPrimaryShape?.();
           position = (port as any).getPosition?.() || (port as Port).getAbsolutePosition();
         }
         // 尝试作为 Node 处理
         else if (typeof (endpoint as Node).getPrimaryShape === 'function') {
           const node = endpoint as Node;
           primaryShape = node.getPrimaryShape();
-          position = node.getPosition();
+          const pos = node.getPosition();
+          position = [pos[0], pos[1]] as [number, number];
         }
         // 兜底：尝试获取 position
         else if (typeof (endpoint as Node).getPosition === 'function') {
-          position = (endpoint as Node).getPosition();
+          const pos = (endpoint as Node).getPosition();
+          position = [pos[0], pos[1]] as [number, number];
         }
 
         if (!primaryShape) {
@@ -411,9 +434,9 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       // 询问 Router 的方向建议（如果有）
       let sourceDir: Vec2 | undefined;
       let targetDir: Vec2 | undefined;
-      if (router.getStartDirection && router.getEndDirection) {
-        sourceDir = router.getStartDirection(sourceCenter, targetCenter);
-        targetDir = router.getEndDirection(sourceCenter, targetCenter);
+      if ('getStartDirection' in router && 'getEndDirection' in router) {
+        sourceDir = (router as any).getStartDirection(sourceCenter, targetCenter);
+        targetDir = (router as any).getEndDirection(sourceCenter, targetCenter);
       }
 
       // 根据方向建议计算锚点位置
@@ -450,7 +473,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       }
 
       // 创建新的 primaryShape
-      this.primaryShape = connector.connect(finalPoints, style) as T;
+      this.primaryShape = connector.connect(finalPoints, style) as TPath;
       super.appendChild(this.primaryShape);
 
       // update markers after primary shape laid out
@@ -473,7 +496,8 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
       return (endpoint as Port).getAbsolutePosition();
     }
     if (typeof (endpoint as Node).getPosition === 'function') {
-      return (endpoint as Node).getPosition();
+      const pos = (endpoint as Node).getPosition();
+      return [pos[0], pos[1]] as [number, number];
     }
     return [0, 0];
   }
@@ -505,14 +529,7 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   getData(): EdgeConfig {
     return this.data;
   }
-  
-  /**
-   * Get the primary shape
-   */
-  getPrimaryShape(): T | null {
-    return this.primaryShape;
-  }
-  
+
   connectedCallback() {
     // Give a bit more time for nodes to be registered and ports to be created
     setTimeout(() => this._tryConnect(), 10);
@@ -559,12 +576,12 @@ export class Edge<T extends DisplayObject = Line> extends CustomElement<EdgeStyl
   disconnectedCallback() {
     // Remove event listeners directly from source and target nodes (DOM API style)
     try {
-      if (this.sourceNode && typeof this.sourceNode.removeEventListener === 'function' && this._onSourceMoved) {
-        this.sourceNode.removeEventListener('node:moved', this._onSourceMoved);
+      if (this.sourceNode && typeof this.sourceNode === 'object' && this._onSourceMoved) {
+        (this.sourceNode as Node).removeEventListener?.('node:moved', this._onSourceMoved as any);
         this._onSourceMoved = null;
       }
-      if (this.targetNode && typeof this.targetNode.removeEventListener === 'function' && this._onTargetMoved) {
-        this.targetNode.removeEventListener('node:moved', this._onTargetMoved);
+      if (this.targetNode && typeof this.targetNode === 'object' && this._onTargetMoved) {
+        (this.targetNode as Node).removeEventListener?.('node:moved', this._onTargetMoved as any);
         this._onTargetMoved = null;
       }
     } catch (e) {
