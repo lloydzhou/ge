@@ -1,11 +1,9 @@
 import type { CanvasConfig } from '@antv/g-lite';
 import type { EdgeRouter } from '../core/edge/EdgeRouter';
 import type { EdgeConnector } from '../core/edge/EdgeConnector';
-import type { EdgeTool } from '../core/edge/EdgeTool';
+import type { EdgeToolOptions } from '../core/edge/EdgeTool';
 import type {
   GEInteractionType,
-  GEDragEvent,
-  GEDropEvent,
   GEDataTransfer,
 } from './events';
 
@@ -18,11 +16,21 @@ import type { Port } from '../core/port/Port';
 // Export types
 export type { Graph, Node, Edge, Port };
 
+// Note: GEInteractiveElement is not re-exported here because it causes issues with Jest's ts-jest.
+// Node/Port import it directly from '../core/GEInteractiveElement' instead.
+
+// ============================================================================
+// Common Vector Types
+// ============================================================================
+
+/**
+ * 2D vector type (tuple)
+ */
+export type Vec2 = [number, number];
+
 // Export event types (runtime values like enums must be exported)
 export { GEInteractionType } from './events';
 export type {
-  GEDragEvent,
-  GEDropEvent,
   GEDataTransfer,
   GEDragStartEventDetail,
   GEDragEventDetail,
@@ -80,7 +88,7 @@ export interface BaseEdgeStyleProps extends BaseStyleProps {
   router?: EdgeRouter;
   connector?: EdgeConnector;
   vertices?: [number, number][];
-  tools?: EdgeTool[];
+  tools?: EdgeToolOptions[];
   startMarker?: EdgeMarkerConfig;
   endMarker?: EdgeMarkerConfig;
 }
@@ -250,8 +258,8 @@ export interface NodeData {
 // Edge data
 export interface EdgeData {
   id: string;
-  source: string | Node | Port;
-  target: string | Node | Port;
+  source: string | Node | Port | null;
+  target: string | Node | Port | null;
   shape?: string | Function;
   style?: BaseEdgeStyleProps;
 }
@@ -328,9 +336,10 @@ export type DisplayObjectConfigWithShape<T = unknown> = import('@antv/g-lite').D
 export type { RenderingPlugin, RenderingPluginContext } from '@antv/g-lite';
 
 // === GE Primitives (Non-visual graph editing objects) ===
-// Re-export EdgeRouter and EdgeConnector for convenience
+// Re-export EdgeRouter, EdgeConnector, and EdgeToolOptions for convenience
 export type { EdgeRouter, NormalRouter, OrthogonalRouter, ManhattanRouter } from '../core/edge/EdgeRouter';
 export type { EdgeConnector, NormalConnector, PolylineConnector, SmoothConnector } from '../core/edge/EdgeConnector';
+export type { EdgeToolOptions } from '../core/edge/EdgeTool';
 
 // Command interface for undo/redo
 export interface Command {

@@ -83,40 +83,6 @@ export interface GEDataTransfer {
 // ============================================================================
 
 /**
- * GE Drag 事件
- * 在拖拽过程中触发（dragstart, drag, dragend）
- */
-export interface GEDragEvent extends CustomEvent<any> {
-  /**
-   * 交互类型
-   */
-  type: GEInteractionType;
-
-  /**
-   * 源元素
-   * 可能是 Node、Port 或 Edge
-   */
-  source: Node | Port | Edge;
-
-  /**
-   * 当前位置（相对于画布）
-   */
-  x: number;
-  y: number;
-
-  /**
-   * 拖拽数据传输对象
-   */
-  dataTransfer: GEDataTransfer;
-
-  /**
-   * 阻止默认行为
-   * 可以在事件处理器中调用以阻止拖拽
-   */
-  preventDefault(): void;
-}
-
-/**
  * DragStart 事件详情
  */
 export interface GEDragStartEventDetail {
@@ -256,44 +222,6 @@ export interface GEConnectEndEventDetail {
 // ============================================================================
 // Drop 事件 - 放置事件
 // ============================================================================
-
-/**
- * GE Drop 事件
- * 当拖拽元素被放置时触发
- */
-export interface GEDropEvent extends CustomEvent<any> {
-  /**
-   * 交互类型
-   */
-  type: GEInteractionType;
-
-  /**
-   * 源元素
-   */
-  source: Node | Port | Edge;
-
-  /**
-   * 目标元素
-   */
-  target: Node | Port | Graph;
-
-  /**
-   * 放置位置
-   */
-  x: number;
-  y: number;
-
-  /**
-   * 拖拽数据传输对象
-   */
-  dataTransfer: GEDataTransfer;
-
-  /**
-   * 阻止默认行为
-   * 可以阻止 drop 操作
-   */
-  preventDefault(): void;
-}
 
 /**
  * Drop 事件详情

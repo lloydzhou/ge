@@ -21,8 +21,22 @@ export interface NodeConfig extends NodeData {
   [key: string]: unknown;
 }
 
-export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<NodeStyleProps> {
-  private primaryShape: T;
+/**
+ * Node class with generic primaryShape support
+ *
+ * @template TShape - The display object type used as primary shape (defaults to Rect)
+ *
+ * @example
+ * // Using default Rect shape
+ * const node = new Node({ id: 'n1', x: 100, y: 100 });
+ *
+ * // Using custom shape type
+ * const circleNode = new Node<Circle>({ id: 'n2', shape: Circle, ... });
+ *
+ * // Using registered shape name
+ * const customNode = new Node({ id: 'n3', shape: 'my-shape', ... });
+ */
+export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElement<TShape> {
   private label: Text;
   private data: NodeConfig;
   private portsById: Map<string, Port> = new Map();
@@ -34,13 +48,13 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
       id: config.id,
     });
     this.data = config;
-    
+
     // Set initial position
     if (config.x !== undefined && config.y !== undefined) {
       super.setPosition(config.x, config.y);
     }
 
-    // pass through shape to createPrimaryShape
+    // Create primaryShape using parent's abstract method
     this.primaryShape = this.createPrimaryShape({
       ...(config as Record<string, unknown>),
       id: `${config.id}-primary`,
@@ -69,19 +83,21 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
       // ignore positioning errors
     }
   }
-  
-  protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): T {
-    // This method should be overridden by subclasses to create the appropriate shape
-    // For the base Node class, we default to Rect
-    // try resolving a registered ctor from config.shape if provided
+
+  /**
+   * Create the primary shape (implements abstract method from GEInteractiveElement)
+   * Resolves shape from config.shape or defaults to Rect
+   */
+  protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): TShape {
+    // Try resolving a registered ctor from config.shape if provided
     const ptype = (config as any).shape || (this.data && this.data.shape);
     const ctor = resolveCtor(this, ptype as any);
     if (ctor) {
-      try { return new ctor(config) as unknown as T; } catch (e) {}
+      try { return new ctor(config) as unknown as TShape; } catch (e) {}
     }
-    return new Rect(config) as unknown as T;
+    return new Rect(config) as unknown as TShape;
   }
-  
+
   /**
    * Position the label in the center of the primary shape
    * Uses DisplayObject's getLocalBounds() for consistent positioning
@@ -89,6 +105,12 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
   private positionLabel(): void {
     try {
       const shape = this.primaryShape;
+      if (!shape) {
+        // Fallback: use style dimensions
+        const nodeStyle = this.data?.style || {};
+        this.label.setLocalPosition([(nodeStyle.width || 100) / 2, (nodeStyle.height || 40) / 2]);
+        return;
+      }
 
       // Use getLocalBounds() from DisplayObject to get the center position
       if (typeof shape.getLocalBounds === 'function') {
@@ -108,14 +130,14 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
       this.label.setLocalPosition([(style.width || 100) / 2, (style.height || 40) / 2]);
     }
   }
-  
+
   /**
    * Get the node ID
    */
   getId(): string {
     return this.data.id;
   }
-  
+
   /**
    * Get the node data
    *
@@ -125,14 +147,7 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
   getData(): NodeConfig {
     return this.data;
   }
-  
-  /**
-   * Get the primary shape
-   */
-  getPrimaryShape(): T {
-    return this.primaryShape;
-  }
-  
+
   createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: BaseNodeStyleProps; [key: string]: unknown } = {}): Port {
     const portId = portConfig.id ? String(portConfig.id) : `port-${Math.random().toString(36).slice(2, 9)}`;
     const fullId = portId.includes(':') ? portId : `${this.getId()}:${portId}`;
@@ -143,7 +158,7 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
       style: portConfig.style || {},
       layout: portConfig.layout,
     });
-    
+
     port.owner = this;
     super.appendChild(port);
     this.portsById.set(fullId, port);
@@ -267,7 +282,7 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
 
     return this;
   }
-  
+
   /**
    * Compute a point on or around the primary shape according to a PortLayoutOptions.
    * Returns coordinates in the same local coordinate space used by the primary shape styles.

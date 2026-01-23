@@ -1,12 +1,10 @@
-import { CustomElement, FederatedEvent, CustomEvent } from '@antv/g-lite';
+import { CustomElement, CustomEvent, type DisplayObject } from '@antv/g-lite';
 import type { GEDataTransfer } from '../types/events';
 import { GEInteractionType } from '../types/events';
-import type { Graph } from './Graph';
-import type { Node } from './node/Node';
-import type { Port } from './port/Port';
+import type { DisplayObjectConfigWithShape } from '../types';
 
 /**
- * GE 交互元素基类
+ * GE 交互元素基类（泛型版本）
  *
  * 为 Node、Port、Edge 提供共享的交互逻辑：
  * - 拖拽状态管理
@@ -14,15 +12,40 @@ import type { Port } from './port/Port';
  * - 通用拖拽事件处理（pointermove/pointerup/pointercancel）
  * - Graph 查找和事件派发
  * - 连线处理（connect:over/drop）
+ * - primaryShape 管理（泛型类型安全）
  *
  * 继承关系：
  * CustomElement (@antv/g-lite)
  *   ↑
- * GEInteractiveElement (本类)
+ * GEInteractiveElement<TShape> (本类)
  *   ↑
- * Node / Port / Edge
+ * Node<TShape>, Port<TShape>, Edge
+ *
+ * @template TShape - 主要图形类型（Node/Port 使用，Edge 使用 DisplayObject）
  */
-export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
+export abstract class GEInteractiveElement<TShape extends DisplayObject = DisplayObject> extends CustomElement<any> {
+  // ============================================
+  // PrimaryShape 管理（泛型类型安全）
+  // ============================================
+
+  /** 主要图形对象（子类创建）*/
+  protected primaryShape: TShape | null = null;
+
+  /**
+   * 创建主要图形对象（子类实现）
+   * @param config - 可选的配置对象
+   * @returns 主要图形对象
+   */
+  protected abstract createPrimaryShape(config?: DisplayObjectConfigWithShape<any>): TShape;
+
+  /**
+   * 获取主要图形对象（类型安全）
+   * @returns 主要图形对象
+   */
+  getPrimaryShape(): TShape {
+    return this.primaryShape!;
+  }
+
   // ============================================
   // 交互状态管理（子类共享）
   // ============================================
@@ -173,8 +196,8 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    */
   protected _capturePointer(pointerId: number): void {
     try {
-      if (typeof this.setPointerCapture === 'function') {
-        this.setPointerCapture(pointerId);
+      if (typeof (this as any).setPointerCapture === 'function') {
+        (this as any).setPointerCapture(pointerId);
       }
     } catch (e) {
       // setPointerCapture 不可用，忽略
@@ -228,9 +251,11 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
 
     // Bind events to Canvas to ensure tracking even when mouse moves fast
     const canvas = this.ownerDocument;
-    canvas.addEventListener('pointermove', this._handlePointerMove);
-    canvas.addEventListener('pointerup', this._handlePointerUp);
-    canvas.addEventListener('pointercancel', this._handlePointerCancel);
+    if (!canvas) return;
+
+    canvas.addEventListener('pointermove', this._handlePointerMove as any);
+    canvas.addEventListener('pointerup', this._handlePointerUp as any);
+    canvas.addEventListener('pointercancel', this._handlePointerCancel as any);
   }
 
   /**
@@ -314,13 +339,15 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    */
   protected _endDrag(): void {
     const canvas = this.ownerDocument;
-    canvas.removeEventListener('pointermove', this._handlePointerMove);
-    canvas.removeEventListener('pointerup', this._handlePointerUp);
-    canvas.removeEventListener('pointercancel', this._handlePointerCancel);
+    if (!canvas) return;
+
+    canvas.removeEventListener('pointermove', this._handlePointerMove as any);
+    canvas.removeEventListener('pointerup', this._handlePointerUp as any);
+    canvas.removeEventListener('pointercancel', this._handlePointerCancel as any);
 
     if (this._pointerId !== null) {
       try {
-        this.releasePointerCapture(this._pointerId);
+        (this as any).releasePointerCapture?.(this._pointerId);
       } catch (e) {
         // ignore
       }
@@ -367,7 +394,7 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    * 子类可以通过覆盖 data.targetConnectable 来控制行为
    */
   _handleConnectOver(e: {
-    source: Node | Port;
+    source: any;
     x: number;
     y: number;
     dataTransfer: GEDataTransfer;
@@ -395,7 +422,7 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    * 子类可以通过覆盖 data.targetConnectable 来控制行为
    */
   _handleConnectDrop(e: {
-    source: Node | Port;
+    source: any;
     x: number;
     y: number;
     dataTransfer: GEDataTransfer;
@@ -424,7 +451,10 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
    * 获取元素的 data 配置
    * 子类需要实现此方法以提供配置数据
    */
-  abstract getData(): any;
+  getData(): any {
+    // Default implementation - subclasses should override
+    return {};
+  }
 
   /**
    * 检查是否可作为连线目标

@@ -1,17 +1,17 @@
+import { Ellipse } from '@antv/g-lite';
 import { resolveAnchorFunction } from '../../utils/nodeAnchor';
 
 describe('Ellipse Connection Point', () => {
   test('should calculate correct intersection point for ellipse', () => {
-    // 创建一个椭圆形状的模拟对象
-    const ellipseShape = {
-      nodeName: 'ellipse',
+    // 创建一个椭圆形状
+    const ellipseShape = new Ellipse({
       style: {
         cx: 0,
         cy: 0,
         rx: 50,
         ry: 30
       }
-    };
+    });
 
     // 测试从右侧水平方向的交点 (angle: 0)
     const anchorFn1 = resolveAnchorFunction({ name: 'angle', args: { angle: 0 } });

@@ -56,10 +56,19 @@ export type PortLayoutAny =
 /**
  * 获取形状的本地边界
  * 使用 @antv/g-lite DisplayObject 的标准 API
+ * 注意：getLocalBounds() 返回 AABB，其 min/max 是 Tuple3Number (3元素)
+ * 我们只取前两个元素 (x, y)，忽略 z
  */
 function getBounds(shape: DisplayObject): { min: [number, number]; max: [number, number] } {
   try {
-    return shape.getLocalBounds();
+    const aabb = shape.getLocalBounds();
+    const min = aabb.getMin();
+    const max = aabb.getMax();
+    // Extract x,y from 3D bounds (ignoring z)
+    return {
+      min: [min[0], min[1]],
+      max: [max[0], max[1]]
+    };
   } catch {
     return { min: [0, 0], max: [0, 0] };
   }
@@ -80,29 +89,29 @@ function getCenter(shape: DisplayObject): [number, number] {
 // NodeAnchor 预设 (与 core/anchor/Anchor.ts 中的预设保持同步)
 // ============================================================================
 
-function centerAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function centerAnchor(shape: DisplayObject, _args?: NodeAnchorArgs): [number, number] {
   return getCenter(shape);
 }
 
-function topAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function topAnchor(shape: DisplayObject, _args?: NodeAnchorArgs): [number, number] {
   const bounds = getBounds(shape);
   const centerX = (bounds.min[0] + bounds.max[0]) / 2;
   return [centerX, bounds.min[1]];
 }
 
-function bottomAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function bottomAnchor(shape: DisplayObject, _args?: NodeAnchorArgs): [number, number] {
   const bounds = getBounds(shape);
   const centerX = (bounds.min[0] + bounds.max[0]) / 2;
   return [centerX, bounds.max[1]];
 }
 
-function leftAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function leftAnchor(shape: DisplayObject, _args?: NodeAnchorArgs): [number, number] {
   const bounds = getBounds(shape);
   const centerY = (bounds.min[1] + bounds.max[1]) / 2;
   return [bounds.min[0], centerY];
 }
 
-function rightAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function rightAnchor(shape: DisplayObject, _args?: NodeAnchorArgs): [number, number] {
   const bounds = getBounds(shape);
   const centerY = (bounds.min[1] + bounds.max[1]) / 2;
   return [bounds.max[0], centerY];
@@ -184,7 +193,7 @@ function angleAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, numb
   return [centerX, centerY];
 }
 
-function absoluteAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
+function absoluteAnchor(_shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
   return [args?.x ?? 0, args?.y ?? 0];
 }
 
@@ -214,6 +223,7 @@ function midSideAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, nu
 /**
  * orth - 正交锚点
  * 选择水平或垂直方向上最近的点
+ * 优先考虑参考点的主导方向：如果参考点的 X 坐标在水平方向上偏离中心更多，则优先选择水平方向
  */
 function orthAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, number] {
   const bounds = getBounds(shape);
@@ -230,13 +240,22 @@ function orthAnchor(shape: DisplayObject, args?: NodeAnchorArgs): [number, numbe
   const distToLeft = Math.abs(refX - bounds.min[0]);
   const distToRight = Math.abs(refX - bounds.max[0]);
 
-  // 选择最近的方向
-  const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+  // 计算参考点相对于中心的偏离程度
+  const offsetX = Math.abs(refX - centerX);
+  const offsetY = Math.abs(refY - centerY);
 
-  if (minDist === distToTop) return [centerX, bounds.min[1]];
-  if (minDist === distToBottom) return [centerX, bounds.max[1]];
-  if (minDist === distToLeft) return [bounds.min[0], centerY];
-  return [bounds.max[0], centerY];
+  // 如果水平偏离更大（或相等），优先选择水平方向
+  if (offsetX >= offsetY) {
+    // 水平方向主导（或相等）
+    return distToLeft <= distToRight
+      ? [bounds.min[0], centerY]  // left
+      : [bounds.max[0], centerY];  // right
+  } else {
+    // 垂直方向主导
+    return distToTop <= distToBottom
+      ? [centerX, bounds.min[1]]  // top
+      : [centerX, bounds.max[1]];  // bottom
+  }
 }
 
 /**

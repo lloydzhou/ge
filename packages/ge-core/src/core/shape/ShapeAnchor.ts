@@ -13,7 +13,7 @@
  */
 
 import type { DisplayObject } from '@antv/g-lite';
-import type { Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 
 // ============================================================================
 // 类型定义

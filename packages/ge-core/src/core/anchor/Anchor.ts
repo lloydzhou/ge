@@ -10,7 +10,7 @@
  */
 
 import type { DisplayObject } from '@antv/g-lite';
-import type { Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 
 // ============================================================================
 // 类型定义
@@ -263,7 +263,7 @@ export const NodeAnchorPresets: Record<string, NodeAnchorFunction> = {
   /**
    * 绝对位置
    */
-  absolute: (shape, args?: NodeAnchorArgs) => {
+  absolute: (_shape, args?: NodeAnchorArgs) => {
     return [args?.x ?? 0, args?.y ?? 0];
   },
 
@@ -272,7 +272,6 @@ export const NodeAnchorPresets: Record<string, NodeAnchorFunction> = {
    * 根据边的进入方向，自动选择最近的一侧
    */
   midSide: (shape, args?: NodeAnchorArgs) => {
-    const style = (shape as any).style || {};
     const direction = args?.direction || [0, 0];
     const [dirX, dirY] = direction;
 

@@ -1,6 +1,6 @@
 import { NormalRouter, OrthogonalRouter, ManhattanRouter } from '../edge/EdgeRouter';
 import { NormalConnector, PolylineConnector } from '../edge/EdgeConnector';
-import type { Vec2 } from '../../utils/edgeLayout';
+import type { Vec2 } from '../../types';
 
 describe('EdgeRouter', () => {
   test('NormalRouter should return the same points', () => {
