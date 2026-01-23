@@ -291,10 +291,10 @@ Canvas (@antv/g-lite)
 └── Graph
 
 CustomElement (@antv/g-lite)
-├── GEInteractiveElement (交互基类)
-│   ├── Node (节点)
-│   └── Port (端口)
-└── Edge (边)
+└── GEInteractiveElement (交互基类)
+    ├── Node (节点)
+    ├── Port (端口)
+    └── Edge (边，仅使用 primaryShape 管理，不使用交互功能)
 ```
 
 > 💡 **详细架构说明、事件系统、插件开发请参考 [CLAUDE.md](./CLAUDE.md)**
