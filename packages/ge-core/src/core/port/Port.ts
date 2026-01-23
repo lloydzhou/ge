@@ -225,36 +225,10 @@ export class Port extends GEInteractiveElement<PortStyleProps> {
     super._initInteraction();
 
     // Apply cursor style (Port 默认支持连线，显示 crosshair)
-    this._applyCursorStyle();
+    this._applyCursorStyleTo(this.circle);
 
     // Synchronously update position to avoid edge connection issues
     this.updatePosition();
-  }
-
-  /**
-   * Port 默认支持连线，显示 crosshair
-   */
-  private _applyCursorStyle(): void {
-    let cursor = 'default';
-
-    const isSourceConnectable = this._isSourceConnectable();
-    const isTargetConnectable = this._isTargetConnectable();
-
-    // Port 主要是连线
-    if (isSourceConnectable) {
-      cursor = 'crosshair';
-    } else if (isTargetConnectable) {
-      cursor = 'pointer';
-    }
-
-    // Apply cursor to the circle
-    try {
-      if (this.circle && typeof (this.circle as any).style === 'object') {
-        (this.circle as any).style.cursor = cursor;
-      }
-    } catch (e) {
-      // ignore
-    }
   }
 
   disconnectedCallback() {

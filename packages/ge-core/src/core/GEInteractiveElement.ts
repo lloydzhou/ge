@@ -341,6 +341,8 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
     const prefix = this._getEventPrefix(this._dragType || GEInteractionType.NODE_DRAG);
     // pointercancel 始终使用 'end' 后缀（NODE_DRAG 用 'dragend'，CONNECTION 用 'end'）
     const endSuffix = (this._dragType || GEInteractionType.NODE_DRAG) === GEInteractionType.NODE_DRAG ? 'dragend' : 'end';
+
+    // 创建事件（_cancelDrag 没有原始事件可以 clone，所以使用 CustomEvent）
     const dragEndEvent = new CustomEvent(`${prefix}:${endSuffix}`, {
       detail: {
         type: this._dragType || GEInteractionType.NODE_DRAG,
@@ -432,5 +434,34 @@ export abstract class GEInteractiveElement<T = any> extends CustomElement<T> {
     const config = (this as any).data?.targetConnectable;
     if (typeof config === 'boolean') return config;
     return config?.enabled ?? this._defaultTargetConnectable;
+  }
+
+  /**
+   * 应用光标样式到指定形状（子类调用此方法）
+   * @param targetShape - 要应用光标样式的形状对象
+   */
+  protected _applyCursorStyleTo(targetShape: any): void {
+    let cursor = 'default';
+
+    const isDraggable = this._isDraggable();
+    const isSourceConnectable = this._isSourceConnectable();
+    const isTargetConnectable = this._isTargetConnectable();
+
+    // 优先级：sourceConnectable > draggable > targetConnectable
+    if (isSourceConnectable) {
+      cursor = 'crosshair';
+    } else if (isDraggable) {
+      cursor = 'move';
+    } else if (isTargetConnectable) {
+      cursor = 'pointer';
+    }
+
+    try {
+      if (targetShape && typeof targetShape.style === 'object') {
+        targetShape.style.cursor = cursor;
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 }

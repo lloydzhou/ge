@@ -184,46 +184,13 @@ export class Node<T extends DisplayObject = Rect> extends GEInteractiveElement<N
     this._initInteraction();
 
     // Apply cursor style based on interaction capabilities
-    this._applyCursorStyle();
+    this._applyCursorStyleTo(this.primaryShape);
 
     // Register with Graph
     try {
       const graph = this.ownerDocument as any;
       if (typeof graph.registerNode === 'function') {
         graph.registerNode(this as any);
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  /**
-   * Apply cursor style based on node interaction capabilities
-   * Reference x6: connection uses 'crosshair', move uses 'move'
-   */
-  private _applyCursorStyle(): void {
-    let cursor = 'default';
-
-    const isDraggable = this._isDraggable();
-    const isSourceConnectable = this._isSourceConnectable();
-    const isTargetConnectable = this._isTargetConnectable();
-
-    // When both draggable and sourceConnectable, prefer crosshair (connection priority)
-    // Click on edge = connection, click on center = move
-    if (isDraggable && isSourceConnectable) {
-      cursor = 'crosshair';
-    } else if (isDraggable) {
-      cursor = 'move';
-    } else if (isSourceConnectable) {
-      cursor = 'crosshair';
-    } else if (isTargetConnectable) {
-      cursor = 'pointer';
-    }
-
-    // Apply cursor to the primary shape
-    try {
-      if (this.primaryShape && typeof (this.primaryShape as any).style === 'object') {
-        (this.primaryShape as any).style.cursor = cursor;
       }
     } catch (e) {
       // ignore
