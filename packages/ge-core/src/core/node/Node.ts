@@ -4,6 +4,7 @@ import type { BaseNodeStyleProps, DisplayObjectConfigWithShape, NodeData, PortLa
 import { Port } from '../port/Port';
 import { resolveAnchorFunction } from '../../utils/nodeAnchor';
 import { ItemElement } from '../ItemElement';
+import { ItemLabelElement } from '../ItemLabelElement';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
@@ -41,6 +42,7 @@ export interface NodeConfig extends NodeData {
  */
 export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShape> {
   private data!: NodeConfig; // definite assignment assertion - set in constructor
+  private _nodeLabel: ItemLabelElement | null = null; // Reference to the label (using ItemLabelElement)
 
   constructor(config: NodeConfig) {
     super({
@@ -65,18 +67,19 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
     // Add children to the group
     super.appendChild(this.primaryShape);
 
-    // Create label if configured (directly like primaryShape, no pending config needed)
+    // Create label if configured (using ItemLabelElement)
     if (config?.style?.label || config?.style?.labelFill || config?.style?.labelFontSize) {
-      const label = new Text({
+      const label = new ItemLabelElement({
+        text: config?.style?.label || config.id,
         style: {
-          text: config?.style?.label || config.id,
           fill: config?.style?.labelFill || '#000',
-          fontSize: config?.style?.labelFontSize || 12,
-          textAlign: 'center',
-          textBaseline: 'middle'
-        }
+          fontSize: config?.style?.labelFontSize || 12
+        },
+        editable: config?.style?.labelEditable === true
       });
-      super.appendChild(label); // Use super.appendChild to avoid Port tracking logic
+      this._nodeLabel = label; // Store reference
+      label.setOwner(this); // Set owner for positioning
+      super.appendChild(label);
     }
   }
 
@@ -96,44 +99,11 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
 
   /**
    * Position the label in the center of the primary shape
-   * Handles different shapes: Circle/Ellipse (cx, cy) vs Rect (x, y, width, height)
+   * Delegates to NodeLabel's updatePosition() method
    */
   private positionLabel(): void {
-    const label = this.getLabelShape();
-    if (!label) return;
-
-    try {
-      const shape = this.primaryShape as any;
-      if (!shape) {
-        // Fallback: use style dimensions
-        const nodeStyle = this.data?.style || {};
-        const w = Number(nodeStyle.width ?? 100);
-        const h = Number(nodeStyle.height ?? 40);
-        label.setLocalPosition([w / 2, h / 2]);
-        return;
-      }
-
-      const shapeStyle = shape.style || {};
-      const nodeName = shape.nodeName;
-
-      // For Circle/Ellipse: center is at (cx, cy)
-      if (nodeName === 'circle' || nodeName === 'ellipse') {
-        const cx = Number(shapeStyle.cx ?? 0);
-        const cy = Number(shapeStyle.cy ?? 0);
-        label.setLocalPosition([cx, cy]);
-        return;
-      }
-
-      // For Rect and other shapes: center is at (x + width/2, y + height/2)
-      const x = Number(shapeStyle.x ?? 0);
-      const y = Number(shapeStyle.y ?? 0);
-      const w = Number(shapeStyle.width ?? 100);
-      const h = Number(shapeStyle.height ?? 40);
-      label.setLocalPosition([x + w / 2, y + h / 2]);
-    } catch (error) {
-      // Final fallback
-      const style = this.data?.style || {};
-      label.setLocalPosition([(style.width || 100) / 2, (style.height || 40) / 2]);
+    if (this._nodeLabel) {
+      this._nodeLabel.updatePosition();
     }
   }
 
@@ -273,6 +243,7 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
   }
 
   connectedCallback() {
+    console.log('[Node.connectedCallback] nodeId:', this.getId(), 'has label:', !!this._nodeLabel);
     // Initialize interaction event listeners
     this._initInteraction();
 
@@ -347,9 +318,10 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
     // After moving, dispatch event to self (DOM API style)
     try {
       const ev = new CustomEvent('node:moved', { detail: { id: this.getId(), x: xNum, y: yNum } });
+      console.log('[Node.setPosition] Dispatching node:moved', { id: this.getId(), x: xNum, y: yNum });
       this.dispatchEvent(ev);
     } catch (e) {
-      // ignore
+      console.error('[Node.setPosition] Failed to dispatch event:', e);
     }
 
     // Synchronously reposition label to avoid flicker

@@ -13,9 +13,10 @@ import type { Edge } from '../core/edge/Edge';
 import type { Port } from '../core/port/Port';
 import type { ItemElement } from '../core/ItemElement';
 import type { ItemToolElement } from '../core/ItemToolElement';
+import type { ItemLabelElement } from '../core/ItemLabelElement';
 
 // Export types
-export type { Graph, Node, Edge, Port, ItemElement, ItemToolElement, LabelConfig };
+export type { Graph, Node, Edge, Port, ItemElement, ItemToolElement, ItemLabelElement, LabelConfig };
 
 // Note: GEInteractiveElement is not re-exported here because it causes issues with Jest's ts-jest.
 // Node/Port import it directly from '../core/GEInteractiveElement' instead.
@@ -79,6 +80,7 @@ export interface BaseNodeStyleProps extends BaseStyleProps {
   labelFill?: string;
   labelFontSize?: number;
   labelOffset?: number;
+  labelEditable?: boolean; // Whether the node label is editable (double-click to edit)
 }
 
 export interface BaseEdgeStyleProps extends BaseStyleProps {
@@ -87,6 +89,7 @@ export interface BaseEdgeStyleProps extends BaseStyleProps {
   labelFontSize?: number;
   labelOffset?: number;
   labelZIndex?: number; // zIndex for single label (backward compatibility)
+  labelEditable?: boolean; // Whether the edge label is editable (double-click to edit)
   labels?: LabelConfig[]; // Multiple labels support
   router?: EdgeRouter;
   connector?: EdgeConnector;
@@ -141,7 +144,7 @@ export interface LabelConfig {
     padding?: number;
     [key: string]: unknown;
   };
-  /** Whether the label is editable */
+  /** Whether the label is editable (double-click to edit) */
   editable?: boolean;
 }
 
@@ -344,6 +347,7 @@ export interface PortData {
 }
 
 export type PortLayoutOptions =
+  | 'center'
   | 'top'
   | 'bottom'
   | 'left'
@@ -359,6 +363,17 @@ export type PortLayoutOptions =
       args: {
         x: number;
         y: number;
+      };
+    }
+  | {
+      name: 'path';
+      args: {
+        distance: number; // Position along path (0-1)
+        offset?: {
+          normal?: number; // Perpendicular offset
+          tangent?: number; // Parallel offset
+        };
+        angle?: number; // Rotation in degrees
       };
     };
 

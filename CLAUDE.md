@@ -596,6 +596,35 @@ layout: { name: 'absolute', args: { x: 10, y: 20 } }
    - DOM API 的元素自己可以派发和监听事件
    - eventBus 是非标准模式，增加了不必要的复杂性
 
+6. **🚨 CRITICAL: CustomEvent 必须从 @antv/g-lite 导入**
+   - ✅ 正确：`import { CustomEvent } from '@antv/g-lite';`
+   - ✅ 正确：`const ev = new CustomEvent('node:moved', { detail: { id: this.getId() } });`
+   - ✅ 正确：`this.dispatchEvent(ev);`
+   - ❌ 错误：使用浏览器原生 `CustomEvent` - 不会在 @antv/g-lite 中工作
+   - ❌ 错误：忘记导入 `CustomEvent` - TypeScript 会报错
+
+   **原因**：
+   - @antv/g-lite 提供了自己的 `CustomEvent` 实现（兼容 FederatedEvent）
+   - 必须从 `@antv/g-lite` 导入，不能使用浏览器原生 `CustomEvent`
+   - 派发自定义事件时，使用 `{ detail }` 传递数据
+
+   **示例**：
+   ```typescript
+   import { CustomEvent } from '@antv/g-lite';
+
+   // 在 Node.setPosition() 中派发事件
+   const ev = new CustomEvent('node:moved', {
+     detail: { id: this.getId(), x: 100, y: 200 }
+   });
+   this.dispatchEvent(ev);
+
+   // 在 Edge 中监听事件
+   node.addEventListener('node:moved', (e: Event) => {
+     const detail = (e as any).detail;
+     console.log('Node moved:', detail.id, detail.x, detail.y);
+   });
+   ```
+
 ### 实现示例
 
 ```typescript

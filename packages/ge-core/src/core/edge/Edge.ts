@@ -13,6 +13,7 @@ import { NormalConnector } from './EdgeConnector';
 import type { Node } from '../node/Node';
 import type { Port } from '../port/Port';
 import { ItemElement } from '../ItemElement';
+import { ItemLabelElement } from '../ItemLabelElement';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -56,10 +57,8 @@ export type EdgeEndpoint = string | Node | Port | null;
  */
 export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath> {
   private data!: EdgeConfig; // definite assignment assertion - set in constructor
-  // Edge manages multiple labels internally using Text objects (not ItemToolElement)
-  private _labelTexts: Map<string, Text> = new Map();
-  // Store position config for each label to update when edge moves
-  private labelPositions: Map<string, { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }> = new Map();
+  // Edge manages multiple labels using ItemLabelElement
+  private _labelTexts: Map<string, ItemLabelElement> = new Map();
   private sourceNode: EdgeEndpoint = null;
   private targetNode: EdgeEndpoint = null;
   private _onSourceMoved: ((e: Event) => void) | null = null;
@@ -148,8 +147,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
     if (this.startMarkerObj) super.appendChild(this.startMarkerObj);
     if (this.endMarkerObj) super.appendChild(this.endMarkerObj);
 
-    // Edge uses multi-labels by default
-    // If style.labels is provided, use it; otherwise, create a default label from style.label
+    // Edge uses multi-labels - users must explicitly provide labels array
     if (style.labels && Array.isArray(style.labels) && style.labels.length > 0) {
       // Multi-label mode: create labels from style.labels array
       style.labels.forEach((labelConfig, index) => {
@@ -160,22 +158,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
           console.warn('Failed to create edge label:', e);
         }
       });
-    } else if (style.label || style.labelFill || style.labelFontSize) {
-      // Single-label mode (backward compatibility): create a default label
-      const defaultLabel = new Text({
-        style: {
-          text: style.label || '',
-          fill: style.labelFill || '#000',
-          fontSize: style.labelFontSize || 12,
-          textAlign: 'center',
-          textBaseline: 'middle',
-          // Set zIndex to ensure label renders above edges
-          zIndex: style.labelZIndex ?? 1
-        }
-      });
-
-      super.appendChild(defaultLabel);
-      this._labelTexts.set('default', defaultLabel);
     }
   }
   
@@ -245,6 +227,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * Handle source node moved event
    */
   private _handleSourceMoved(_e: Event): void {
+    console.log('[Edge._handleSourceMoved] Source node moved, updating edge', this.data.id);
     this.updatePositionFromNodes();
   }
 
@@ -252,6 +235,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * Handle target node moved event
    */
   private _handleTargetMoved(_e: Event): void {
+    console.log('[Edge._handleTargetMoved] Target node moved, updating edge', this.data.id);
     this.updatePositionFromNodes();
   }
 
@@ -534,42 +518,48 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
   // ============================================
 
   /**
-   * Override getLabelShape to return primary label
-   * First tries labels Map, then falls back to parent's findLabelInChildren()
-   * @returns Primary label or null
+   * Override getLabelShape to return first label's Text shape
+   * @returns First label's Text shape or null
    */
   override getLabelShape(): Text | null {
-    return this._labelTexts.get('default') ||
-           this._labelTexts.values().next().value ||
-           super.getLabelShape(); // fallback to parent's implementation
+    const edgeLabel = this._labelTexts.values().next().value;
+    if (edgeLabel) {
+      return edgeLabel.getLabelShape();
+    }
+    return super.getLabelShape(); // fallback to parent's implementation
   }
 
   /**
-   * Add a label to this edge
+   * Add a label to this edge using ItemLabelElement
    * @param id - Label ID
    * @param config - Label configuration
-   * @returns The created Text label
+   * @returns The created ItemLabelElement
    */
-  addLabel(id: string, config: { text?: string; position?: { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }; style?: { fill?: string; fontSize?: number; background?: string; padding?: number; zIndex?: number; [key: string]: unknown } }): Text {
-    const label = new Text({
+  addLabel(id: string, config: {
+    text?: string;
+    position?: { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number };
+    style?: { fill?: string; fontSize?: number; background?: string; padding?: number; zIndex?: number; [key: string]: unknown };
+    editable?: boolean;
+  }): ItemLabelElement {
+    const label = new ItemLabelElement({
+      id,
+      text: config.text || id,
+      position: config.position,
       style: {
-        text: config.text || id,
         fill: config.style?.fill || '#000',
         fontSize: config.style?.fontSize || 12,
-        textAlign: 'center',
-        textBaseline: 'middle',
-        // Set zIndex to ensure labels render above edges (default: 1)
         zIndex: config.style?.zIndex ?? 1,
         ...config.style
-      }
+      },
+      editable: config.editable === true
     });
 
+    // Set owner reference for positioning (ItemLabelElement will auto-detect Edge vs Node)
+    label.setOwner(this as any);
+
     this._labelTexts.set(id, label);
-    // Store position config for later updates
-    if (config.position) {
-      this.labelPositions.set(id, config.position);
-    }
     super.appendChild(label);
+
     // Note: Don't call updateLabelPosition here since edge may not be connected yet
     // Labels will be positioned in updatePositionFromNodes after connection
 
@@ -587,7 +577,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
         super.removeChild(label);
       } catch (e) {}
       this._labelTexts.delete(id);
-      this.labelPositions.delete(id);
     }
   }
 
@@ -596,54 +585,36 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * Called when edge position changes
    */
   private updateAllLabels(): void {
-    this._labelTexts.forEach((_label, id) => {
-      const position = this.labelPositions.get(id);
-      this.updateLabelPosition(id, position);
+    this._labelTexts.forEach((label) => {
+      label.updatePosition();
     });
   }
 
   /**
    * Get a specific label by ID
-   * If id not provided, returns the default label
+   * If id not provided, returns the first label
    * @param id - Label ID (optional)
-   * @returns Label Text object or null
+   * @returns Label ItemLabelElement object or null
    */
-  override getLabel(id?: string): Text | null {
+  getEdgeLabel(id?: string): ItemLabelElement | null {
     if (!id) {
-      return this.getLabelShape();
+      return this._labelTexts.values().next().value || null;
     }
     return this._labelTexts.get(id) || null;
   }
 
   /**
-   * Update label position based on config
-   * @param id - Label ID
-   * @param position - Position configuration
+   * Get label text (for backward compatibility)
+   * @param id - Label ID (optional)
+   * @returns Text content or null
    */
-  private updateLabelPosition(id: string, position?: { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }): void {
-    const label = this._labelTexts.get(id);
-    if (!label) return;
-
-    try {
-      const pts = this.getEdgePoints();
-      const t = position?.distance ?? 0.5;
-      const offset = position?.offset;
-
-      // Use the edgeLayout computeAnchor function
-      const anchor = computeAnchor(pts, { t, offset });
-      label.setLocalPosition([anchor.x, anchor.y]);
-
-      // Apply angle rotation if specified
-      if (position?.angle) {
-        // For now, angle is stored - actual rotation could be applied to the label element
-        // label.style.rotation = position.angle;
-      }
-    } catch (e) {
-      // ignore label positioning errors
-    }
+  getLabelText(id?: string): string | null {
+    const label = this.getEdgeLabel(id);
+    return label ? label.getText() : null;
   }
 
   connectedCallback() {
+    console.log('[Edge.connectedCallback] Connecting edge', this.data.id, 'source:', this.data.source, 'target:', this.data.target);
     // Connect immediately after being added to DOM
     this._tryConnect();
   }
@@ -652,6 +623,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
     try {
       const graph = this.ownerDocument as any;
       if (!graph || typeof graph.getElementById !== 'function') {
+        console.warn('[Edge._tryConnect] No graph or graph.getElementById not available');
         return false;
       }
 
@@ -674,6 +646,12 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
 
       sourceNode = resolveEndpoint(this.data.source);
       targetNode = resolveEndpoint(this.data.target);
+
+      console.log('[Edge._tryConnect] Resolved endpoints:', {
+        edge: this.data.id,
+        sourceNode,
+        targetNode
+      });
 
       if (sourceNode && targetNode) {
         this.connectTo(sourceNode, targetNode);

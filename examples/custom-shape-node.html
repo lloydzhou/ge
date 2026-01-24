@@ -72,15 +72,13 @@
           fill: '#1890ff',
           stroke: '#000',
           lineWidth: 2,
-          label: 'Circle Node',
+          label: 'Circle Node (Editable)',
           labelFill: '#fff',
-          labelFontSize: 14
+          labelFontSize: 14,
+          labelEditable: true  // 双击可编辑
         },
         // 使节点可拖拽
-        draggable: true,
-        // 使节点可作为连线源和目标
-        sourceConnectable: true,
-        targetConnectable: true
+        draggable: true
       });
 
       // Create another circle node using ctor directly
@@ -100,9 +98,6 @@
         },
         // 使节点可拖拽
         draggable: true,
-        // 使节点可作为连线源和目标
-        sourceConnectable: true,
-        targetConnectable: true
       });
 
       // Add the nodes to the graph
@@ -126,10 +121,7 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true,
-        // 使节点可作为连线源和目标
-        sourceConnectable: true,
-        targetConnectable: true
+        draggable: true
       });
 
       // Add the node to the graph
@@ -199,15 +191,13 @@
           fill: '#f5a623',
           stroke: '#000',
           lineWidth: 1,
-          label: 'Polygon Node',
+          label: 'Polygon Node (Editable)',
           labelFill: '#000',
-          labelFontSize: 12
+          labelFontSize: 12,
+          labelEditable: true  // 双击可编辑
         },
         // 使节点可拖拽
-        draggable: true,
-        // 使节点可作为连线源和目标
-        sourceConnectable: true,
-        targetConnectable: true
+        draggable: true
       });
       graph.appendChild(polygonNode);
       // Ports on polygon using angles that may hit vertices or edges
@@ -234,10 +224,7 @@
           labelFontSize: 12
         },
         // 使节点可拖拽
-        draggable: true,
-        // 使节点可作为连线源和目标
-        sourceConnectable: true,
-        targetConnectable: true
+        draggable: true
       });
       graph.appendChild(ellipseNode);
       ellipseNode.createPort({ id: 'ellipse-top', layout: 'top', shape: 'custom-port' });
@@ -279,9 +266,10 @@
             },
             {
               id: 'label-middle',
-              text: 'Middle',
+              text: 'Editable (双击)',
               position: { distance: 0.5 },
-              style: { fill: '#52c41a', fontSize: 14, fontWeight: 'bold', zIndex: 3 }
+              style: { fill: '#52c41a', fontSize: 14, fontWeight: 'bold', zIndex: 3 },
+              editable: true  // 双击可编辑
             },
             {
               id: 'label-end',
