@@ -222,7 +222,116 @@ const customNode = new CustomNode({
 graph.appendChild(customNode);
 ```
 
-### 2. 自定义路由器
+### 2. 使用 DOM 风格 API 添加端口和工具
+
+GE 推荐使用类 DOM 的 API 来操作端口和工具：
+
+```typescript
+import { Node, Port } from '@antv/ge';
+
+const node = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#fff'
+  }
+});
+
+// 创建端口并添加到节点 (DOM 风格)
+const port1 = new Port({
+  id: 'port-in',
+  layout: 'left',
+  style: {
+    r: 4,
+    fill: '#fff',
+    stroke: '#000'
+  }
+});
+
+const port2 = new Port({
+  id: 'port-out',
+  layout: 'right',
+  style: {
+    r: 4,
+    fill: '#fff',
+    stroke: '#000'
+  }
+});
+
+// 使用 appendChild 添加端口 (自动追踪)
+node.appendChild(port1);
+node.appendChild(port2);
+
+graph.appendChild(node);
+
+// 获取端口
+const port = node.getPort('port-in');
+const allPorts = node.getPorts();
+```
+
+### 3. 边的多标签支持
+
+```typescript
+import { Edge } from '@antv/ge';
+
+const edge = new Edge({
+  id: 'edge1',
+  source: 'node1',
+  target: 'node2',
+  style: {
+    // 主标签 (向后兼容)
+    label: 'Edge Label',
+
+    // 多标签配置
+    labels: [
+      {
+        id: 'label1',
+        text: 'Start',
+        position: {
+          distance: 0.2,  // 位置: 边的 20% 处
+          offset: {
+            normal: 10    // 法向偏移
+          }
+        },
+        style: {
+          fill: '#333',
+          fontSize: 12
+        }
+      },
+      {
+        id: 'label2',
+        text: 'End',
+        position: {
+          distance: 0.8,  // 位置: 边的 80% 处
+          offset: {
+            normal: -10
+          }
+        }
+      }
+    ]
+  }
+});
+
+graph.appendChild(edge);
+
+// 动态添加标签
+edge.addLabel('dynamic-label', {
+  text: 'Dynamic',
+  position: { distance: 0.5 },
+  style: { fill: 'red' }
+});
+
+// 移除标签
+edge.removeLabel('label1');
+
+// 获取标签
+const label = edge.getLabel('label2');
+```
+
+### 4. 自定义路由器
 
 ```typescript
 import type { EdgeRouter } from '@antv/ge';
@@ -245,7 +354,7 @@ const edge = new Edge({
 });
 ```
 
-### 3. 自定义连接器
+### 5. 自定义连接器
 
 ```typescript
 import type { EdgeConnector } from '@antv/ge';
@@ -292,9 +401,12 @@ Canvas (@antv/g-lite)
 
 CustomElement (@antv/g-lite)
 └── GEInteractiveElement (交互基类)
-    ├── Node (节点)
-    ├── Port (端口)
-    └── Edge (边，仅使用 primaryShape 管理，不使用交互功能)
+    ├── ItemElement (集合管理基类)
+    │   ├── Node (节点)
+    │   └── Edge (边)
+    └── ItemToolElement (单项定位基类)
+        ├── Port (端口)
+        └── EdgeMarker (箭头)
 ```
 
 > 💡 **详细架构说明、事件系统、插件开发请参考 [CLAUDE.md](./CLAUDE.md)**

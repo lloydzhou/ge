@@ -11,7 +11,9 @@ graph TB
     end
 
     subgraph "Layer 1.5: GE 中间层"
-        GEInteractive["GEInteractiveElement<br/>交互元素基类"]
+        GEInteractive["GEInteractiveElement<br/>交互元素基类<br/>- 拖拽状态管理<br/>- 数据传输 (DataTransfer)<br/>- 通用拖拽事件处理<br/>- primaryShape/labelShape 管理"]
+        ItemElement["ItemElement<br/>集合管理基类<br/>- tools[] 集合<br/>- ports[] 集合<br/>- labels[] 集合<br/>- distributeItems() 布局算法"]
+        ItemToolElement["ItemToolElement<br/>单项定位基类<br/>- owner 引用<br/>- calculatePosition() 统一定位<br/>- distance/offset/angle 参数<br/>- getSiblings()/getIndex()"]
     end
 
     subgraph "Layer 2: 图编辑原语 (非可视化对象)"
@@ -29,9 +31,11 @@ graph TB
 
     Canvas -->|"继承"| Graph
     CustomElement -->|"继承"| GEInteractive
-    GEInteractive -->|"继承"| Node
-    GEInteractive -->|"继承"| Edge
-    GEInteractive -->|"继承"| Port
+    GEInteractive -->|"继承"| ItemElement
+    GEInteractive -->|"继承"| ItemToolElement
+    ItemElement -->|"继承"| Node
+    ItemElement -->|"继承"| Edge
+    ItemToolElement -->|"继承"| Port
     DisplayObject -->|"继承"| CustomElement
 ```
 
@@ -64,21 +68,51 @@ classDiagram
     %% GE 中间层
     class GEInteractiveElement {
         <<abstract>>
+        #primaryShape: TShape
         #_isDragging: boolean
         #_dragType: GEInteractionType
         #_dataTransfer: GEDataTransfer
         #_pointerId: number
         #_dragStartPos: [number, number]
+        +getPrimaryShape(): TShape
+        +getLabelShape(): Text
+        +getLabel(id?): Text
+        +setLabelShape(config): void
+        +findLabelInChildren(): Text
         +_getEventPrefix(type): string
         +_createDataTransfer(): GEDataTransfer
-        +_findGraphParent(): Graph
-        +_emitToGraph(eventName, detail): void
-        +_getCanvasPosition(clientX, clientY): [number, number]
         +_endDrag(): void
         +_cancelDrag(): void
         +_handleConnectOver(e): boolean
         +_handleConnectDrop(e): boolean
         +getData(): any
+    }
+
+    class ItemElement {
+        <<abstract>>
+        #tools: ItemToolElement[]
+        #ports: ItemToolElement[]
+        #labels: ItemToolElement[]
+        +distributeItems(items): void
+        +_trackItem(item, type): void
+        +_untrackItem(item, type): void
+        +getTools(): ItemToolElement[]
+        +getPorts(): ItemToolElement[]
+        +getLabels(): ItemToolElement[]
+    }
+
+    class ItemToolElement {
+        <<abstract>>
+        #_owner: ItemElement
+        #position: {distance, offset, angle}
+        #layout: string | PortLayoutOptions
+        +calculatePosition(): Vec2
+        +calculatePositionOnPath(path, t): Vec2
+        +calculatePositionOnShape(shape, layout): Vec2
+        +applyOffsetAndAngle(point, tangent): Vec2
+        +getSiblings(): ItemToolElement[]
+        +getIndex(): number
+        +updateDistributedPosition(index, count): void
     }
 
     %% GE 可视化元素
@@ -103,9 +137,12 @@ classDiagram
         -primaryShape: T
         -label: Text
         -data: NodeConfig
-        -portsById: Map
+        +appendChild(child): this
+        +removeChild(child): this
         +getPrimaryShape()
-        +createPort()
+        +addPort(config): Port
+        +getPort(id): Port
+        +getPorts(): Port[]
         +computeAnchorForLayout()
         +getId()
         +getData()
@@ -113,12 +150,16 @@ classDiagram
 
     class Edge {
         -primaryShape: T
-        -label: Text
+        -labels: Map<string, Text>
         -data: EdgeData
         -sourceNode: EdgeEndpoint
         -targetNode: EdgeEndpoint
         -router: EdgeRouter
         -connector: EdgeConnector
+        +getLabelShape(): Text
+        +addLabel(id, config): Text
+        +removeLabel(id): void
+        +getLabel(id): Text
         +connectTo()
         +updatePositionFromNodes()
         +getId()
@@ -126,7 +167,7 @@ classDiagram
     }
 
     class Port {
-        -circle: DisplayObject
+        -primaryShape: T
         -data: PortConfig
         -owner: Node
         -layout: PortLayoutOptions
@@ -160,10 +201,12 @@ classDiagram
     %% 继承关系
     DisplayObject <|-- CustomElement
     CustomElement <|-- GEInteractiveElement
+    GEInteractiveElement <|-- ItemElement
+    GEInteractiveElement <|-- ItemToolElement
     Canvas <|-- Graph
-    GEInteractiveElement <|-- Node
-    GEInteractiveElement <|-- Edge
-    GEInteractiveElement <|-- Port
+    ItemElement <|-- Node
+    ItemElement <|-- Edge
+    ItemToolElement <|-- Port
 
     %% 组合关系
     Graph *-- AnchorRegistry : contains
@@ -476,11 +519,13 @@ graph TB
 |------|-------|--------|------|------|
 | Canvas | Layer 1 | ✅ | - | 画布容器，DOM 管理 |
 | CustomElement | Layer 1 | ✅ | DisplayObject | 自定义元素基类 |
-| **GEInteractiveElement** | **Layer 1.5** | **❌** | **CustomElement** | **交互元素基类，共享拖拽逻辑** |
+| **GEInteractiveElement** | **Layer 1.5** | **❌** | **CustomElement** | **交互元素基类：拖拽状态、DataTransfer、primaryShape/labelShape** |
+| **ItemElement** | **Layer 1.5** | **❌** | **GEInteractiveElement** | **集合管理基类：tools/ports/labels 数组、distributeItems 布局** |
+| **ItemToolElement** | **Layer 1.5** | **❌** | **GEInteractiveElement** | **单项定位基类：owner 引用、calculatePosition 统一定位** |
 | Graph | Layer 3 | ✅ | Canvas | 图编辑容器，处理 node:drag* |
-| Node | Layer 3 | ✅ | GEInteractiveElement | 节点，派发交互事件 |
-| Edge | Layer 3 | ✅ | GEInteractiveElement | 边 |
-| Port | Layer 3 | ✅ | GEInteractiveElement | 端口/连接桩，只支持连线 |
+| Node | Layer 3 | ✅ | ItemElement | 节点，管理 ports 集合 |
+| Edge | Layer 3 | ✅ | ItemElement | 边，管理 labels 集合 |
+| Port | Layer 3 | ✅ | ItemToolElement | 端口/连接桩，位置计算 |
 | Router | Layer 2 | ❌ | (纯类) | 计算路径点 |
 | Connector | Layer 2 | ❌ | (纯类) | 生成图形 |
 | Anchor | Layer 2 | ❌ | (策略函数) | 计算连接点 |

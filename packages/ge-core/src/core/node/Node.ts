@@ -3,7 +3,7 @@ import { resolveCtor } from '../../utils/shapeResolver';
 import type { BaseNodeStyleProps, DisplayObjectConfigWithShape, NodeData, PortLayoutOptions } from '../../types';
 import { Port } from '../port/Port';
 import { resolveAnchorFunction } from '../../utils/nodeAnchor';
-import { GEInteractiveElement } from '../GEInteractiveElement';
+import { ItemElement } from '../ItemElement';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
@@ -24,6 +24,9 @@ export interface NodeConfig extends NodeData {
 /**
  * Node class with generic primaryShape support
  *
+ * Extends ItemElement to provide collection management (tools/ports/labels)
+ * and GEInteractiveElement for interaction capabilities.
+ *
  * @template TShape - The display object type used as primary shape (defaults to Rect)
  *
  * @example
@@ -36,10 +39,8 @@ export interface NodeConfig extends NodeData {
  * // Using registered shape name
  * const customNode = new Node({ id: 'n3', shape: 'my-shape', ... });
  */
-export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElement<TShape> {
-  private label: Text;
-  private data: NodeConfig;
-  private portsById: Map<string, Port> = new Map();
+export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShape> {
+  private data!: NodeConfig; // definite assignment assertion - set in constructor
 
   constructor(config: NodeConfig) {
     super({
@@ -61,26 +62,21 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
       shape: config.shape
     } as DisplayObjectConfigWithShape);
 
-    // Create the node label
-    this.label = new Text({
-      style: {
-        text: config?.style?.label || config.id,
-        fill: config?.style?.labelFill || '#000',
-        fontSize: config?.style?.labelFontSize || 12,
-        textAlign: 'center',
-        textBaseline: 'middle'
-      }
-    });
-
     // Add children to the group
     super.appendChild(this.primaryShape);
-    super.appendChild(this.label);
 
-    // Immediately position the label synchronously to avoid flashing
-    try {
-      this.positionLabel();
-    } catch (e) {
-      // ignore positioning errors
+    // Create label if configured (directly like primaryShape, no pending config needed)
+    if (config?.style?.label || config?.style?.labelFill || config?.style?.labelFontSize) {
+      const label = new Text({
+        style: {
+          text: config?.style?.label || config.id,
+          fill: config?.style?.labelFill || '#000',
+          fontSize: config?.style?.labelFontSize || 12,
+          textAlign: 'center',
+          textBaseline: 'middle'
+        }
+      });
+      super.appendChild(label); // Use super.appendChild to avoid Port tracking logic
     }
   }
 
@@ -100,34 +96,44 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
 
   /**
    * Position the label in the center of the primary shape
-   * Uses DisplayObject's getLocalBounds() for consistent positioning
+   * Handles different shapes: Circle/Ellipse (cx, cy) vs Rect (x, y, width, height)
    */
   private positionLabel(): void {
+    const label = this.getLabelShape();
+    if (!label) return;
+
     try {
-      const shape = this.primaryShape;
+      const shape = this.primaryShape as any;
       if (!shape) {
         // Fallback: use style dimensions
         const nodeStyle = this.data?.style || {};
-        this.label.setLocalPosition([(nodeStyle.width || 100) / 2, (nodeStyle.height || 40) / 2]);
+        const w = Number(nodeStyle.width ?? 100);
+        const h = Number(nodeStyle.height ?? 40);
+        label.setLocalPosition([w / 2, h / 2]);
         return;
       }
 
-      // Use getLocalBounds() from DisplayObject to get the center position
-      if (typeof shape.getLocalBounds === 'function') {
-        const bounds = shape.getLocalBounds();
-        const centerX = (bounds.min[0] + bounds.max[0]) / 2;
-        const centerY = (bounds.min[1] + bounds.max[1]) / 2;
-        this.label.setLocalPosition([centerX, centerY]);
+      const shapeStyle = shape.style || {};
+      const nodeName = shape.nodeName;
+
+      // For Circle/Ellipse: center is at (cx, cy)
+      if (nodeName === 'circle' || nodeName === 'ellipse') {
+        const cx = Number(shapeStyle.cx ?? 0);
+        const cy = Number(shapeStyle.cy ?? 0);
+        label.setLocalPosition([cx, cy]);
         return;
       }
 
-      // Fallback: use style dimensions
-      const nodeStyle = this.data?.style || {};
-      this.label.setLocalPosition([(nodeStyle.width || 100) / 2, (nodeStyle.height || 40) / 2]);
+      // For Rect and other shapes: center is at (x + width/2, y + height/2)
+      const x = Number(shapeStyle.x ?? 0);
+      const y = Number(shapeStyle.y ?? 0);
+      const w = Number(shapeStyle.width ?? 100);
+      const h = Number(shapeStyle.height ?? 40);
+      label.setLocalPosition([x + w / 2, y + h / 2]);
     } catch (error) {
       // Final fallback
       const style = this.data?.style || {};
-      this.label.setLocalPosition([(style.width || 100) / 2, (style.height || 40) / 2]);
+      label.setLocalPosition([(style.width || 100) / 2, (style.height || 40) / 2]);
     }
   }
 
@@ -148,7 +154,70 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
     return this.data;
   }
 
-  createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: BaseNodeStyleProps; [key: string]: unknown } = {}): Port {
+  /**
+   * Override appendChild to automatically track ItemToolElements (Port, etc.)
+   * This enables DOM-style API: new Port(); node.appendChild(port);
+   */
+  override appendChild<T extends DisplayObject>(child: T): this {
+    // Auto-track if child is a Port (ItemToolElement)
+    // Use multiple checks for robustness: className property, constructor name, or instanceof
+    const isPort = (child as any).className === 'g-port' ||
+                    (child as any).constructor?.name === 'Port' ||
+                    (child as any).getId && (child as any).updatePosition; // Port-specific methods
+
+    if (child && isPort) {
+      const port = child as unknown as Port;
+
+      // Auto-add nodeId: prefix to Port ID if not already present
+      // This ensures consistency with addPort behavior
+      const portId = (port as any).data?.id;
+      if (portId && !portId.includes(':')) {
+        const fullId = `${this.getId()}:${portId}`;
+        (port as any).data.id = fullId;
+        // Update the element's id attribute for DOM lookup
+        try {
+          (port as any).id = fullId;
+        } catch (e) {}
+      }
+
+      // Set owner reference
+      (port as any).owner = this;
+      (port as any)._setOwner?.(this);
+
+      // Track in ItemElement's ports array
+      this._trackItem(port as any, 'port');
+
+      // Trigger position update
+      try {
+        (port as any).updatePosition?.();
+      } catch (e) {}
+    }
+
+    // Call parent implementation
+    return super.appendChild(child);
+  }
+
+  /**
+   * Override removeChild to untrack ItemToolElements
+   */
+  override removeChild<T extends DisplayObject>(child: T): this {
+    // Untrack before removing
+    if (child && (child as any).constructor?.name === 'Port') {
+      const port = child as unknown as Port;
+      this._untrackItem(port as any, 'port');
+    }
+
+    // Call parent implementation
+    return super.removeChild(child);
+  }
+
+  /**
+   * Add a port to this node (convenience method for creating and adding a port)
+   * Creates a Port and tracks it in ItemElement's ports array
+   *
+   * @deprecated Use DOM-style API instead: new Port({ id: 'p1', layout: 'left' }); node.appendChild(port);
+   */
+  addPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: BaseNodeStyleProps; [key: string]: unknown } = {}): Port {
     const portId = portConfig.id ? String(portConfig.id) : `port-${Math.random().toString(36).slice(2, 9)}`;
     const fullId = portId.includes(':') ? portId : `${this.getId()}:${portId}`;
 
@@ -159,15 +228,23 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
       layout: portConfig.layout,
     });
 
-    port.owner = this;
-    super.appendChild(port);
-    this.portsById.set(fullId, port);
+    // Use DOM-style appendChild which will auto-track
+    this.appendChild(port);
+
     return port;
+  }
+
+  /**
+   * @deprecated Use DOM-style API instead: new Port({ id: 'p1', layout: 'left' }); node.appendChild(port);
+   */
+  createPort(portConfig: { id?: string; layout?: PortLayoutOptions; style?: BaseNodeStyleProps; [key: string]: unknown } = {}): Port {
+    // Delegate to addPort for backward compatibility
+    return this.addPort(portConfig);
   }
 
   getPortById(id: string): Port | undefined {
     const fullId = id.includes(':') ? id : `${this.getId()}:${id}`;
-    return this.portsById.get(fullId);
+    return this.ports.find(p => (p as Port).getId() === fullId) as Port | undefined;
   }
 
   /**
@@ -178,10 +255,10 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
   }
 
   /**
-   * Get all ports of this node
+   * Get all ports of this node (overrides ItemElement's getPorts)
    */
-  getPorts(): Port[] {
-    return Array.from(this.portsById.values());
+  override getPorts(): Port[] {
+    return this.ports as Port[];
   }
 
   removePort(id: string): void {
@@ -190,7 +267,8 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
       try {
         super.removeChild(port);
       } catch (e) {}
-      this.portsById.delete(port.getId ? port.getId() : id);
+      // Untrack from ItemElement's ports array
+      this._untrackItem(port, 'port');
     }
   }
 
@@ -200,6 +278,13 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
 
     // Apply cursor style based on interaction capabilities
     this._applyCursorStyleTo(this.primaryShape);
+
+    // Position the label (created in constructor)
+    try {
+      this.positionLabel();
+    } catch (e) {
+      // ignore positioning errors
+    }
 
     // Register with Graph
     try {
@@ -223,14 +308,8 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
       // ignore
     }
 
-    // Unregister ports
-    try {
-      this.portsById.forEach((p) => {
-        if (p && typeof p.getId === 'function') {
-          // nothing special for now
-        }
-      });
-    } catch (e) {}
+    // Clear ports array
+    this.ports = [];
   }
 
   // Override setPosition to emit moved event
@@ -299,8 +378,10 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
       if (anchorFn) {
         return anchorFn(shape);
       }
-      // Fallback to center
-      return [Number(nodeStyle.width || 100) / 2, Number(nodeStyle.height || 40) / 2];
+      // Fallback to center - read from style first, then use defaults
+      const w = Number(nodeStyle.width ?? shape?.style?.width ?? 100);
+      const h = Number(nodeStyle.height ?? shape?.style?.height ?? 40);
+      return [w / 2, h / 2];
     } catch (e) {
       try {
         // fallback to center using getLocalBounds
@@ -308,10 +389,16 @@ export class Node<TShape extends DisplayObject = Rect> extends GEInteractiveElem
           const bounds: any = (this.primaryShape as any).getLocalBounds();
           const centerX = (bounds.min[0] + bounds.max[0]) / 2;
           const centerY = (bounds.min[1] + bounds.max[1]) / 2;
-          return [centerX, centerY];
+          // Only use bounds if they're valid (not all zeros)
+          if (centerX !== 0 || centerY !== 0) {
+            return [centerX, centerY];
+          }
         }
       } catch (er) {}
-      return [Number(nodeStyle.width || 100) / 2, Number(nodeStyle.height || 40) / 2];
+      // Final fallback - read from style directly
+      const w = Number(nodeStyle.width ?? shape?.style?.width ?? 100);
+      const h = Number(nodeStyle.height ?? shape?.style?.height ?? 40);
+      return [w / 2, h / 2];
     }
   }
 

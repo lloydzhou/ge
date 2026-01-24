@@ -1,7 +1,8 @@
-import { CustomElement, DisplayObject, Circle, Polygon } from '@antv/g-lite';
+import { Circle, Polygon, DisplayObject } from '@antv/g-lite';
 import type { Vec2 } from '../../types';
 import type { EdgeLayoutOptions } from '../../utils/edgeLayout';
 import { resolveCtor } from '../../utils/shapeResolver';
+import { ItemToolElement } from '../ItemToolElement';
 
 export type EdgeMarkerOptions = {
   enabled?: boolean;
@@ -20,60 +21,96 @@ export type EdgeAnchor = {
   normal: Vec2;
 };
 
-export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
+/**
+ * Edge Marker (arrow head) - extends ItemToolElement
+ *
+ * Represents an arrow marker at the start or end of an edge.
+ * Uses ItemToolElement's unified positioning system.
+ *
+ * Inheritance:
+ * CustomElement (@antv/g-lite)
+ *   ↑
+ * GEInteractiveElement
+ *   ↑
+ * ItemToolElement<TShape>
+ *   ↑
+ * EdgeMarker
+ */
+export class EdgeMarker extends ItemToolElement<DisplayObject> {
   private cfg: EdgeMarkerOptions;
-  private host: DisplayObject | null = null;
 
   constructor(cfg: EdgeMarkerOptions, host?: DisplayObject | null) {
-    super({ className: 'g-edge-marker' });
-    this.cfg = cfg || {};
-    this.host = host ?? null;
+    // Initialize with minimal config
+    super({
+      className: 'g-edge-marker',
+      id: `marker-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    } as any);
 
-    // create inner display object and append as child so EdgeMarker itself is a DisplayObject
-    const inner = this.createInnerNode();
-    if (inner) {
-      try { super.appendChild(inner as any); } catch (e) {}
+    this.cfg = cfg || {};
+
+    // Create primaryShape (the marker visual)
+    this.primaryShape = this.createPrimaryShape();
+
+    // Append primaryShape
+    if (this.primaryShape) {
+      super.appendChild(this.primaryShape);
+    }
+
+    // Set position if layout provided
+    if (cfg.layout) {
+      this.position.layout = cfg.layout;
+    }
+
+    // Store host reference for shape resolution
+    if (host) {
+      (this as any).host = host;
     }
   }
 
-  private createInnerNode(): DisplayObject | null {
-    if (!this.cfg || this.cfg.enabled === false) return null;
+  /**
+   * Create the marker shape (circle, triangle, or custom)
+   */
+  protected createPrimaryShape(): DisplayObject {
+    if (!this.cfg || this.cfg.enabled === false) {
+      // Return empty circle as placeholder
+      return new Circle({ style: { r: 0 } });
+    }
+
     const size = this.cfg.size ?? 6;
     const fill = this.cfg.fill ?? '#000';
     const stroke = this.cfg.stroke ?? '#000';
     const lineWidth = this.cfg.lineWidth ?? 1;
 
-    // 1) 优先尝试 shape（注册名或 ctor）
+    // 1) Try shape from registry (using host as context)
     const shapeName = this.cfg.shape;
-    const ctx = this.host || (this as any);
+    const host = (this as any).host || this;
     if (shapeName) {
       try {
-        const ctor = resolveCtor(ctx, shapeName as any);
+        const ctor = resolveCtor(host, shapeName as any);
         if (ctor) {
           try {
             return new ctor({ style: { r: size / 2, fill, stroke, lineWidth } });
           } catch (e) {
-            // ignore and fallback to builtin handling below
+            // ignore and fallback
           }
         }
       } catch (e) {
         // ignore and fallback
       }
 
-      // if shapeName is a built-in indicator string, handle it
+      // Handle built-in shape strings
       if (typeof shapeName === 'string') {
         if (shapeName === 'circle') {
           return new Circle({ style: { r: size / 2, fill, stroke, lineWidth } });
         }
         if (shapeName === 'triangle') {
-          const s = size;
           const k = 0.6;
           return new Polygon({
             style: {
               points: [
                 [0, 0],
-                [-s, s * k],
-                [-s, -s * k],
+                [-size, size * k],
+                [-size, -size * k],
               ],
               fill,
               stroke,
@@ -84,7 +121,7 @@ export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
       }
     }
 
-    // 默认回退为圆形
+    // Default: circle
     return new Circle({
       style: {
         r: size / 2,
@@ -95,38 +132,28 @@ export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
     });
   }
 
-  // 返回自身作为可被 appendChild 的对象
-  getDisplayObject(): DisplayObject | null {
-    return this;
-  }
+  /**
+   * Update marker position and rotation
+   * @param anchor - Position and tangent info
+   */
+  update(anchor: EdgeAnchor | null): void {
+    if (!anchor || !this.primaryShape) return;
 
-  private _getInner(): DisplayObject | null {
-    try {
-      // CustomElement children stored on internal property; use safe access
-      return (this as any).children && (this as any).children.length > 0 ? (this as any).children[0] as DisplayObject : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  update(anchor: EdgeAnchor | null) {
-    const inner = this._getInner();
-    if (!inner || !anchor) return;
     const { x, y, tangent } = anchor;
 
-    // position
+    // Update position
     try {
-      (this as any).setLocalPosition?.([x, y]);
+      this.setPosition(x, y);
     } catch (e) {}
 
-    // angle along tangent
+    // Update rotation based on tangent
     const angle = Math.atan2(tangent[1], tangent[0]);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
 
-    // if polygon, recompute rotated points (fallback if rotation transform unavailable)
+    // For polygon, recompute rotated points
     try {
-      if ((inner as any).nodeName === 'polygon') {
+      if (this.primaryShape.nodeName === 'polygon') {
         const size = this.cfg.size ?? 6;
         const k = 0.6;
         const p1: [number, number] = [0, 0];
@@ -134,25 +161,64 @@ export class EdgeMarker extends CustomElement<EdgeMarkerOptions> {
         const p3: [number, number] = [-(size), -size * k];
         const r2: [number, number] = [p2[0] * cos - p2[1] * sin, p2[0] * sin + p2[1] * cos];
         const r3: [number, number] = [p3[0] * cos - p3[1] * sin, p3[0] * sin + p3[1] * cos];
-        (inner as Polygon).attr({ points: [p1, r2, r3] });
+        (this.primaryShape as Polygon).attr({ points: [p1, r2, r3] });
       } else {
+        // For other shapes, use rotation transform
         const deg = (angle * 180) / Math.PI;
-        try { (this as any).setLocalEuler?.([0, 0, deg]); } catch (e) {}
+        try {
+          this.primaryShape.setLocalEuler?.([0, 0, deg]);
+        } catch (e) {
+          // Fallback: set rotation attribute
+          this.primaryShape.attr?.('rotation', deg);
+        }
       }
     } catch (e) {
-      // ignore
+      // ignore rotation errors
     }
   }
 
-  dispose() {
+  /**
+   * Calculate position based on edge path (override from ItemToolElement)
+   * Edge markers use 'layout' config to determine position along path
+   */
+  protected calculatePosition(): Vec2 {
+    if (!this._owner?.primaryShape) return [0, 0];
+
+    // Use layout config (e.g., { snap: 'start' } or { snap: 'end' })
+    const layout = this.position.layout;
+    if (typeof layout === 'object' && (layout as any).snap) {
+      const snap = (layout as any).snap;
+      if (snap === 'start') {
+        this.position.distance = 0;
+      } else if (snap === 'end') {
+        this.position.distance = 1;
+      }
+    }
+
+    // Call parent implementation to calculate position
+    return super.calculatePosition();
+  }
+
+  /**
+   * Update position when edge changes
+   */
+  updatePosition(): void {
+    const pos = this.calculatePosition();
+    this.setPosition(pos[0], pos[1]);
+  }
+
+  /**
+   * Dispose of marker
+   */
+  dispose(): void {
     try {
-      // remove any children
-      try {
-        const children = (this as any).children || [];
-        for (let i = children.length - 1; i >= 0; i--) {
-          try { super.removeChild(children[i]); } catch (e) {}
-        }
-      } catch (e) {}
+      // Remove primaryShape
+      if (this.primaryShape) {
+        try {
+          super.removeChild(this.primaryShape);
+        } catch (e) {}
+        this.primaryShape = null;
+      }
     } catch (e) {}
   }
 }
