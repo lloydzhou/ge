@@ -85,6 +85,7 @@ export class SmoothConnector implements EdgeConnector {
  * 圆角连接器
  */
 export class RoundedConnector implements EdgeConnector {
+  // @ts-expect-error - radius stored for future use when rounded corners are implemented
   private readonly radius: number;
 
   constructor(radius: number = 10) {
@@ -100,8 +101,6 @@ export class RoundedConnector implements EdgeConnector {
 
     // 在实际应用中，这里可以实现带圆角的路径算法
     // 目前我们只是简单地使用 Polyline，但会记录 radius 值以备将来使用
-    console.log(`RoundedConnector with radius: ${this.radius}`);
-
     return new Polyline({
       style: {
         points,

@@ -2,7 +2,7 @@ import { Circle, DisplayObject } from '@antv/g-lite';
 import { resolveCtor } from '../../utils/shapeResolver';
 import type { BasePortStyleProps, PortData, PortLayoutOptions } from '../../types';
 import type { Node } from '../node/Node';
-import { GEInteractiveElement } from '../GEInteractiveElement';
+import { ItemToolElement } from '../ItemToolElement';
 
 export interface PortStyleProps extends BasePortStyleProps {
   r?: number;
@@ -20,6 +20,11 @@ export interface PortConfig extends PortData {
 /**
  * Port class with generic primaryShape support
  *
+ * Extends ItemToolElement to provide unified positioning logic:
+ * - Owner reference (Node)
+ * - Position calculation based on owner's primaryShape
+ * - Layout-based positioning (top, bottom, left, right, angle, absolute)
+ *
  * @template TShape - The display object type used as primary shape (defaults to Circle)
  *
  * @example
@@ -32,7 +37,7 @@ export interface PortConfig extends PortData {
  * // Using registered shape name
  * const customPort = new Port({ id: 'p3', shape: 'my-port-shape', ... });
  */
-export class Port<TShape extends DisplayObject = Circle> extends GEInteractiveElement<TShape> {
+export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement<TShape> {
   private data: PortConfig;
   public owner: Node | null = null; // parent node reference
   private layout: PortLayoutOptions | undefined;

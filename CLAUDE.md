@@ -69,34 +69,61 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 位置: `/utils/edgeLayout.ts`
    - 接口: `computeAnchor(shape, angle): Vec2`
 
-#### Layer 3: GE 可视化元素 (继承 CustomElement)
+#### Layer 3: GE 可视化元素
+
+**完整的 5 层继承架构:**
+
+```
+CustomElement (@antv/g-lite)
+  ↑
+GEInteractiveElement<TShape> (交互基类)
+  ↑
+├── ItemElement<TShape> (集合管理基类)
+│   ↑
+│   ├── Node (节点组件)
+│   │   - 管理 ports[] 集合
+│   │   - 集成 GEInteractiveElement 的交互能力
+│   │
+│   └── Edge (边组件)
+│       - 管理 _labelTexts (多标签支持)
+│       - 集成 GEInteractiveElement 的交互能力
+│
+└── ItemToolElement<TShape> (单项定位基类)
+    ↑
+    ├── Port (端口组件)
+    │   - 基于 Node 的 primaryShape 计算位置
+    │   - 集成 GEInteractiveElement 的交互能力
+    │
+    └── EdgeMarker (箭头标记)
+        - 基于 Edge 的 primaryShape 计算位置
+        - 不需要交互能力
+```
 
 1. **Graph (图容器)**
    - 继承: `Canvas`
    - 职责:
      - 节点/边注册表
      - DOM 操作 (appendChild 等继承自 Canvas)
-     - 事件总线
      - 插件系统 (复用 Canvas 的 RenderingPlugin)
      - 撤销/重做系统
 
-2. **Node (节点)**
-   - 继承: `CustomElement`
+2. **Node (节点)** - extends ItemElement
+   - 继承链: `CustomElement → GEInteractiveElement → ItemElement → Node`
    - 组成:
      - `primaryShape` (用户可自定义的形状)
-     - `label` (文本)
-     - `ports[]` (端口容器)
+     - `labelShape` (文本标签，继承自父类)
+     - `ports[]` (ItemToolElement[] 集合)
    - 能力:
-     - 端口管理 (createPort, removePort, getPort)
-     - 锚点计算 (computeAnchor)
-     - 事件 (node:moved, node:connected, etc.)
+     - 端口管理 (createPort, getPorts, appendChild)
+     - 集合管理 (继承自 ItemElement)
+     - 交互能力 (继承自 GEInteractiveElement)
 
-3. **Edge (边)**
-   - 继承: `CustomElement`
+3. **Edge (边)** - extends ItemElement
+   - 继承链: `CustomElement → GEInteractiveElement → ItemElement → Edge`
    - 组成:
-     - `path` (由 Connector 生成的图形)
-     - `label` (边标签)
-     - `startMarker`, `endMarker` (箭头)
+     - `primaryShape` (由 Connector 生成的 Path)
+     - `_labelTexts` (多标签支持，内部 Map<string, Text>)
+     - `startMarker`, `endMarker` (EdgeMarker 实例)
    - 属性:
      - `source` (起点: Node | Port)
      - `target` (终点: Node | Port)
@@ -106,29 +133,77 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 能力:
      - 自动连接/断开
      - 路径自动更新
+     - 多标签支持 (x6 风格)
 
-4. **Port (端口)**
-   - 继承: `CustomElement`
+4. **Port (端口)** - extends ItemToolElement
+   - 继承链: `CustomElement → GEInteractiveElement → ItemToolElement → Port`
    - 作用: 节点上的连接桩
    - 位置: 通过 layout 计算 (top, bottom, left, right, angle, absolute)
+   - 能力:
+     - 基于 owner (Node) 的 primaryShape 计算位置
+     - 集成交互能力 (draggable/sourceConnectable/targetConnectable)
+
+5. **EdgeMarker (箭头)** - extends ItemToolElement
+   - 继承链: `CustomElement → GEInteractiveElement → ItemToolElement → EdgeMarker`
+   - 作用: 边的起点或终点箭头
+   - 位置: 基于 owner (Edge) 的 primaryShape 计算
+   - 支持: circle, triangle 等形状
 
 ### 关键设计决策
 
-1. **继承关系明确**
+1. **继承关系明确 (5 层架构)**
+
    ```
    Canvas (g-lite)
      ↓ extends
    Graph
-     ├── contains → Node[]
-     └── contains → Edge[]
 
    CustomElement (g-lite)
      ↓ extends
-   Node, Edge, Port
-     └── each has primaryShape (可视化部分)
+   GEInteractiveElement<TShape> (交互基类 - 拖拽/连线)
+     ↓ extends
+   ├── ItemElement<TShape> (集合管理: tools/ports/labels)
+   │   ↓ extends
+   │   ├── Node (节点)
+   │   └── Edge (边)
+   │
+   └── ItemToolElement<TShape> (单项定位)
+       ↓ extends
+       ├── Port (端口)
+       └── EdgeMarker (箭头)
    ```
 
-2. **原语分离**
+   **职责分离:**
+   - `GEInteractiveElement`: 统一交互逻辑 (draggable/sourceConnectable/targetConnectable)
+   - `ItemElement`: 集合管理 (tools/ports/labels 数组 + 布局算法)
+   - `ItemToolElement`: 单项定位 (基于 owner.primaryShape 计算位置)
+
+2. **ItemElement / ItemToolElement 双层架构**
+
+   **设计理念:** 将"集合管理"与"单项定位"分离
+
+   ```
+   ItemElement (集合管理者)
+   ├── tools: ItemToolElement[]   # 工具集合
+   ├── ports: ItemToolElement[]   # 端口集合
+   └── labels: ItemToolElement[]  # 标签集合
+
+   ItemToolElement (单项定位者)
+   ├── _owner: ItemElement        # 所属集合管理者
+   ├── position: { distance, offset, angle }  # 位置参数
+   └── calculatePosition()        # 基于 owner.primaryShape 计算位置
+   ```
+
+   **统一定位逻辑:**
+   - **Edge Labels**: 使用 `distance` (0-1) 沿路径定位
+   - **Node Ports**: 使用 `layout` (top/bottom/left/right/angle/absolute) 在形状上定位
+   - **EdgeMarkers**: 使用 `layout.snap` (start/end) 在路径端点定位
+
+   **DOM 兼容性:**
+   - ItemToolElement 实例仍存储在 `owner.children` 中 (符合 DOM)
+   - ItemElement 的数组仅用于追踪和布局计算
+
+3. **原语分离**
    - Router/Connector/Anchor 是纯 JS 对象，不继承 DisplayObject
    - 它们只负责计算和逻辑，不负责渲染
    - 渲染由 Node/Edge/Port 这些 CustomElement 负责
@@ -136,6 +211,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **插件系统**
    - 直接复用 Canvas 的 RenderingPlugin
    - 插件接收 RenderingPluginContext，包含 graph 引用
+
+4. **多标签支持 (Edge)**
+   - Edge 使用 `_labelTexts: Map<string, Text>` 内部管理多个标签
+   - 每个标签有独立的位置配置 (distance, offset, angle)
+   - 支持 zIndex 控制渲染顺序
+   - 向后兼容单标签模式 (label 属性)
 
 ### 扩展点设计
 
@@ -304,18 +385,20 @@ packages/ge-core/src/
 ├── core/                       # 核心图编辑组件
 │   ├── Graph.ts               # 主画布（继承 @antv/g-lite Canvas）
 │   ├── CommandHistory.ts      # 撤销/重做系统
+│   ├── GEInteractiveElement.ts # 交互基类（统一拖拽/连线交互）
+│   ├── ItemElement.ts         # 集合管理基类（tools/ports/labels）
+│   ├── ItemToolElement.ts     # 单项定位基类（统一定位逻辑）
 │   ├── commands/               # 命令模式实现
 │   │   └── GraphCommands.ts   # 节点/边操作命令
 │   ├── node/
-│   │   └── Node.ts            # 节点组件（继承 CustomElement）
+│   │   └── Node.ts            # 节点组件（继承 ItemElement）
 │   ├── edge/
-│   │   ├── Edge.ts            # 边组件（继承 CustomElement）
+│   │   ├── Edge.ts            # 边组件（继承 ItemElement）
 │   │   ├── EdgeRouter.ts      # 路径路由算法（非可视化原语）
 │   │   ├── EdgeConnector.ts   # 连接器（非可视化原语）
-│   │   ├── EdgeMarker.ts      # 箭头标记
-│   │   └── EdgeTool.ts        # 边交互工具
+│   │   └── EdgeMarker.ts      # 箭头标记（继承 ItemToolElement）
 │   └── port/
-│       └── Port.ts            # 连接端口（继承 CustomElement）
+│       └── Port.ts            # 连接端口（继承 ItemToolElement）
 ├── plugins/
 │   └── ConnectionPlugin.ts    # 交互式边创建
 ├── utils/
@@ -614,9 +697,17 @@ const node = graph.addNode({
 ```
 CustomElement (@antv/g-lite)
   ↑
-GEInteractiveElement (所有交互逻辑)
+GEInteractiveElement<TShape> (所有交互逻辑)
   ↑
-Node / Port / Edge (纯数据+渲染，无交互逻辑)
+├── ItemElement<TShape> (集合管理)
+│   ↑
+│   ├── Node (纯数据+渲染，交互由父类处理)
+│   └── Edge (纯数据+渲染，交互由父类处理)
+│
+└── ItemToolElement<TShape> (单项定位)
+    ↑
+    ├── Port (纯数据+渲染，交互由父类处理)
+    └── EdgeMarker (纯渲染，无交互)
 ```
 
 ### 关键规则

@@ -1,4 +1,4 @@
-import { CustomElement, CustomEvent, type DisplayObject } from '@antv/g-lite';
+import { CustomElement, CustomEvent, type DisplayObject, Text } from '@antv/g-lite';
 import type { GEDataTransfer } from '../types/events';
 import { GEInteractionType } from '../types/events';
 import type { DisplayObjectConfigWithShape } from '../types';
@@ -13,13 +13,21 @@ import type { DisplayObjectConfigWithShape } from '../types';
  * - Graph 查找和事件派发
  * - 连线处理（connect:over/drop）
  * - primaryShape 管理（泛型类型安全）
+ * - labelShape 管理（单一标签）
  *
  * 继承关系：
  * CustomElement (@antv/g-lite)
  *   ↑
  * GEInteractiveElement<TShape> (本类)
  *   ↑
- * Node<TShape>, Port<TShape>, Edge
+ * ItemElement<TShape> (集合管理)
+ *   ↑
+ * Node<TShape>, Edge<TShape>
+ *
+ *   ↑
+ * ItemToolElement<TShape> (单项定位)
+ *   ↑
+ * Port<TShape>
  *
  * @template TShape - 主要图形类型（Node/Port 使用，Edge 使用 DisplayObject）
  */
@@ -44,6 +52,84 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
    */
   getPrimaryShape(): TShape {
     return this.primaryShape!;
+  }
+
+  // ============================================
+  // Label 管理（基于方法，子类可扩展支持多标签）
+  // ============================================
+
+  /**
+   * 获取标签对象（单一标签）
+   * 默认从 children 中查找第一个 Text 对象
+   * 子类（如 Edge）可以 override 支持多标签
+   * @returns 标签对象，如果不存在则返回 null
+   */
+  getLabelShape(): Text | null {
+    return this.findLabelInChildren();
+  }
+
+  /**
+   * 获取指定 ID 的标签（支持多标签）
+   * 默认实现只支持单一标签，子类可以 override
+   * @param id - 标签 ID，不传则返回主标签
+   * @returns 标签对象，如果不存在则返回 null
+   */
+  getLabel(id?: string): Text | null {
+    if (!id) return this.getLabelShape();
+    return null;  // 子类可以 override 支持多标签
+  }
+
+  /**
+   * 设置或更新标签内容
+   * 如果标签不存在则创建，存在则更新
+   * @param config - 标签配置
+   */
+  setLabelShape(config: { text?: string; fill?: string; fontSize?: number; [key: string]: unknown }): void {
+    let label = this.getLabelShape();
+    if (!label) {
+      label = new Text({ style: config });
+      // Try to append the label
+      try {
+        this.appendChild(label);
+      } catch (e) {
+        // If appendChild fails (e.g., during construction), label is still usable
+        console.warn('Failed to append label:', e);
+      }
+    } else {
+      // Update existing
+      if (config.text !== undefined) {
+        label.style.text = config.text as string;
+      }
+      if (config.fill) {
+        label.style.fill = config.fill as string;
+      }
+      if (config.fontSize) {
+        label.style.fontSize = config.fontSize as number;
+      }
+      // Update other style properties
+      Object.keys(config).forEach(key => {
+        if (key !== 'text' && key !== 'fill' && key !== 'fontSize') {
+          (label?.style as any)[key] = config[key];
+        }
+      });
+    }
+  }
+
+  /**
+   * 从 children 中查找第一个 Text 对象
+   * @protected 子类可以复用此方法
+   */
+  protected findLabelInChildren(): Text | null {
+    try {
+      for (const child of this.children || []) {
+        if ((child as any).nodeName === 'text') {
+          return child as Text;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
   }
 
   // ============================================

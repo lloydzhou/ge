@@ -62,13 +62,45 @@ export type PortLayoutAny =
 function getBounds(shape: DisplayObject): { min: [number, number]; max: [number, number] } {
   try {
     const aabb = shape.getLocalBounds();
-    const min = aabb.getMin();
-    const max = aabb.getMax();
+    const min = aabb.getMin() as number[];
+    const max = aabb.getMax() as number[];
     // Extract x,y from 3D bounds (ignoring z)
-    return {
-      min: [min[0], min[1]],
-      max: [max[0], max[1]]
+    const bounds: { min: [number, number]; max: [number, number] } = {
+      min: [min[0] || 0, min[1] || 0],
+      max: [max[0] || 0, max[1] || 0]
     };
+    // Check if bounds are valid (not all zeros)
+    if (bounds.min[0] !== 0 || bounds.min[1] !== 0 || bounds.max[0] !== 0 || bounds.max[1] !== 0) {
+      return bounds;
+    }
+    // Bounds are zero, fall through to style-based calculation
+  } catch {
+    // getLocalBounds failed, fall through to style-based calculation
+  }
+
+  // Fallback: calculate bounds from style properties
+  try {
+    const style = (shape as any).style || {};
+    const nodeName = shape.nodeName;
+
+    if (nodeName === 'rect') {
+      const x = Number(style.x ?? 0);
+      const y = Number(style.y ?? 0);
+      const w = Number(style.width ?? 100);
+      const h = Number(style.height ?? 40);
+      return { min: [x, y], max: [x + w, y + h] };
+    }
+
+    if (nodeName === 'circle' || nodeName === 'ellipse') {
+      const cx = Number(style.cx ?? 0);
+      const cy = Number(style.cy ?? 0);
+      const rx = nodeName === 'ellipse' ? Number(style.rx ?? 50) : Number(style.r ?? 25);
+      const ry = nodeName === 'ellipse' ? Number(style.ry ?? 25) : Number(style.r ?? 25);
+      return { min: [cx - rx, cy - ry], max: [cx + rx, cy + ry] };
+    }
+
+    // Default fallback
+    return { min: [0, 0], max: [Number(style.width ?? 100), Number(style.height ?? 40)] };
   } catch {
     return { min: [0, 0], max: [0, 0] };
   }

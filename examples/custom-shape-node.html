@@ -261,7 +261,73 @@
       });
       graph.appendChild(ellipseEdge);
 
-      console.log('Graph with custom shape nodes, ports and edges created');
+      // Example 1: Edge with multiple labels using labels array
+      const multiLabelEdge = new Edge({
+        id: 'multi-label-edge',
+        source: circleNode.getPort('bottom'),
+        target: polygonNode.getPort('poly-angle-90'),
+        style: {
+          stroke: '#666',
+          lineWidth: 2,
+          // 多标签模式：使用 labels 数组
+          labels: [
+            {
+              id: 'label-start',
+              text: 'Start',
+              position: { distance: 0.2 },
+              style: { fill: '#1890ff', fontSize: 12, zIndex: 2 }
+            },
+            {
+              id: 'label-middle',
+              text: 'Middle',
+              position: { distance: 0.5 },
+              style: { fill: '#52c41a', fontSize: 14, fontWeight: 'bold', zIndex: 3 }
+            },
+            {
+              id: 'label-end',
+              text: 'End',
+              position: { distance: 0.8 },
+              style: { fill: '#ff4d4f', fontSize: 12, zIndex: 2 }
+            }
+          ]
+        }
+      });
+      graph.appendChild(multiLabelEdge);
+
+      // Example 2: Edge with multiple labels including offsets and angles
+      const offsetLabelEdge = new Edge({
+        id: 'offset-label-edge',
+        source: customCircleNode.getPort('angle-135'),
+        target: ellipseNode.getPort('ellipse-abs'),
+        style: {
+          stroke: '#999',
+          lineWidth: 2,
+          // 多标签模式：展示不同的位置偏移和 zIndex
+          labels: [
+            {
+              id: 'offset-1',
+              text: 'Above',
+              position: { distance: 0.3, offset: { normal: -15 } },
+              style: { fill: '#000', fontSize: 11, zIndex: 2 }
+            },
+            {
+              id: 'offset-2',
+              text: 'Below',
+              position: { distance: 0.3, offset: { normal: 15 } },
+              style: { fill: '#000', fontSize: 11, zIndex: 2 }
+            },
+            {
+              id: 'offset-3',
+              text: 'Center',
+              position: { distance: 0.7 },
+              style: { fill: '#722ed1', fontSize: 13, zIndex: 4 }
+            }
+          ]
+        }
+      });
+      graph.appendChild(offsetLabelEdge);
+
+      console.log('Graph with custom shape nodes, ports, edges and multi-label edges created');
     });
    </script>
  </body>

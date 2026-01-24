@@ -1,7 +1,6 @@
 import type { CanvasConfig } from '@antv/g-lite';
 import type { EdgeRouter } from '../core/edge/EdgeRouter';
 import type { EdgeConnector } from '../core/edge/EdgeConnector';
-import type { EdgeToolOptions } from '../core/edge/EdgeTool';
 import type {
   GEInteractionType,
   GEDataTransfer,
@@ -12,9 +11,11 @@ import type { Graph } from '../core/Graph';
 import type { Node } from '../core/node/Node';
 import type { Edge } from '../core/edge/Edge';
 import type { Port } from '../core/port/Port';
+import type { ItemElement } from '../core/ItemElement';
+import type { ItemToolElement } from '../core/ItemToolElement';
 
 // Export types
-export type { Graph, Node, Edge, Port };
+export type { Graph, Node, Edge, Port, ItemElement, ItemToolElement, LabelConfig };
 
 // Note: GEInteractiveElement is not re-exported here because it causes issues with Jest's ts-jest.
 // Node/Port import it directly from '../core/GEInteractiveElement' instead.
@@ -85,10 +86,11 @@ export interface BaseEdgeStyleProps extends BaseStyleProps {
   labelFill?: string;
   labelFontSize?: number;
   labelOffset?: number;
+  labelZIndex?: number; // zIndex for single label (backward compatibility)
+  labels?: LabelConfig[]; // Multiple labels support
   router?: EdgeRouter;
   connector?: EdgeConnector;
   vertices?: [number, number][];
-  tools?: EdgeToolOptions[];
   startMarker?: EdgeMarkerConfig;
   endMarker?: EdgeMarkerConfig;
 }
@@ -107,6 +109,40 @@ export interface EdgeMarkerConfig {
   stroke?: string;
   lineWidth?: number;
   layout?: EdgeLayoutOptions;
+}
+
+/**
+ * Label configuration for Edge labels
+ */
+export interface LabelConfig {
+  /** Label ID (default 'default') */
+  id?: string;
+  /** Label text content */
+  text?: string;
+  /** Label position */
+  position?: {
+    /** t: 0-1 along edge */
+    distance?: number;
+    /** Offset from path */
+    offset?: {
+      /** Perpendicular offset */
+      normal?: number;
+      /** Parallel offset */
+      tangent?: number;
+    };
+    /** Rotation in degrees */
+    angle?: number;
+  };
+  /** Label style */
+  style?: {
+    fill?: string;
+    fontSize?: number;
+    background?: string;
+    padding?: number;
+    [key: string]: unknown;
+  };
+  /** Whether the label is editable */
+  editable?: boolean;
 }
 
 export interface EdgeLayoutOptions {
@@ -336,10 +372,9 @@ export type DisplayObjectConfigWithShape<T = unknown> = import('@antv/g-lite').D
 export type { RenderingPlugin, RenderingPluginContext } from '@antv/g-lite';
 
 // === GE Primitives (Non-visual graph editing objects) ===
-// Re-export EdgeRouter, EdgeConnector, and EdgeToolOptions for convenience
+// Re-export EdgeRouter, EdgeConnector for convenience
 export type { EdgeRouter, NormalRouter, OrthogonalRouter, ManhattanRouter } from '../core/edge/EdgeRouter';
 export type { EdgeConnector, NormalConnector, PolylineConnector, SmoothConnector } from '../core/edge/EdgeConnector';
-export type { EdgeToolOptions } from '../core/edge/EdgeTool';
 
 // Command interface for undo/redo
 export interface Command {

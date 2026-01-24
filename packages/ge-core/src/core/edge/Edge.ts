@@ -10,10 +10,9 @@ import type { EdgeRouter } from './EdgeRouter';
 import { NormalRouter } from './EdgeRouter';
 import type { EdgeConnector } from './EdgeConnector';
 import { NormalConnector } from './EdgeConnector';
-import { EdgeTool, type EdgeToolOptions } from './EdgeTool';
 import type { Node } from '../node/Node';
 import type { Port } from '../port/Port';
-import { GEInteractiveElement } from '../GEInteractiveElement';
+import { ItemElement } from '../ItemElement';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -26,7 +25,6 @@ export interface EdgeStyleProps extends BaseEdgeStyleProps {
   router?: EdgeRouter; // 路由器
   connector?: EdgeConnector; // 连接器
   vertices?: Vec2[]; // 中间点
-  tools?: EdgeToolOptions[]; // 边上工具
   startMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
   endMarker?: EdgeMarkerConfig & { typeName?: string }; // Backward compatibility
 }
@@ -40,8 +38,10 @@ export type EdgeEndpoint = string | Node | Port | null;
 /**
  * Edge class with generic path support
  *
- * Edge extends GEInteractiveElement like Node and Port, using path
- * as its primary shape.
+ * Extends ItemElement to provide collection management (tools/ports/labels)
+ * and GEInteractiveElement for interaction capabilities.
+ *
+ * Edge uses a path (Line, Polyline, Path, etc.) as its primary shape.
  *
  * @template TPath - The display object type used as path shape (defaults to Line)
  *
@@ -54,9 +54,12 @@ export type EdgeEndpoint = string | Node | Port | null;
  *   style: { connector: new SmoothConnector() }
  * });
  */
-export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveElement<TPath> {
-  private label: Text;
-  private data: EdgeConfig;
+export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath> {
+  private data!: EdgeConfig; // definite assignment assertion - set in constructor
+  // Edge manages multiple labels internally using Text objects (not ItemToolElement)
+  private _labelTexts: Map<string, Text> = new Map();
+  // Store position config for each label to update when edge moves
+  private labelPositions: Map<string, { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }> = new Map();
   private sourceNode: EdgeEndpoint = null;
   private targetNode: EdgeEndpoint = null;
   private _onSourceMoved: ((e: Event) => void) | null = null;
@@ -67,17 +70,20 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
   private startMarkerCfg: NonNullable<EdgeStyleProps['startMarker']> = {};
   private endMarkerCfg: NonNullable<EdgeStyleProps['endMarker']> = {};
   private labelOffset: number = 0;
-  // tools
-  private tools: EdgeTool[] = [];
   
   constructor(config: EdgeConfig) {
+    // Extract source and target before calling super (to avoid filtering by CustomElement)
+    const { source, target, ...restConfig } = config;
+
     super({
-      ...config,
+      ...restConfig,
       className: 'g-edge',
       id: config.id,
     });
-    this.data = config;
-    
+
+    // Restore source and target to data (they were excluded from super call)
+    this.data = { ...restConfig, source, target } as EdgeConfig;
+
     // Create default styles if not provided
     const style: EdgeStyleProps = {
       stroke: '#000',
@@ -136,35 +142,40 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
       layout: this.endMarkerCfg.layout,
       shape: this.endMarkerCfg.shape,
     }, this) : null;
-    
-    // Create the edge label
-    this.label = new Text({
-      style: {
-        text: style.label || '',
-        fill: style.labelFill || '#000',
-        fontSize: style.labelFontSize || 12,
-        textAlign: 'center',
-        textBaseline: 'middle'
-      }
-    });
-    
-    // Add children to the group: markers -> label
+
+    // Add markers to the group
     // primaryShape 将在 updatePositionFromNodes 中动态创建和添加
     if (this.startMarkerObj) super.appendChild(this.startMarkerObj);
     if (this.endMarkerObj) super.appendChild(this.endMarkerObj);
-    super.appendChild(this.label);
-    
-    // Create tools if provided
-    if (style.tools && Array.isArray(style.tools)) {
-      style.tools.forEach(toolConfig => {
+
+    // Edge uses multi-labels by default
+    // If style.labels is provided, use it; otherwise, create a default label from style.label
+    if (style.labels && Array.isArray(style.labels) && style.labels.length > 0) {
+      // Multi-label mode: create labels from style.labels array
+      style.labels.forEach((labelConfig, index) => {
         try {
-          const tool = new EdgeTool(toolConfig as EdgeToolOptions, this as any);
-          this.tools.push(tool);
-          super.appendChild(tool);
+          const labelId = labelConfig.id || `label-${index}`;
+          this.addLabel(labelId, labelConfig);
         } catch (e) {
-          console.warn('Failed to create edge tool:', e);
+          console.warn('Failed to create edge label:', e);
         }
       });
+    } else if (style.label || style.labelFill || style.labelFontSize) {
+      // Single-label mode (backward compatibility): create a default label
+      const defaultLabel = new Text({
+        style: {
+          text: style.label || '',
+          fill: style.labelFill || '#000',
+          fontSize: style.labelFontSize || 12,
+          textAlign: 'center',
+          textBaseline: 'middle',
+          // Set zIndex to ensure label renders above edges
+          zIndex: style.labelZIndex ?? 1
+        }
+      });
+
+      super.appendChild(defaultLabel);
+      this._labelTexts.set('default', defaultLabel);
     }
   }
   
@@ -244,20 +255,7 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
     this.updatePositionFromNodes();
   }
 
-  /**
-   * Position the label in the center of the primary shape
-   * Uses bounding box to calculate the center position
-   */
-  private positionLabel(): void {
-    try {
-      const pts = this.getEdgePoints();
-      const anchor = computeAnchor(pts, { t: 0.5, offset: { normal: this.labelOffset } });
-      this.label.setLocalPosition([anchor.x, anchor.y]);
-    } catch (error) {
-      // ignore label positioning errors
-    }
-  }
-  
+
   private updateMarkers() {
     // Delegating marker layout to EdgeMarker instances
     try {
@@ -479,7 +477,8 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
       // update markers after primary shape laid out
       this.updateMarkers();
 
-      this.positionLabel();
+      // Update all labels' positions
+      this.updateAllLabels();
     } catch (e) {
       console.warn('Failed to update edge position:', e);
     }
@@ -530,14 +529,132 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
     return this.data;
   }
 
-  connectedCallback() {
-    // Give a bit more time for nodes to be registered and ports to be created
-    setTimeout(() => this._tryConnect(), 10);
+  // ============================================
+  // Multiple Labels Support
+  // ============================================
+
+  /**
+   * Override getLabelShape to return primary label
+   * First tries labels Map, then falls back to parent's findLabelInChildren()
+   * @returns Primary label or null
+   */
+  override getLabelShape(): Text | null {
+    return this._labelTexts.get('default') ||
+           this._labelTexts.values().next().value ||
+           super.getLabelShape(); // fallback to parent's implementation
   }
 
-  private _tryConnect() {
+  /**
+   * Add a label to this edge
+   * @param id - Label ID
+   * @param config - Label configuration
+   * @returns The created Text label
+   */
+  addLabel(id: string, config: { text?: string; position?: { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }; style?: { fill?: string; fontSize?: number; background?: string; padding?: number; zIndex?: number; [key: string]: unknown } }): Text {
+    const label = new Text({
+      style: {
+        text: config.text || id,
+        fill: config.style?.fill || '#000',
+        fontSize: config.style?.fontSize || 12,
+        textAlign: 'center',
+        textBaseline: 'middle',
+        // Set zIndex to ensure labels render above edges (default: 1)
+        zIndex: config.style?.zIndex ?? 1,
+        ...config.style
+      }
+    });
+
+    this._labelTexts.set(id, label);
+    // Store position config for later updates
+    if (config.position) {
+      this.labelPositions.set(id, config.position);
+    }
+    super.appendChild(label);
+    // Note: Don't call updateLabelPosition here since edge may not be connected yet
+    // Labels will be positioned in updatePositionFromNodes after connection
+
+    return label;
+  }
+
+  /**
+   * Remove a label from this edge
+   * @param id - Label ID
+   */
+  removeLabel(id: string): void {
+    const label = this._labelTexts.get(id);
+    if (label) {
+      try {
+        super.removeChild(label);
+      } catch (e) {}
+      this._labelTexts.delete(id);
+      this.labelPositions.delete(id);
+    }
+  }
+
+  /**
+   * Update all labels' positions based on stored position configs
+   * Called when edge position changes
+   */
+  private updateAllLabels(): void {
+    this._labelTexts.forEach((_label, id) => {
+      const position = this.labelPositions.get(id);
+      this.updateLabelPosition(id, position);
+    });
+  }
+
+  /**
+   * Get a specific label by ID
+   * If id not provided, returns the default label
+   * @param id - Label ID (optional)
+   * @returns Label Text object or null
+   */
+  override getLabel(id?: string): Text | null {
+    if (!id) {
+      return this.getLabelShape();
+    }
+    return this._labelTexts.get(id) || null;
+  }
+
+  /**
+   * Update label position based on config
+   * @param id - Label ID
+   * @param position - Position configuration
+   */
+  private updateLabelPosition(id: string, position?: { distance?: number; offset?: { normal?: number; tangent?: number }; angle?: number }): void {
+    const label = this._labelTexts.get(id);
+    if (!label) return;
+
+    try {
+      const pts = this.getEdgePoints();
+      const t = position?.distance ?? 0.5;
+      const offset = position?.offset;
+
+      // Use the edgeLayout computeAnchor function
+      const anchor = computeAnchor(pts, { t, offset });
+      label.setLocalPosition([anchor.x, anchor.y]);
+
+      // Apply angle rotation if specified
+      if (position?.angle) {
+        // For now, angle is stored - actual rotation could be applied to the label element
+        // label.style.rotation = position.angle;
+      }
+    } catch (e) {
+      // ignore label positioning errors
+    }
+  }
+
+  connectedCallback() {
+    // Connect immediately after being added to DOM
+    this._tryConnect();
+  }
+
+  private _tryConnect(): boolean {
     try {
       const graph = this.ownerDocument as any;
+      if (!graph || typeof graph.getElementById !== 'function') {
+        return false;
+      }
+
       let sourceNode: EdgeEndpoint | null = null;
       let targetNode: EdgeEndpoint | null = null;
 
@@ -560,16 +677,12 @@ export class Edge<TPath extends DisplayObject = Line> extends GEInteractiveEleme
 
       if (sourceNode && targetNode) {
         this.connectTo(sourceNode, targetNode);
-      } else {
-        console.warn(`Edge ${this.data.id}: Could not resolve endpoints`, {
-          source: this.data.source,
-          target: this.data.target,
-          sourceNode,
-          targetNode,
-        });
+        return true;
       }
+      return false;
     } catch (e) {
       console.warn(`Failed to connect edge ${this.data.id}:`, e);
+      return false;
     }
   }
   
