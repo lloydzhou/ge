@@ -3,6 +3,7 @@ import { resolveCtor } from '../../utils/shapeResolver';
 import type { BasePortStyleProps, PortData, PortLayoutOptions } from '../../types';
 import type { Node } from '../node/Node';
 import { ItemToolElement } from '../ItemToolElement';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface PortStyleProps extends BasePortStyleProps {
   r?: number;
@@ -46,12 +47,17 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
   protected _defaultSourceConnectable = true;
 
   constructor(config: PortConfig) {
+    // Generate ID if not provided (unified method)
+    config.id = config.id || GEInteractiveElement.generateId('port');
+
     super({
       ...config,
       className: 'g-port',
       id: config.id,
     });
-    this.data = config;
+    // Store config without id (this.id is the single source of truth, from CustomElement)
+    const { id, ...configWithoutId } = config;
+    this.data = configWithoutId;
     this.layout = config.layout;
 
     // Create default styles if not provided
@@ -198,8 +204,8 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
   /**
    * Get the port ID
    */
-  getId(): string {
-    return this.data.id;
+  override getId(): string {
+    return (this as any).id || '';
   }
 
   /**

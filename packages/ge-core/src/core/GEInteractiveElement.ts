@@ -33,6 +33,30 @@ import type { DisplayObjectConfigWithShape } from '../types';
  */
 export abstract class GEInteractiveElement<TShape extends DisplayObject = DisplayObject> extends CustomElement<any> {
   // ============================================
+  // ID Management
+  // ============================================
+
+  /**
+   * Get the element's ID
+   * Uses the id property from CustomElement (set via super() call)
+   * @returns The element's ID string
+   */
+  getId(): string {
+    return (this as any).id || '';
+  }
+
+  /**
+   * Generate a unique ID
+   * Uses timestamp + random string to ensure uniqueness
+   * Subclasses can use this in their constructors before super()
+   * @param prefix - ID prefix (e.g., 'node', 'edge', 'port', 'label', 'marker')
+   * @returns Unique ID string
+   */
+  protected static generateId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  // ============================================
   // PrimaryShape 管理（泛型类型安全）
   // ============================================
 

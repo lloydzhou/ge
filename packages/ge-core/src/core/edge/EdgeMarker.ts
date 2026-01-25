@@ -3,6 +3,7 @@ import type { Vec2 } from '../../types';
 import type { EdgeLayoutOptions } from '../../utils/edgeLayout';
 import { resolveCtor } from '../../utils/shapeResolver';
 import { ItemToolElement } from '../ItemToolElement';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export type EdgeMarkerOptions = {
   enabled?: boolean;
@@ -40,13 +41,19 @@ export class EdgeMarker extends ItemToolElement<DisplayObject> {
   private cfg: EdgeMarkerOptions;
 
   constructor(cfg: EdgeMarkerOptions, host?: DisplayObject | null) {
+    // Generate unique ID using base class method
+    const id = GEInteractiveElement.generateId('marker');
+
     // Initialize with minimal config
     super({
       className: 'g-edge-marker',
-      id: `marker-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+      id
     } as any);
 
     this.cfg = cfg || {};
+
+    // Set EdgeMarker's z-index to be above edge path but below labels
+    (this as any).style.zIndex = 1;
 
     // Create primaryShape (the marker visual)
     this.primaryShape = this.createPrimaryShape();

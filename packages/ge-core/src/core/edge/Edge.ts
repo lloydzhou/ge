@@ -14,6 +14,7 @@ import type { Node } from '../node/Node';
 import type { Port } from '../port/Port';
 import { ItemElement } from '../ItemElement';
 import { ItemLabelElement } from '../ItemLabelElement';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface EdgeStyleProps extends BaseEdgeStyleProps {
   stroke?: string;
@@ -74,14 +75,18 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
     // Extract source and target before calling super (to avoid filtering by CustomElement)
     const { source, target, ...restConfig } = config;
 
+    // Generate ID if not provided (unified method)
+    restConfig.id = restConfig.id || GEInteractiveElement.generateId('edge');
+
     super({
       ...restConfig,
       className: 'g-edge',
-      id: config.id,
+      id: restConfig.id,
     });
 
-    // Restore source and target to data (they were excluded from super call)
-    this.data = { ...restConfig, source, target } as EdgeConfig;
+    // Store config without id (this.id is the single source of truth, from CustomElement)
+    const { id, ...configWithoutId } = restConfig;
+    this.data = { ...configWithoutId, source, target } as EdgeConfig;
 
     // Create default styles if not provided
     const style: EdgeStyleProps = {
@@ -443,6 +448,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
         stroke: this.data.style?.stroke || '#000',
         lineWidth: this.data.style?.lineWidth || 1,
         lineDash: this.data.style?.lineDash || [],
+        zIndex: 0, // Edge path should be below labels and markers
       };
 
       // 移除旧的 primaryShape
@@ -456,7 +462,15 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
 
       // 创建新的 primaryShape
       this.primaryShape = connector.connect(finalPoints, style) as TPath;
-      super.appendChild(this.primaryShape);
+
+      // Insert primaryShape as the first child to render it below markers and labels
+      // This ensures the edge path is always at the bottom of the rendering stack
+      const firstChild = this.children?.[0] || null;
+      if (firstChild) {
+        super.insertBefore(this.primaryShape, firstChild as DisplayObject);
+      } else {
+        super.appendChild(this.primaryShape);
+      }
 
       // update markers after primary shape laid out
       this.updateMarkers();
@@ -488,8 +502,8 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
   /**
    * Get the edge ID
    */
-  getId(): string {
-    return this.data.id;
+  override getId(): string {
+    return (this as any).id || '';
   }
   
   /**
@@ -648,7 +662,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
       targetNode = resolveEndpoint(this.data.target);
 
       console.log('[Edge._tryConnect] Resolved endpoints:', {
-        edge: this.data.id,
+        edge: this.getId(),
         sourceNode,
         targetNode
       });
@@ -659,7 +673,7 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
       }
       return false;
     } catch (e) {
-      console.warn(`Failed to connect edge ${this.data.id}:`, e);
+      console.warn(`Failed to connect edge ${this.getId()}:`, e);
       return false;
     }
   }

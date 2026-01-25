@@ -88,6 +88,9 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
   /** Original text before editing (for cancel) */
   private _originalText: string = '';
 
+  /** Original z-index before editing (for restore) */
+  private _originalZIndex: number | null = null;
+
   /**
    * Get attribute value (DOM-like API)
    * Supports: contenteditable
@@ -186,6 +189,10 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
 
     const currentText = (label as any).style?.text || '';
     this._originalText = currentText;
+
+    // Save current z-index and set a high z-index for editing
+    this._originalZIndex = (this as any).style?.zIndex ?? null;
+    (this as any).style.zIndex = 9999;
 
     // Get label bounds for positioning
     const bounds = label.getLocalBounds?.();
@@ -338,6 +345,15 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
       this._editingInput = null;
     }
     this._originalText = '';
+
+    // Restore original z-index
+    if (this._originalZIndex !== null) {
+      (this as any).style.zIndex = this._originalZIndex;
+    } else {
+      // If there was no original z-index, remove the one we set
+      delete (this as any).style?.zIndex;
+    }
+    this._originalZIndex = null;
   }
 
   // ============================================

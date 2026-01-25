@@ -5,6 +5,7 @@ import { Port } from '../port/Port';
 import { resolveAnchorFunction } from '../../utils/nodeAnchor';
 import { ItemElement } from '../ItemElement';
 import { ItemLabelElement } from '../ItemLabelElement';
+import { GEInteractiveElement } from '../GEInteractiveElement';
 
 export interface NodeStyleProps extends BaseNodeStyleProps {
   width?: number;
@@ -45,12 +46,17 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
   private _nodeLabel: ItemLabelElement | null = null; // Reference to the label (using ItemLabelElement)
 
   constructor(config: NodeConfig) {
+    // Generate ID if not provided (unified method)
+    config.id = config.id || GEInteractiveElement.generateId('node');
+
     super({
       ...config,
       className: 'g-node',
       id: config.id,
     });
-    this.data = config;
+    // Store config without id (this.id is the single source of truth, from CustomElement)
+    const { id, ...configWithoutId } = config;
+    this.data = configWithoutId as NodeConfig;
 
     // Set initial position
     if (config.x !== undefined && config.y !== undefined) {
@@ -59,8 +65,8 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
 
     // Create primaryShape using parent's abstract method
     this.primaryShape = this.createPrimaryShape({
-      ...(config as Record<string, unknown>),
-      id: `${config.id}-primary`,
+      ...(configWithoutId as Record<string, unknown>),
+      id: `${this.getId()}-primary`,
       shape: config.shape
     } as DisplayObjectConfigWithShape);
 
@@ -70,7 +76,7 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
     // Create label if configured (using ItemLabelElement)
     if (config?.style?.label || config?.style?.labelFill || config?.style?.labelFontSize) {
       const label = new ItemLabelElement({
-        text: config?.style?.label || config.id,
+        text: config?.style?.label || this.getId(),
         style: {
           fill: config?.style?.labelFill || '#000',
           fontSize: config?.style?.labelFontSize || 12
@@ -89,7 +95,7 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
    */
   protected createPrimaryShape(config: DisplayObjectConfigWithShape<any>): TShape {
     // Try resolving a registered ctor from config.shape if provided
-    const ptype = (config as any).shape || (this.data && this.data.shape);
+    const ptype = (config as any).shape;
     const ctor = resolveCtor(this, ptype as any);
     if (ctor) {
       try { return new ctor(config) as unknown as TShape; } catch (e) {}
@@ -110,8 +116,8 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
   /**
    * Get the node ID
    */
-  getId(): string {
-    return this.data.id;
+  override getId(): string {
+    return (this as any).id || '';
   }
 
   /**

@@ -208,11 +208,60 @@ GEInteractiveElement<TShape> (交互基类)
    - 它们只负责计算和逻辑，不负责渲染
    - 渲染由 Node/Edge/Port 这些 CustomElement 负责
 
-3. **插件系统**
+4. **统一 ID 管理架构**
+
+   **核心原则**: ID 的单一数据源 (Single Source of Truth)
+
+   ```
+   config.id (constructor parameter, temporary)
+     ↓ auto-generate if missing
+   super({ id: config.id })  →  sets this.id (CustomElement property)
+     ↓
+   this.getId()  →  returns this.id (the ONLY source of truth)
+   ```
+
+   **关键点:**
+   - `this.id` - 来自 CustomElement (@antv/g-lite)，通过 `super({ id: ... })` 设置
+   - `this.getId()` - 统一访问方法，返回 `this.id`
+   - `this.data` - **不包含** `id` 字段（避免重复）
+
+   **ID 生成:**
+   ```typescript
+   // 在构造函数中（调用 super() 之前）
+   config.id = config.id || GEInteractiveElement.generateId('node');
+
+   // 调用 super() 时传入 id
+   super({
+     ...config,
+     className: 'g-node',
+     id: config.id,  // 设置 this.id
+   });
+
+   // 存储 config 时移除 id（避免重复）
+   const { id, ...configWithoutId } = config;
+   this.data = configWithoutId;
+   ```
+
+   **ID 格式:**
+   - 格式: `{prefix}-{timestamp}-{random}`
+   - 示例: `node-1704067200000-abc123`, `edge-1704067200000-def456`
+   - 前缀: `node`, `edge`, `port`, `label`, `marker`
+
+   **使用方法:**
+   ```typescript
+   // ✅ 正确 - 使用 getId()
+   const id = node.getId();
+   console.log('Node ID:', id);
+
+   // ❌ 错误 - 不要访问 this.data.id
+   const id = node.data.id;  // data 中不再包含 id
+   ```
+
+5. **插件系统**
    - 直接复用 Canvas 的 RenderingPlugin
    - 插件接收 RenderingPluginContext，包含 graph 引用
 
-4. **多标签支持 (Edge)**
+6. **多标签支持 (Edge)**
    - Edge 使用 `_labelTexts: Map<string, Text>` 内部管理多个标签
    - 每个标签有独立的位置配置 (distance, offset, angle)
    - 支持 zIndex 控制渲染顺序
@@ -797,6 +846,168 @@ MovePlugin/ConnectionPlugin 监听到事件
 | 子类重复实现 `_handlePointerDown` | 删除，使用父类的实现 |
 | 子类直接调用 `setPosition()` 移动自己 | 由 MovePlugin 监听事件后调用 |
 | 使用 `_emitToGraph` 手动派发事件 | 使用 `dispatchEvent` 让事件自然冒泡 |
+
+---
+
+## 交互模式选择指南：Plugin vs 内聚模式
+
+### 背景与问题
+
+在 GE 的架构设计中，存在两种交互实现模式：
+- **分离模式（Plugin）**: 元素只负责渲染和派发事件，业务逻辑由 Plugin 处理
+- **内聚模式**: 元素内部包含完整的交互逻辑，自包含实现
+
+**ItemLabelElement 的编辑功能**采用了内聚模式（contenteditable 支持），这与 GE 主要的"元素只派发事件，Plugin 处理逻辑"原则有所差异。这个章节说明两种模式的适用场景。
+
+### 关键区分点：交互边界
+
+| 维度 | 分离模式（Plugin） | 内聚模式（ItemToolElement 内部） |
+|------|-------------------|-------------------------------|
+| **交互范围** | 跨元素（Node A → Node B） | 单元素内部 |
+| **状态管理** | 需要协调多个元素 | 只涉及自身状态 |
+| **可复用性** | 逻辑可在不同元素间共享 | 逻辑是元素特有的 |
+| **复杂度** | 复杂交互 | 简单交互 |
+
+### 使用场景判断
+
+#### ✅ 使用 Plugin（分离模式）的场景
+
+| 案例 | 原因 |
+|------|------|
+| **MovePlugin** | 拖拽涉及鼠标指针在 Canvas 上移动，需要持续跟踪全局鼠标位置 |
+| **ConnectionPlugin** | 连线涉及 Source → Target 跨元素，需要高亮多个候选目标 |
+| **SelectPlugin** | 框选涉及多个元素，需要批量管理选中状态 |
+| **Undo/Redo** | 全局操作历史管理 |
+
+**判断依据:**
+- 交互涉及多个元素的协调
+- 需要 Canvas 级别的状态管理
+- 逻辑需要在多个元素间共享
+
+#### ✅ 使用内聚模式的场景
+
+| 案例 | 原因 |
+|------|------|
+| **Label 编辑** | 双击 → 编辑 → 完成，完全在 Label 内部，交互边界清晰 |
+| **Port hover 高亮** | 鼠标移入 → 高亮 → 移出，单元素交互 |
+| **ButtonRemove** | 点击 → 删除 owner，操作明确简单 |
+| **NodeEditor** | 双击 → 编辑节点数据，单元素操作 |
+
+**判断依据:**
+- 交互完全在元素内部
+- 只涉及自身状态
+- 操作简单明确
+
+### 核心原则
+
+**无论使用哪种模式，都应该派发 DOM 事件通知外部**
+
+```typescript
+// ✅ 正确：内聚 + 事件派发
+class ItemLabelElement {
+  _commitEditing() {
+    // 1. 内部处理更新（内聚模式的优点）
+    this.primaryShape.style.text = newValue;
+
+    // 2. 派发事件通知外部（保持可扩展性）
+    this.dispatchEvent(new CustomEvent('editend', {
+      detail: { source: this, oldValue, newValue }
+    }));
+  }
+}
+
+// ✅ 外部可以选择监听
+label.addEventListener('editend', (e) => {
+  console.log('Label changed:', e.detail.newValue);
+  // 可以在这里做额外的处理，比如：
+  // - 验证输入
+  // - 同步到数据模型
+  // - 记录到历史
+});
+```
+
+### 交互边界决策图
+
+```
+┌─────────────────────────────────────────────┐
+│  Canvas/Graph 级别的交互 → Plugin          │
+│  - 鼠标在 Canvas 上的全局移动                │
+│  - 跨元素的协调（连线、框选）                 │
+│  - 需要全局状态（历史记录、选中管理）         │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│  Element 级别的交互 → 内聚模式              │
+│  - 双击编辑自身（Label、Node）              │
+│  - 单元素状态切换（hover、active）           │
+│  - 简单明确的操作（删除按钮）                │
+└─────────────────────────────────────────────┘
+```
+
+### 对 ItemToolElement 的影响
+
+**ItemToolElement 子类可以根据交互复杂度选择模式:**
+
+```typescript
+// 简单交互 → 内聚模式
+class ButtonRemove extends ItemToolElement {
+  connectedCallback() {
+    this.addEventListener('click', () => {
+      // 直接删除 owner，简单明确
+      this._owner?.remove();
+    });
+  }
+}
+
+// 复杂交互 → 可选的内聚模式
+class DraggableHandle extends ItemToolElement {
+  // 可以选择内部实现拖拽
+  // 或者只派发事件，让外部 Plugin 处理
+  connectedCallback() {
+    this.addEventListener('pointerdown', (e) => {
+      // 派发事件，让 Plugin 决定如何处理
+      this.dispatchEvent(new CustomEvent('handle:dragstart', {
+        detail: { handle: this, originalEvent: e }
+      }));
+    });
+  }
+}
+```
+
+### 设计权衡
+
+**内聚模式 ≠ 违反单一职责原则**
+
+- 内聚模式是"默认实现"，不是"强制行为"
+- 内聚模式 + 事件派发 = 既提供开箱即用，又保持可扩展性
+- 关键是"交互边界"：单元素内部 vs 跨元素协调
+
+**ItemLabelElement 的编辑功能为何适合内聚？**
+
+```typescript
+// ✅ 内聚模式的好处：
+const label = new ItemLabelElement({
+  text: 'Hello',
+  editable: true  // ← 一行配置，开箱即用
+});
+
+// ❌ 如果用 Plugin 模式：
+const label = new ItemLabelElement({ text: 'Hello' });
+graph.use(new EditPlugin());  // ← 需要额外配置
+// Plugin 还需要：
+// - 监听所有元素的 dblclick 事件
+// - 判断元素是否可编辑
+// - 创建输入框
+// - 处理 blur/keydown
+// 太复杂了！
+```
+
+### 关键洞察
+
+1. **交互边界决定模式**: 单元素内部 → 内聚；跨元素协调 → Plugin
+2. **复杂度决定模式**: 简单操作 → 内聚；复杂协调 → Plugin
+3. **内聚模式的价值**: 提供开箱即用的体验，降低使用成本
+4. **事件派发不妥协**: 无论哪种模式，都应该派发事件保持可扩展性
 
 ---
 

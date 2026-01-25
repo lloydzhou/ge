@@ -2,6 +2,7 @@ import { Text } from '@antv/g-lite';
 import { ItemToolElement } from './ItemToolElement';
 import type { ItemElement } from './ItemElement';
 import type { Vec2 } from '../types';
+import { GEInteractiveElement } from './GEInteractiveElement';
 
 /**
  * ItemLabelElement - 统一的 Label 元素
@@ -33,7 +34,9 @@ export class ItemLabelElement extends ItemToolElement<Text> {
     };
     editable?: boolean;
   }) {
-    super({ id: config.id || `label-${Math.random().toString(36).slice(2, 9)}` });
+    // Generate ID if not provided (unified method)
+    const id = config.id || GEInteractiveElement.generateId('label');
+    super({ id });
 
     // For Node labels, default layout is 'center'
     // For Edge labels, layout will be {name: 'path', args: {...}} based on position config
@@ -76,6 +79,10 @@ export class ItemLabelElement extends ItemToolElement<Text> {
     });
 
     this.appendChild(this.primaryShape);
+
+    // Set ItemLabelElement's own z-index to ensure labels render above edges
+    // Edge labels need higher z-index than the edge path
+    (this as any).style.zIndex = config.style?.zIndex ?? 10;
 
     // Enable editing if editable is true
     if (config.editable === true) {
