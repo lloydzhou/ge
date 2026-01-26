@@ -2,6 +2,78 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 CRITICAL: 绝对禁止覆盖的基础 DOM API 方法
+
+以下方法是 @antv/g-lite CustomElement 的核心 API，**绝对禁止覆盖**，因为：
+
+1. **破坏框架属性系统** - 覆盖这些方法会干扰 @antv/g-lite 的内部机制
+2. **难以调试的 bug** - 覆盖导致的行为异常非常难以发现和定位
+3. **违反设计原则** - 这些是浏览器标准 API，不应被自定义行为干扰
+
+### 禁止覆盖的方法列表
+
+| 方法 | 禁止原因 |
+|------|----------|
+| `getAttribute()` | 破坏属性读取，导致 `draggable`/`linkable` 等属性获取失败 |
+| `setAttribute()` | 破坏属性设置，导致交互属性无法正确设置 |
+| `removeAttribute()` | 破坏属性移除，导致清理逻辑失效 |
+| `hasAttribute()` | 破坏属性检查，影响条件判断 |
+| `querySelector()` | 破坏元素查找，影响 DOM 操作 |
+| `querySelectorAll()` | 破坏批量查找，影响 DOM 操作 |
+
+### 正确做法
+
+**❌ 错误示例** (曾经导致严重的 bug):
+```typescript
+// ItemToolElement.ts - 曾经的错误代码
+getAttribute(name: string): string | null {
+  if (name === 'contenteditable') {
+    return this._contenteditable ? 'true' : 'false';
+  }
+  return null;  // ← 问题！其他属性都返回 null！
+}
+
+setAttribute(name: string, value: any): void {
+  if (name === 'contenteditable') {
+    this._contenteditable = value;
+    this._setupEditing();
+  }
+  // 什么都不做 ← 问题！其他属性设置被忽略！
+}
+```
+
+**✅ 正确做法**:
+```typescript
+// 使用专门的 setter/getter 方法
+setEditable(editable: boolean): void {
+  this._contenteditable = editable;
+  if (editable) {
+    this._setupEditing();
+  } else {
+    this._cleanupEditing();
+  }
+}
+
+isEditable(): boolean {
+  return this._contenteditable === true;
+}
+```
+
+### 历史教训
+
+**案例**: ItemToolElement 覆盖了 `getAttribute/setAttribute` 方法来处理 `contenteditable` 属性。
+
+**后果**:
+- Port 元素的 `draggable`/`linkable` 属性设置全部失效
+- 日志显示 `attr: null style: null`
+- 花了一整天时间才定位到问题根源
+- Node 继承 ItemElement（没有覆盖）正常工作，Port 继承 ItemToolElement（有覆盖）失败
+
+**教训**:
+> 永远不要覆盖浏览器标准 DOM API 方法！永远使用专门的公共方法来实现自定义功能！
+
+---
+
 ## 项目概述
 
 **GE (Graph Editor)** 是基于 [AntV/G](https://g.antv.antgroup.com/) 的现代化图编辑器库。它采用类 DOM 的 API 设计，对于熟悉文档对象模型 (DOM) 的 Web 开发者来说非常直观。

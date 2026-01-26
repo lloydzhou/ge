@@ -87,6 +87,9 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
       label.setOwner(this); // Set owner for positioning
       super.appendChild(label);
     }
+
+    // Note: 交互属性由基类 GEInteractiveElement.connectedCallback 统一设置
+    // 不需要在构造函数中设置 style.draggable/linkable/droppable/linkto
   }
 
   /**
@@ -249,9 +252,10 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
   }
 
   connectedCallback() {
+    // 基类统一设置交互属性（draggable, linkable, droppable, linkto）
+    super.connectedCallback();
+
     console.log('[Node.connectedCallback] nodeId:', this.getId(), 'has label:', !!this._nodeLabel);
-    // Initialize interaction event listeners
-    this._initInteraction();
 
     // Apply cursor style based on interaction capabilities
     this._applyCursorStyleTo(this.primaryShape);
@@ -324,7 +328,6 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
     // After moving, dispatch event to self (DOM API style)
     try {
       const ev = new CustomEvent('node:moved', { detail: { id: this.getId(), x: xNum, y: yNum } });
-      console.log('[Node.setPosition] Dispatching node:moved', { id: this.getId(), x: xNum, y: yNum });
       this.dispatchEvent(ev);
     } catch (e) {
       console.error('[Node.setPosition] Failed to dispatch event:', e);

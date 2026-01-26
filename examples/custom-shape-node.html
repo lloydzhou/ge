@@ -33,7 +33,10 @@
 
     const renderer = new window.G.SVG.Renderer()
     renderer.registerPlugin(new Annotation.Plugin());
-    renderer.registerPlugin(new Dragndrop.Plugin());
+    // Register DragndropPlugin with isDocumentDraggable for canvas panning
+    renderer.registerPlugin(new Dragndrop.Plugin({
+      isDocumentDraggable: true,
+    }));
     
     // Create a graph
     const graph = new Graph({
@@ -42,6 +45,9 @@
       height: 600,
       renderer,
     });
+
+    (window.__g_instances__ = window.__g_instances__ || [])?.push(graph);
+
 
     // Prefer graph.document.customElements so resolveCtor prefers the graph-scoped registry
     graph.customElements.define('custom-circle', Circle);

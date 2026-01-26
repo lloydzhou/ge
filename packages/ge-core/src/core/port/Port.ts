@@ -44,21 +44,13 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
   private layout: PortLayoutOptions | undefined;
 
   // Port 默认支持连线（与 Node 不同，Node 默认不支持）
+  // Port 既可以作为连线源，也可以作为连线目标
   protected _defaultSourceConnectable = true;
+  protected _defaultTargetConnectable = true;
 
   constructor(config: PortConfig) {
     // Generate ID if not provided (unified method)
     config.id = config.id || GEInteractiveElement.generateId('port');
-
-    super({
-      ...config,
-      className: 'g-port',
-      id: config.id,
-    });
-    // Store config without id (this.id is the single source of truth, from CustomElement)
-    const { id, ...configWithoutId } = config;
-    this.data = configWithoutId;
-    this.layout = config.layout;
 
     // Create default styles if not provided
     const style: PortStyleProps = {
@@ -70,6 +62,16 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
       y: 0,
       ...config.style,
     };
+
+    super({
+      ...config,
+      className: 'g-port',
+      id: config.id,
+    });
+    // Store config without id (this.id is the single source of truth, from CustomElement)
+    const { id, ...configWithoutId } = config;
+    this.data = configWithoutId;
+    this.layout = config.layout;
 
     // Create primaryShape using parent's abstract method
     this.primaryShape = this.createPrimaryShape({
@@ -88,7 +90,9 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
     try {
       super.appendChild(this.primaryShape);
     } catch (e) {}
-  }
+
+    // Note: 交互属性由基类 GEInteractiveElement.connectedCallback 统一设置
+    // 不需要在构造函数中设置 style.draggable/linkable/droppable/linkto
 
   /**
    * Create the primary shape (implements abstract method from GEInteractiveElement)
@@ -242,8 +246,8 @@ export class Port<TShape extends DisplayObject = Circle> extends ItemToolElement
   }
 
   connectedCallback() {
-    // Initialize interaction event listeners (handled by parent)
-    super._initInteraction();
+    // 基类统一设置交互属性（draggable, linkable, droppable, linkto）
+    super.connectedCallback();
 
     // Apply cursor style (Port 默认支持连线，显示 crosshair)
     this._applyCursorStyleTo(this.primaryShape);

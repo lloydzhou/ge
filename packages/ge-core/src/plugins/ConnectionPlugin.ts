@@ -1,33 +1,56 @@
 /**
- * ConnectionPlugin - Event-driven connection creation
+ * ConnectionPlugin - Connection creation using g-plugin-dragndrop events
  *
- * Listens to connect:* events from Node/Port and handles edge creation.
- * This is an optional convenience layer - developers can also listen to
- * connect:* events directly for custom behavior.
+ * Listens to g-plugin-dragndrop's dragstart/drag/drop events and handles edge creation.
+ * Uses linkable/linkto style properties to determine connection behavior.
  */
 import type { RenderingPlugin, RenderingPluginContext } from '../types';
 import { Edge } from '../core/edge/Edge';
 import type { Port } from '../core/port/Port';
 import type { Node } from '../core/node/Node';
 import type { BaseEdgeStyleProps } from '../types';
+import { Plugin as DragndropPlugin } from '@antv/g-plugin-dragndrop';
 
 export interface ConnectionPluginOptions {
   defaultEdgeStyle?: Partial<BaseEdgeStyleProps>;
-  snapToPorts?: boolean; // snap to nearby ports during drag
-  snapDistance?: number; // distance in canvas coordinates for snapping
+  snapToPorts?: boolean;
+  snapDistance?: number;
+  validateConnection?: (source: Node | Port, target: Node | Port) => boolean;
+  /** g-plugin-dragndrop options (if not already registered by MovePlugin) */
+  dragndrop?: {
+    overlap?: 'pointer' | 'center';
+    dragstartDistanceThreshold?: number;
+    dragstartTimeThreshold?: number;
+  };
 }
 
 export class ConnectionPlugin implements RenderingPlugin {
   name = 'connection';
   private context: RenderingPluginContext | null = null;
   private opts: ConnectionPluginOptions;
-  private _onConnectStart: ((e: Event) => void) | null = null;
-  private _onConnectDrag: ((e: Event) => void) | null = null;
-  private _onConnectEnd: ((e: Event) => void) | null = null;
 
-  private startEndpoint: Node | Port | null = null;
+  private currentSource: Node | Port | null = null;
   private tempEdge: Edge | null = null;
   private virtualTarget: { getPosition(): [number, number]; setPosition(x: number, y: number): void } | null = null;
+  private edgeCreated = false; // Flag to track if edge was successfully created
+  private snappedTarget: Node | Port | null = null; // Last snapped target (when magnet effect triggered)
+
+  private _onDragStart: ((e: Event) => void) | null = null;
+  private _onDrag: ((e: Event) => void) | null = null;
+  private _onDrop: ((e: Event) => void) | null = null;
+  private _onDragEnd: ((e: Event) => void) | null = null;
+
+  // Saved userSelect value from container
+  private _savedUserSelect: string | null = null;
+
+  // Helper: Check if g-plugin-dragndrop is already registered
+  private _isDragndropRegistered(renderer: any): boolean {
+    if (!renderer?.plugins) return false;
+    return renderer.plugins.some((p: any) =>
+      p?.constructor?.name === 'DragndropPlugin' ||
+      p?.name === 'dragndrop'
+    );
+  }
 
   constructor(options: ConnectionPluginOptions = {}) {
     this.opts = {
@@ -37,11 +60,28 @@ export class ConnectionPlugin implements RenderingPlugin {
     };
   }
 
-  /**
-   * Apply plugin to graph (following Canvas's plugin.apply pattern)
-   */
   apply(context: RenderingPluginContext, _runtime?: any): void {
     this.context = context;
+    const graph = (context as any).graph;
+
+    // ========================================
+    // Ensure g-plugin-dragndrop is registered
+    // ========================================
+    try {
+      const renderer = (graph as any).renderer;
+      if (renderer && !this._isDragndropRegistered(renderer)) {
+        // Register with default options if MovePlugin hasn't registered it yet
+        const dragndropPlugin = new DragndropPlugin({
+          overlap: 'pointer',
+          dragstartDistanceThreshold: 5,
+          dragstartTimeThreshold: 200,
+          ...(this.opts.dragndrop || {}),
+        });
+        renderer.registerPlugin(dragndropPlugin);
+      }
+    } catch (e) {
+      console.warn('[ConnectionPlugin] Failed to ensure g-plugin-dragndrop:', e);
+    }
 
     // Virtual endpoint factory: lightweight object with position methods
     const createVirtualEndpoint = (x = 0, y = 0) => {
@@ -61,165 +101,234 @@ export class ConnectionPlugin implements RenderingPlugin {
       };
     };
 
-    const cleanupTemp = () => {
+    const cleanup = () => {
       try {
-        if (this.tempEdge && (this.context as any)?.graph) {
-          (this.context as any).graph.removeChild(this.tempEdge);
+        if (this.tempEdge && graph) {
+          graph.removeChild(this.tempEdge);
         }
       } catch (err) {}
       this.tempEdge = null;
       this.virtualTarget = null;
-      this.startEndpoint = null;
+      this.currentSource = null;
+      this.snappedTarget = null;
+      this.edgeCreated = false;
     };
 
-    // Handle connect:start - start creating a connection
-    this._onConnectStart = (e: any) => {
-      try {
-        // Clean up any existing temp edge first
-        cleanupTemp();
+    // Handle dragstart from linkable elements
+    this._onDragStart = (e: Event) => {
+      // Prevent text selection during connection operations
+      const container = graph.context?.config?.container;
+      const domContainer = typeof container === 'string'
+        ? document.querySelector(container) as HTMLElement
+        : container as HTMLElement;
+      if (domContainer && this._savedUserSelect === null) {
+        this._savedUserSelect = domContainer.style.userSelect;
+        domContainer.style.userSelect = 'none';
+      }
 
-        const { source } = e.detail;
-        if (!source) return;
+      // @ts-ignore
+      const path = (e as any).path || (e as any).composedPath?.() || [];
 
-        this.startEndpoint = source;
-        const startPos = this._computeEndpointPosition(source);
+      const target = e.target as Node | Port;
 
-        // Create virtual target at start position
+      // Check if there's a linkable element in the event path
+      // Only check style properties (setAttribute may not work in @antv/g-lite)
+      const linkableElement = path.find((p: any) => {
+        const linkable = p?.style?.linkable;
+        return linkable === true;
+      });
+
+      if (linkableElement) {
+        // Stop propagation - we're handling this for connection
+        e.stopPropagation();
+        cleanup();
+        this.currentSource = linkableElement;
+        const startPos = this._computeEndpointPosition(linkableElement);
         this.virtualTarget = createVirtualEndpoint(startPos[0], startPos[1]);
-
-        // Create temporary edge
         this.tempEdge = new Edge({
-          id: `tmp-edge-${Math.random().toString(36).slice(2, 9)}`,
-          source: this.startEndpoint,
+          id: `tmp-edge-${Date.now()}`,
+          source: this.currentSource,
           target: this.virtualTarget as any,
           style: {
             ...(this.opts.defaultEdgeStyle || {}),
             stroke: '#999',
-            lineDash: [5, 5],
+            strokeDasharray: [5, 5],
           } as any
         });
-
         try {
-          if ((this.context as any)?.graph) {
-            (this.context as any).graph.appendChild(this.tempEdge);
-            this.tempEdge.connectTo(this.startEndpoint, this.virtualTarget as any);
+          if (graph) {
+            graph.appendChild(this.tempEdge);
+            this.tempEdge.connectTo(this.currentSource as any, this.virtualTarget as any);
           }
         } catch (err) {
-          cleanupTemp();
+          cleanup();
         }
-      } catch (err) {
-        // ignore
+        return;
       }
+
+      // Don't cleanup, just return - let other plugins (like MovePlugin) handle it
     };
 
-    // Handle connect:drag - update temp edge endpoint position
-    this._onConnectDrag = (e: any) => {
-      try {
-        if (!this.tempEdge || !this.virtualTarget) return;
+    // Handle drag from linkable elements
+    this._onDrag = (e: Event) => {
+      if (!this.tempEdge || !this.virtualTarget || !this.currentSource) return;
 
-        const { x, y } = e.detail;
+      const { canvasX, canvasY } = e as any;
 
-        // Optionally snap to nearby ports
-        let targetX = x;
-        let targetY = y;
+      // Optionally snap to nearby ports
+      let targetX = canvasX;
+      let targetY = canvasY;
 
-        if (this.opts.snapToPorts) {
-          const snapResult = this._findSnapTarget(x, y);
-          if (snapResult) {
-            targetX = snapResult[0];
-            targetY = snapResult[1];
-          }
+      if (this.opts.snapToPorts) {
+        const snapResult = this._findSnapTarget(canvasX, canvasY);
+        if (snapResult) {
+          targetX = snapResult[0];
+          targetY = snapResult[1];
+          // Record the actual snapped target (not just position)
+          this.snappedTarget = this._findTargetAt(targetX, targetY);
+        } else {
+          this.snappedTarget = null;
         }
-
-        this.virtualTarget.setPosition(targetX, targetY);
-        this.tempEdge.updatePositionFromNodes();
-      } catch (err) {
-        // ignore
       }
+
+      this.virtualTarget.setPosition(targetX, targetY);
+      this.tempEdge.updatePositionFromNodes();
+
+      // Also stop propagation in drag phase to prevent Node movement
+      e.stopPropagation();
     };
 
-    // Handle connect:end - finish connection
-    this._onConnectEnd = (e: any) => {
+    // Handle drop on linkto elements
+    this._onDrop = (e: Event) => {
+      if (!this.currentSource) {
+        cleanup();
+        return;
+      }
+
+      // Use snapped target if available (magnet effect was triggered)
+      // Otherwise, try to find target at drop position
+      let target = this.snappedTarget;
+
+      if (!target) {
+        const { canvasX, canvasY } = e as any;
+        if (typeof canvasX === 'number' && typeof canvasY === 'number') {
+          target = this._findTargetAt(canvasX, canvasY);
+        }
+      }
+
+      if (!target) {
+        cleanup();
+        return;
+      }
+
+      // Don't allow self-connection
+      if (target === this.currentSource) {
+        cleanup();
+        return;
+      }
+
+      // Create the actual edge
+      const edge = new Edge({
+        id: `edge-${Date.now()}`,
+        source: this.currentSource,
+        target: target,
+        style: {
+          ...(this.opts.defaultEdgeStyle || {}),
+        }
+      });
+
       try {
-        if (!this.startEndpoint) {
-          cleanupTemp();
-          return;
+        if (graph) {
+          graph.appendChild(edge);
+          edge.connectTo(this.currentSource as any, target as any);
+          this.edgeCreated = true;
         }
+      } catch (err) {
+        console.error('[ConnectionPlugin] Error creating edge:', err);
+      }
 
-        let target = e.detail.target;
+      cleanup();
+    };
 
-        // If target not provided in event, try to find one at current position
-        if (!target) {
-          const x = e.detail.x;
-          const y = e.detail.y;
-          if (typeof x === 'number' && typeof y === 'number') {
-            target = this._findTargetAt(x, y);
-          }
-        }
+    // Handle dragend - create edge if we have a snapped target
+    // This handles the case where drop event doesn't fire (mouse released on canvas, not on target)
+    this._onDragEnd = (e: Event) => {
+      // Restore userSelect on container
+      const container = graph.context?.config?.container;
+      const domContainer = typeof container === 'string'
+        ? document.querySelector(container) as HTMLElement
+        : container as HTMLElement;
+      if (domContainer && this._savedUserSelect !== null) {
+        domContainer.style.userSelect = this._savedUserSelect;
+        this._savedUserSelect = null;
+      }
 
-        // If still no target, just cleanup
-        if (!target) {
-          cleanupTemp();
-          return;
-        }
+      // If drop handler already created the edge, just cleanup
+      if (this.edgeCreated) {
+        cleanup();
+        return;
+      }
+
+      // If we have a snapped target (magnet effect), create the edge here
+      // This handles the case where mouse is released on canvas (not on target element)
+      if (this.snappedTarget && this.currentSource) {
+        const target = this.snappedTarget;
 
         // Don't allow self-connection
-        if (target === this.startEndpoint) {
-          cleanupTemp();
-          return;
-        }
-
-        // Check if target accepts connection
-        const canConnect = this._canConnectTo(this.startEndpoint, target);
-        if (!canConnect) {
-          cleanupTemp();
+        if (target === this.currentSource) {
+          cleanup();
           return;
         }
 
         // Create the actual edge
         const edge = new Edge({
-          id: `edge-${Math.random().toString(36).slice(2, 9)}`,
-          source: this.startEndpoint,
+          id: `edge-${Date.now()}`,
+          source: this.currentSource,
           target: target,
           style: {
             ...(this.opts.defaultEdgeStyle || {}),
           }
         });
 
-        if ((this.context as any)?.graph) {
-          try {
-            (this.context as any).graph.appendChild(edge);
-            edge.connectTo(this.startEndpoint as any, target as any);
-          } catch (err) {
-            // ignore
+        try {
+          if (graph) {
+            graph.appendChild(edge);
+            edge.connectTo(this.currentSource as any, target as any);
+            this.edgeCreated = true;
           }
+        } catch (err) {
+          console.error('[ConnectionPlugin] Error creating edge:', err);
         }
-      } catch (err) {
-        // ignore
-      } finally {
-        cleanupTemp();
+
+        cleanup();
+        return;
       }
+
+      cleanup();
     };
 
-    // Attach event listeners to graph
+    // Listen to g-plugin-dragndrop events on graph with capture=true
+    // Use event delegation - check target's style properties
+    // capture=true ensures we handle events in capture phase, before they bubble to parent elements
     try {
-      ((this.context as any).graph as any).addEventListener('connect:start', this._onConnectStart as EventListener);
-      ((this.context as any).graph as any).addEventListener('connect:drag', this._onConnectDrag as EventListener);
-      ((this.context as any).graph as any).addEventListener('connect:end', this._onConnectEnd as EventListener);
+      graph.addEventListener('dragstart', this._onDragStart as EventListener, { capture: true });
+      graph.addEventListener('drag', this._onDrag as EventListener, { capture: true });
+      graph.addEventListener('drop', this._onDrop as EventListener, { capture: true });
+      graph.addEventListener('dragend', this._onDragEnd as EventListener, { capture: true });
     } catch (e) {
       // ignore
     }
   }
 
-  /**
-   * Clean up plugin (following Canvas's plugin.destroy pattern)
-   */
   destroy(): void {
     try {
       if ((this.context as any)?.graph) {
-        ((this.context as any).graph as any).removeEventListener('connect:start', this._onConnectStart as EventListener);
-        ((this.context as any).graph as any).removeEventListener('connect:drag', this._onConnectDrag as EventListener);
-        ((this.context as any).graph as any).removeEventListener('connect:end', this._onConnectEnd as EventListener);
+        const graph = (this.context as any).graph;
+        // Must use same capture option as addEventListener
+        graph.removeEventListener('dragstart', this._onDragStart as EventListener, { capture: true });
+        graph.removeEventListener('drag', this._onDrag as EventListener, { capture: true });
+        graph.removeEventListener('drop', this._onDrop as EventListener, { capture: true });
+        graph.removeEventListener('dragend', this._onDragEnd as EventListener, { capture: true });
       }
     } catch (e) {
       // ignore
@@ -234,12 +343,15 @@ export class ConnectionPlugin implements RenderingPlugin {
 
     // Reset all properties
     this.context = null;
-    this.startEndpoint = null;
+    this.currentSource = null;
     this.tempEdge = null;
     this.virtualTarget = null;
-    this._onConnectStart = null;
-    this._onConnectDrag = null;
-    this._onConnectEnd = null;
+    this.snappedTarget = null;
+    this._onDragStart = null;
+    this._onDrag = null;
+    this._onDrop = null;
+    this._onDragEnd = null;
+    this.edgeCreated = false;
   }
 
   /**
@@ -254,22 +366,9 @@ export class ConnectionPlugin implements RenderingPlugin {
         return endpoint.getAbsolutePosition();
       }
 
-      // For Node, get position and add offset for center
+      // For other elements, get position directly
       if (typeof endpoint.getPosition === 'function') {
-        const [x, y] = endpoint.getPosition();
-        if (typeof endpoint.getPrimaryShape === 'function') {
-          const shape = endpoint.getPrimaryShape();
-          if (shape?.style) {
-            if (shape.nodeName === 'circle' || shape.nodeName === 'ellipse') {
-              return [x + (shape.style.cx || 0), y + (shape.style.cy || 0)];
-            } else if (shape.nodeName === 'rect') {
-              const w = shape.style.width || 0;
-              const h = shape.style.height || 0;
-              return [x + w / 2, y + h / 2];
-            }
-          }
-        }
-        return [x, y];
+        return endpoint.getPosition();
       }
     } catch (e) {}
     return [0, 0];
@@ -277,6 +376,7 @@ export class ConnectionPlugin implements RenderingPlugin {
 
   /**
    * Find nearby port/node for snapping
+   * Only considers elements with linkto=true (can accept connections)
    */
   private _findSnapTarget(x: number, y: number): [number, number] | null {
     try {
@@ -290,7 +390,10 @@ export class ConnectionPlugin implements RenderingPlugin {
       for (const node of nodes || []) {
         if (typeof node.getPorts === 'function') {
           for (const port of node.getPorts()) {
-            if (port === this.startEndpoint) continue;
+            if (port === this.currentSource) continue;
+
+            // Only snap to elements with linkto=true
+            if (!(port as any).style?.linkto) continue;
 
             const pos = typeof port.getAbsolutePosition === 'function'
               ? port.getAbsolutePosition()
@@ -309,6 +412,7 @@ export class ConnectionPlugin implements RenderingPlugin {
 
   /**
    * Find a valid connection target at the given position
+   * Only considers elements with linkto=true (can accept connections)
    */
   private _findTargetAt(x: number, y: number): Node | Port | null {
     try {
@@ -322,7 +426,10 @@ export class ConnectionPlugin implements RenderingPlugin {
       for (const node of nodes || []) {
         if (typeof node.getPorts === 'function') {
           for (const port of node.getPorts()) {
-            if (port === this.startEndpoint) continue;
+            if (port === this.currentSource) continue;
+
+            // Only target elements with linkto=true
+            if (!(port as any).style?.linkto) continue;
 
             const pos = typeof port.getAbsolutePosition === 'function'
               ? port.getAbsolutePosition()
@@ -331,7 +438,7 @@ export class ConnectionPlugin implements RenderingPlugin {
             const dist = Math.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2);
             if (dist <= snapDistance) {
               // Check if port accepts connection
-              if (this._canConnectTo(this.startEndpoint!, port)) {
+              if (this._canConnectTo(this.currentSource!, port)) {
                 return port;
               }
             }
@@ -341,13 +448,16 @@ export class ConnectionPlugin implements RenderingPlugin {
 
       // If no port found, check nodes (for node-to-node connections)
       for (const node of nodes || []) {
-        if (node === this.startEndpoint) continue;
+        if (node === this.currentSource) continue;
+
+        // Only target nodes with linkto=true
+        if (!(node as any).style?.linkto) continue;
 
         const pos = this._computeEndpointPosition(node);
         const dist = Math.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2);
         if (dist <= snapDistance) {
           // Check if node accepts connection
-          if (this._canConnectTo(this.startEndpoint!, node)) {
+          if (this._canConnectTo(this.currentSource!, node)) {
             return node;
           }
         }

@@ -11,9 +11,11 @@ export class Graph extends Canvas {
 
   constructor(config: GraphOptions) {
     super(config as any); // GraphOptions extends CanvasConfig but may have extra properties
+
     // Initialize anchor registry
     this.anchorRegistry = new AnchorRegistry();
-    // expose renderer if provided so plugins can access it
+
+    // Expose renderer if provided so plugins can access it
     try {
       if (config && config.renderer) {
         (this as any).renderer = config.renderer;
@@ -22,8 +24,29 @@ export class Graph extends Canvas {
       // ignore
     }
 
+    console.log('constructor', this);
+
     // Add graph reference to context so plugins can access it
     (this.context as any).graph = this;
+
+    // Configure document draggable for camera panning
+    // This enables g-plugin-dragndrop to handle canvas background dragging
+    if (config.draggable) {
+      try {
+        this.document.style.draggable = true;
+        // Set cursor on canvas DOM element
+        const canvas = config.container;
+        if (canvas && typeof canvas === 'string') {
+          const el = document.getElementById(canvas);
+          if (el) el.style.cursor = 'grab';
+        } else if (canvas instanceof HTMLElement) {
+          canvas.style.cursor = 'grab';
+        }
+        console.log('[Graph] Document draggable enabled, cursor set to grab');
+      } catch (e) {
+        console.warn('[Graph] Failed to set document draggable:', e);
+      }
+    }
   }
 
   // ============================================

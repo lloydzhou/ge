@@ -1,458 +1,33 @@
 # GE 事件系统文档
 
-GE (Graph Editor) 的事件系统设计模仿浏览器原生 Drag-and-Drop API，提供灵活、解耦的交互方式。
+GE (Graph Editor) 的事件系统基于 @antv/g 的官方 [g-plugin-dragndrop](https://g.antv.antgroup.com/en/plugins/dragndrop) 插件，使用标准 PointerEvents 和 DOM 风格的拖拽 API。
 
 ## 设计理念
 
-1. **事件发射器模式**：Node/Port 只负责派发事件，不修改自身状态
-2. **职责分离**：Graph 处理节点移动，ConnectionPlugin 处理连线创建
-3. **多级处理**：可在 Graph/Node/Port 级别监听事件
-4. **命名空间**：使用 `node:`、`connect:` 前缀避免与 g-lite 事件冲突
+1. **使用官方插件**：依赖 g-plugin-dragndrop 提供底层拖拽能力
+2. **配置驱动**：通过 `style.draggable`、`style.linkable`、`style.linkto` 配置交互行为
+3. **事件委托**：插件在 Graph 级别监听事件，统一处理交互逻辑
+4. **标准事件**：使用 `dragstart`、`drag`、`dragend`、`drop` 等标准事件名
 
 ## 事件类型概览
 
-| 事件名称 | 派发者 | 典型处理者 | 说明 |
+| 事件名称 | 来源 | 处理者 | 说明 |
 |---------|-------|-----------|------|
-| `node:dragstart` | Node | Graph | 开始拖拽节点 |
-| `node:drag` | Node | Graph | 节点拖拽中 |
-| `node:dragend` | Node | Graph | 节点拖拽结束 |
-| `connect:start` | Node/Port | ConnectionPlugin | 开始创建连线 |
-| `connect:drag` | Node/Port | ConnectionPlugin | 连线拖拽中 |
-| `connect:end` | Node/Port | ConnectionPlugin | 连线操作结束 |
+| `dragstart` | g-plugin-dragndrop | MovePlugin/ConnectionPlugin | 开始拖拽 |
+| `drag` | g-plugin-dragndrop | MovePlugin/ConnectionPlugin | 拖拽中 |
+| `dragend` | g-plugin-dragndrop | MovePlugin | 拖拽结束 |
+| `drop` | g-plugin-dragndrop | ConnectionPlugin | 放置到目标 |
+| `node:moved` | Node | 应用层 | 节点移动后（GE 特有事件） |
+| `node:added` | Graph | 应用层 | 节点添加后（GE 特有事件） |
 
-## 节点拖拽事件
+## 配置交互行为
 
-### node:dragstart
+### 节点拖拽 (draggable)
 
-当用户在可拖拽的节点上按下指针时触发。
-
-```typescript
-interface NodeDragStartEventDetail {
-  type: GEInteractionType.NODE_DRAG;
-  source: Node;
-  x: number;  // 画布坐标 X
-  y: number;  // 画布坐标 Y
-  dataTransfer: GEDataTransfer;
-}
-```
-
-**使用示例：**
+使用 `MovePlugin` 实现节点拖拽移动：
 
 ```typescript
-graph.addEventListener('node:dragstart', (e) => {
-  const { source, x, y } = e.detail;
-  console.log(`开始拖拽节点: ${source.getId()}`);
-});
-```
-
-### node:drag
-
-当用户拖拽节点移动指针时持续触发。
-
-```typescript
-interface NodeDragEventDetail {
-  type: GEInteractionType.NODE_DRAG;
-  source: Node;
-  x: number;
-  y: number;
-  dataTransfer: GEDataTransfer;
-  target?: Node | Port;  // 当前悬停的目标（预留）
-}
-```
-
-**使用示例：**
-
-```typescript
-graph.addEventListener('node:drag', (e) => {
-  const { source, x, y } = e.detail;
-  // Graph 会自动处理节点移动
-  // 这里可以添加额外的逻辑，如磁力吸附、边界检测等
-});
-```
-
-### node:dragend
-
-当用户释放指针结束拖拽时触发。
-
-```typescript
-interface NodeDragEndEventDetail {
-  type: GEInteractionType.NODE_DRAG;
-  source: Node;
-  dropped: boolean;  // 是否成功 drop
-  target?: Node | Port;  // 最终目标（预留）
-}
-```
-
-## 连线创建事件
-
-### connect:start
-
-当用户在可连线的元素上按下指针时触发。
-
-```typescript
-interface ConnectStartEventDetail {
-  source: Node | Port;  // 连线源
-  x: number;
-  y: number;
-  dataTransfer: GEDataTransfer;
-  preventDefault(): void;  // 阻止连线
-}
-```
-
-**使用示例：**
-
-```typescript
-graph.addEventListener('connect:start', (e) => {
-  const { source, x, y } = e.detail;
-  console.log(`开始从 ${source.getId()} 创建连线`);
-
-  // 可以阻止连线
-  if (someCondition) {
-    e.detail.preventDefault();
-  }
-});
-```
-
-### connect:drag
-
-当用户拖拽连线移动指针时持续触发。
-
-```typescript
-interface ConnectDragEventDetail {
-  source: Node | Port;
-  x: number;
-  y: number;
-  dataTransfer: GEDataTransfer;
-  target?: Node | Port;  // 当前悬停的目标
-}
-```
-
-**使用示例：**
-
-```typescript
-graph.addEventListener('connect:drag', (e) => {
-  const { source, x, y, target } = e.detail;
-
-  // ConnectionPlugin 会显示临时连线
-  // 这里可以添加磁力吸附、高亮目标等效果
-  if (target) {
-    target.style.stroke = '#ff0000';
-  }
-});
-```
-
-### connect:end
-
-当用户释放指针结束连线操作时触发。
-
-```typescript
-interface ConnectEndEventDetail {
-  source: Node | Port;
-  connected: boolean;  // 是否成功创建连线
-  target?: Node | Port;  // 连接目标
-  x?: number;  // 结束位置
-  y?: number;
-}
-```
-
-**使用示例：**
-
-```typescript
-graph.addEventListener('connect:end', (e) => {
-  const { source, connected, target } = e.detail;
-
-  if (connected && target) {
-    console.log(`成功连接: ${source.getId()} -> ${target.getId()}`);
-  } else {
-    console.log('连线取消');
-  }
-});
-```
-
-## GEDataTransfer
-
-类似浏览器的 `dataTransfer`，用于在拖拽过程中传递数据。
-
-```typescript
-interface GEDataTransfer {
-  // 设置数据
-  setData(type: string, data: unknown): void;
-
-  // 获取数据
-  getData(type: string): unknown;
-
-  // 检查数据类型
-  hasType(type: string): boolean;
-
-  // 清除所有数据
-  clearData(): void;
-
-  // 允许的效果
-  effectAllowed: 'move' | 'copy' | 'link' | 'none';
-
-  // 当前效果
-  dropEffect: 'move' | 'copy' | 'link' | 'none';
-}
-```
-
-**使用示例：**
-
-```typescript
-graph.addEventListener('connect:start', (e) => {
-  const { dataTransfer } = e.detail;
-
-  // 存储自定义数据
-  dataTransfer.setData('connectionType', 'data-flow');
-  dataTransfer.setData('sourceType', 'output');
-
-  // 在后续事件中获取
-  const connectionType = dataTransfer.getData('connectionType');
-});
-```
-
-## 配置节点交互行为
-
-### 拖拽配置
-
-```typescript
-const node = graph.addNode({
-  id: 'node1',
-  x: 100,
-  y: 100,
-
-  // 简单配置
-  draggable: true,
-
-  // 或详细配置
-  draggable: {
-    enabled: true,
-    onDragStart: (e) => {
-      console.log('开始拖拽');
-      return true;  // 返回 false 可阻止拖拽
-    },
-    onDrag: (e) => {
-      console.log('拖拽位置:', e.detail.x, e.detail.y);
-    },
-    onDrop: (e) => {
-      console.log('拖拽完成');
-    },
-  },
-});
-```
-
-### 连线配置
-
-```typescript
-const node = graph.addNode({
-  id: 'node1',
-
-  // 作为连线源
-  sourceConnectable: {
-    enabled: true,
-    onDragStart: (e) => {
-      // 可以阻止连线
-      if (someCondition) {
-        e.detail.preventDefault();
-        return false;
-      }
-      return true;
-    },
-    onDrag: (e) => {
-      // 更新 dataTransfer 数据
-      e.detail.dataTransfer.setData('sourceType', 'output');
-    },
-  },
-
-  // 作为连线目标
-  targetConnectable: {
-    enabled: true,
-    onDragOver: (e) => {
-      // 验证是否接受此连接
-      const { source } = e.detail;
-      return source.data?.type === 'output';  // 只接受 output
-    },
-    onDrop: (e) => {
-      // 处理连接
-      console.log('接受连接:', e.detail.source.getId());
-      return true;
-    },
-  },
-
-  // 通用连接验证
-  connectable: (source, target) => {
-    // 不允许自连接
-    if (source === target) return false;
-    // 只允许特定类型之间的连接
-    return source.data?.type !== target.data?.type;
-  },
-});
-```
-
-### 同时启用拖拽和连线
-
-当节点同时配置 `draggable` 和 `sourceConnectable` 时：
-
-```typescript
-const node = graph.addNode({
-  id: 'node1',
-  x: 100,
-  y: 100,
-  draggable: true,        // 可拖拽移动
-  sourceConnectable: true, // 可作为连线源
-  targetConnectable: true, // 可作为连线目标
-});
-```
-
-**设计理念：事件驱动，不做限制**
-
-Node 作为事件发射器，根据用户的实际交互行为派发对应的事件：
-- 从节点**中心区域**拖拽 → 移动节点 → 派发 `node:*` 事件
-- 从节点**边缘区域**拖拽 → 创建连线 → 派发 `connect:*` 事件
-
-开发者完全控制要监听哪些事件以及如何响应：
-
-```typescript
-// 监听节点移动事件
-graph.addEventListener('node:drag', (e) => {
-  const { source, x, y } = e.detail;
-  // Graph 会自动处理节点移动
-  // 这里可以添加额外逻辑，如磁力吸附、边界检测等
-});
-
-// 监听连线创建事件
-graph.addEventListener('connect:start', (e) => {
-  const { source, x, y } = e.detail;
-  console.log(`开始从 ${source.getId()} 创建连线`);
-});
-
-// 或者完全不监听某些事件，那它们就不会产生任何效果
-```
-
-**鼠标样式：**
-- 两者都启用：`cursor: 'grab'`
-- 只有 draggable：`cursor: 'move'`
-- 只有 sourceConnectable：`cursor: 'crosshair'`
-
-**事件触发顺序（从中心拖拽 - 移动节点）：**
-```
-pointerdown (节点中心)
-  ↓
-_determineDragType() → NODE_DRAG
-  ↓
-_startDrag(NODE_DRAG)
-  ↓
-dispatch('node:dragstart')  → Graph 准备移动
-  ↓
-pointermove
-  ↓
-dispatch('node:drag')       → Graph 更新节点位置
-  ↓
-pointerup
-  ↓
-dispatch('node:dragend')    → Graph 完成移动
-```
-
-**事件触发顺序（从边缘拖拽 - 创建连线）：**
-```
-pointerdown (节点边缘)
-  ↓
-_determineDragType() → CONNECTION
-  ↓
-_startDrag(CONNECTION)
-  ↓
-dispatch('connect:start')  → ConnectionPlugin 创建临时边
-  ↓
-pointermove
-  ↓
-dispatch('connect:drag')   → ConnectionPlugin 更新临时边
-  ↓
-pointerup
-  ↓
-dispatch('connect:end')    → ConnectionPlugin 创建实际边
-```
-
-## 端口交互配置
-
-端口只支持连线，不支持拖拽移动：
-
-```typescript
-const port = node.createPort({
-  id: 'output',
-  layout: 'right',
-
-  // 作为连线源
-  sourceConnectable: {
-    enabled: true,
-    onDragStart: (e) => console.log('开始从端口连线'),
-  },
-
-  // 作为连线目标
-  targetConnectable: {
-    enabled: true,
-    onDrop: (e) => console.log('连接到端口'),
-  },
-
-  // 端口不需要 draggable 配置
-});
-```
-
-## Graph 级别事件监听
-
-```typescript
-const graph = new Graph({ container: 'container' });
-
-// 监听所有节点拖拽事件
-graph.addEventListener('node:dragstart', (e) => {
-  console.log('节点拖拽开始:', e.detail.source.getId());
-});
-
-graph.addEventListener('node:drag', (e) => {
-  // Graph 会自动处理节点移动
-  // 这里可以添加额外逻辑
-});
-
-graph.addEventListener('node:dragend', (e) => {
-  console.log('节点拖拽结束:', e.detail.source.getId());
-});
-
-// 监听所有连线事件
-graph.addEventListener('connect:start', (e) => {
-  console.log('连线开始:', e.detail.source.getId());
-});
-
-graph.addEventListener('connect:drag', (e) => {
-  console.log('连线拖拽中:', e.detail.x, e.detail.y);
-});
-
-graph.addEventListener('connect:end', (e) => {
-  console.log('连线结束:', e.detail.connected);
-});
-```
-
-## 使用 ConnectionPlugin
-
-ConnectionPlugin 是可选的便利层，自动处理 `connect:*` 事件：
-
-```typescript
-const graph = new Graph({ container: 'container' });
-
-// 使用 ConnectionPlugin
-graph.use(new ConnectionPlugin({
-  defaultEdgeStyle: {
-    stroke: '#1890ff',
-    strokeWidth: 2,
-  },
-  snapToPorts: true,      // 启用端口吸附
-  snapDistance: 10,        // 吸附距离（像素）
-}));
-
-// 现在连线会自动创建，无需手动处理 connect:* 事件
-```
-
-## 完整示例
-
-```typescript
-import { Graph } from '@antv/ge-core';
+import { Graph, Node, MovePlugin } from '@antv/ge-core';
 
 const graph = new Graph({
   container: 'container',
@@ -460,69 +35,471 @@ const graph = new Graph({
   height: 600,
 });
 
-// 添加 ConnectionPlugin
-graph.use(new ConnectionPlugin({
-  defaultEdgeStyle: {
-    stroke: '#1890ff',
-    strokeWidth: 2,
-  },
+// 使用 MovePlugin（会自动注册 g-plugin-dragndrop）
+graph.use(new MovePlugin({
+  snapToGrid: false,     // 是否网格对齐
+  gridSize: 10,          // 网格大小
 }));
 
-// 创建可拖拽、可连线的节点
-const node1 = graph.addNode({
+// 创建可拖拽节点
+const node = new Node({
   id: 'node1',
   x: 100,
   y: 100,
-  style: { width: 100, height: 60, fill: '#f0f0f0' },
-  draggable: true,
-  sourceConnectable: true,
-  targetConnectable: true,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+    draggable: true,  // 启用拖拽
+  },
 });
 
-const node2 = graph.addNode({
-  id: 'node2',
-  x: 400,
+graph.appendChild(node);
+```
+
+### 节点连线 (linkable / linkto)
+
+使用 `ConnectionPlugin` 实现连线创建：
+
+```typescript
+import { Graph, Node, ConnectionPlugin } from '@antv/ge-core';
+
+const graph = new Graph({
+  container: 'container',
+  width: 800,
+  height: 600,
+});
+
+// 使用 ConnectionPlugin
+graph.use(new ConnectionPlugin({
+  defaultEdgeStyle: {
+    stroke: '#1890ff',
+    lineWidth: 2,
+  },
+}));
+
+// 创建可连线节点
+const node = new Node({
+  id: 'node1',
+  x: 100,
   y: 100,
-  style: { width: 100, height: 60, fill: '#f0f0f0' },
-  draggable: true,
-  sourceConnectable: true,
-  targetConnectable: true,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+    linkable: true,   // 可作为连线源
+    linkto: true,     // 可作为连线目标
+  },
 });
 
-// 监听连线成功事件
-graph.addEventListener('connect:end', (e) => {
-  if (e.detail.connected) {
-    console.log('连接成功:', e.detail.source.getId(), '->', e.detail.target?.getId());
-  }
+graph.appendChild(node);
+```
+
+### 端口连线
+
+```typescript
+const node = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+  },
 });
 
-// 监听节点移动事件
-graph.addEventListener('node:drag', (e) => {
-  // Graph 已自动处理，这里可以添加额外逻辑
-  const { source, x, y } = e.detail;
-  console.log(`节点 ${source.getId()} 移动到 (${x}, ${y})`);
+// 创建可连线端口
+node.createPort({
+  id: 'output',
+  layout: 'right',
+  style: {
+    linkable: true,   // 可作为连线源
+  },
+});
+
+node.createPort({
+  id: 'input',
+  layout: 'left',
+  style: {
+    linkto: true,     // 可作为连线目标
+  },
 });
 ```
 
-## 事件调试
+### 画布平移 (拖拽画布背景)
 
 ```typescript
-// 调试所有交互事件
-const eventTypes = [
-  'node:dragstart', 'node:drag', 'node:dragend',
-  'connect:start', 'connect:drag', 'connect:end',
-];
+import { Canvas, CanvasRenderer } from '@antv/g-lite';
+import { Plugin as DragndropPlugin } from '@antv/g-plugin-dragndrop';
 
-eventTypes.forEach((eventType) => {
-  graph.addEventListener(eventType, (e) => {
-    console.log(`[Event] ${eventType}:`, e.detail);
-  });
+const renderer = new CanvasRenderer();
+renderer.registerPlugin(new DragndropPlugin({
+  isDocumentDraggable: true,  // 启用画布拖拽
+}));
+
+const graph = new Graph({
+  container: 'container',
+  width: 800,
+  height: 600,
+  draggable: true,  // 设置画布可拖拽（显示 grab 光标）
+  renderer,
 });
+
+// MovePlugin 会自动处理画布拖拽的相机平移
+graph.use(new MovePlugin());
+```
+
+## MovePlugin 事件处理
+
+MovePlugin 监听 g-plugin-dragndrop 事件并处理节点移动：
+
+```typescript
+graph.use(new MovePlugin());
+
+// MovePlugin 内部实现（简化）
+class MovePlugin {
+  apply(context) {
+    const graph = context.graph;
+
+    // 注册 g-plugin-dragndrop（如果未注册）
+    const renderer = graph.renderer;
+    if (!this._isDragndropRegistered(renderer)) {
+      const dragndropPlugin = new DragndropPlugin({
+        isDocumentDraggable: graph.document?.style?.draggable,
+      });
+      renderer.registerPlugin(dragndropPlugin);
+    }
+
+    // 监听节点拖拽
+    this._onDrag = (e) => {
+      const target = e.target;
+      if (target?.style?.draggable) {
+        // 使用 requestAnimationFrame 实现平滑移动
+        const { canvasX, canvasY } = e;
+        target.setPosition(canvasX, canvasY);
+      }
+    };
+
+    graph.addEventListener('drag', this._onDrag);
+  }
+}
+```
+
+## ConnectionPlugin 事件处理
+
+ConnectionPlugin 监听 g-plugin-dragndrop 事件并处理连线创建：
+
+```typescript
+graph.use(new ConnectionPlugin({
+  defaultEdgeStyle: { stroke: '#1890ff', lineWidth: 2 },
+}));
+
+// ConnectionPlugin 内部实现（简化）
+class ConnectionPlugin {
+  apply(context) {
+    const graph = context.graph;
+
+    // 注册 g-plugin-dragndrop（如果未注册）
+    const renderer = graph.renderer;
+    if (!this._isDragndropRegistered(renderer)) {
+      renderer.registerPlugin(new DragndropPlugin());
+    }
+
+    // 监听连线开始
+    this._onDragStart = (e) => {
+      const target = e.target;
+      if (target?.style?.linkable) {
+        // 创建临时边
+        this._tempEdge = new Edge({
+          source: target,
+          target: { x: e.canvasX, y: e.canvasY },
+        });
+        graph.appendChild(this._tempEdge);
+      }
+    };
+
+    // 监听连线拖拽
+    this._onDrag = (e) => {
+      if (this._tempEdge) {
+        this._tempEdge.target = { x: e.canvasX, y: e.canvasY };
+      }
+    };
+
+    // 监听连线结束
+    this._onDrop = (e) => {
+      const target = e.target;
+      if (this._tempEdge && target?.style?.linkto) {
+        // 创建实际边
+        const edge = new Edge({
+          id: `edge-${Date.now()}`,
+          source: this._tempEdge.source,
+          target: target,
+        });
+        graph.appendChild(edge);
+      }
+      // 清理临时边
+      if (this._tempEdge) {
+        graph.removeChild(this._tempEdge);
+        this._tempEdge = null;
+      }
+    };
+
+    graph.addEventListener('dragstart', this._onDragStart);
+    graph.addEventListener('drag', this._onDrag);
+    graph.addEventListener('drop', this._onDrop);
+  }
+}
+```
+
+## GE 特有事件
+
+除了 g-plugin-dragndrop 的标准事件外，GE 还派发一些特有事件供应用层使用：
+
+### node:moved
+
+节点移动后派发（不是拖拽中，而是移动完成后）：
+
+```typescript
+graph.addEventListener('node:moved', (e) => {
+  const { id, x, y } = e.detail;
+  console.log(`节点 ${id} 移动到 (${x}, ${y})`);
+  // 可以在这里保存节点位置到后端
+});
+```
+
+### node:added
+
+节点添加到图后派发：
+
+```typescript
+graph.addEventListener('node:added', (e) => {
+  const { id, x, y } = e.detail;
+  console.log(`节点 ${id} 添加到 (${x}, ${y})`);
+});
+```
+
+## 配置优先级
+
+节点可以同时配置多种交互能力：
+
+```typescript
+const node = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: {
+    draggable: true,    // 可拖拽移动
+    linkable: true,     // 可作为连线源
+    linkto: true,       // 可作为连线目标
+  },
+});
+```
+
+**交互行为：**
+- 鼠标按下 → g-plugin-dragndrop 派发 `dragstart`
+- MovePlugin 检查 `style.draggable` → 如果 true，处理移动
+- ConnectionPlugin 检查 `style.linkable` → 如果 true，创建连线
+
+## 自定义事件处理
+
+您可以在应用层监听拖拽事件并添加自定义逻辑：
+
+```typescript
+// 监听所有拖拽事件
+graph.addEventListener('dragstart', (e) => {
+  const target = e.target;
+  console.log('开始拖拽:', target.getId());
+
+  // 可以在这里添加自定义逻辑
+  // 例如：高亮选中的节点
+  target.style.stroke = '#ff0000';
+});
+
+graph.addEventListener('drag', (e) => {
+  // 拖拽中
+  // 注意：此事件频繁触发，避免复杂计算
+  const { canvasX, canvasY } = e;
+});
+
+graph.addEventListener('dragend', (e) => {
+  const target = e.target;
+  console.log('拖拽结束:', target.getId());
+
+  // 恢复样式
+  target.style.stroke = '#000000';
+});
+
+graph.addEventListener('drop', (e) => {
+  const target = e.target;
+  console.log('放置到:', target.getId());
+});
+```
+
+## 光标样式
+
+GE 自动设置合适的光标样式：
+
+| 配置 | 光标样式 |
+|------|----------|
+| `draggable: true` | `grab` / `grabbing` |
+| `linkable: true` | `crosshair` |
+| `linkto: true` | 默认光标 |
+| 画布可拖拽 | `grab` / `grabbing` |
+
+您也可以在样式中自定义：
+
+```typescript
+const node = new Node({
+  id: 'node1',
+  style: {
+    draggable: true,
+    cursor: 'move',  // 自定义光标
+  },
+});
+```
+
+## 完整示例
+
+```typescript
+import { CanvasRenderer } from '@antv/g-lite';
+import { Plugin as DragndropPlugin } from '@antv/g-plugin-dragndrop';
+import { Graph, Node, Edge, MovePlugin, ConnectionPlugin } from '@antv/ge-core';
+
+// 1. 创建渲染器并注册 g-plugin-dragndrop
+const renderer = new CanvasRenderer();
+renderer.registerPlugin(new DragndropPlugin({
+  isDocumentDraggable: true,  // 启用画布拖拽
+}));
+
+// 2. 创建图
+const graph = new Graph({
+  container: 'container',
+  width: 800,
+  height: 600,
+  draggable: true,  // 设置画布可拖拽（显示 grab 光标）
+  renderer,
+});
+
+// 3. 使用插件
+graph.use(new MovePlugin({
+  snapToGrid: true,
+  gridSize: 10,
+}));
+graph.use(new ConnectionPlugin({
+  defaultEdgeStyle: {
+    stroke: '#1890ff',
+    lineWidth: 2,
+  },
+}));
+
+// 4. 创建节点
+const node1 = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+    draggable: true,  // 可拖拽
+    linkable: true,   // 可连线源
+    linkto: true,     // 可连线目标
+  },
+});
+
+const node2 = new Node({
+  id: 'node2',
+  x: 400,
+  y: 100,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+    draggable: true,
+    linkable: true,
+    linkto: true,
+  },
+});
+
+graph.appendChild(node1);
+graph.appendChild(node2);
+
+// 5. 监听 GE 特有事件
+graph.addEventListener('node:moved', (e) => {
+  console.log('节点移动:', e.detail);
+});
+
+graph.addEventListener('node:added', (e) => {
+  console.log('节点添加:', e.detail);
+});
+
+// 现在您可以：
+// - 拖拽节点移动位置
+// - 从一个节点拖拽到另一个节点创建连线
+// - 拖拽画布背景平移视图
 ```
 
 ## 注意事项
 
-1. **坐标系统**：事件中的 x、y 是画布坐标，不是屏幕坐标
-2. **事件阻止**：在事件处理器中调用 `preventDefault()` 可阻止操作
-3. **性能考虑**：`node:drag` 和 `connect:drag` 频繁触发，避免复杂计算
-4. **内存泄漏**：移除事件监听器时注意清理
+1. **依赖 g-plugin-dragndrop**：确保正确注册了 g-plugin-dragndrop 插件
+2. **MovePlugin 和 ConnectionPlugin 会自动注册**：如果未注册，它们会自动注册 g-plugin-dragndrop
+3. **事件目标**：`e.target` 是被拖拽的元素（Node 或 Port）
+4. **坐标系统**：`canvasX`、`canvasY` 是画布坐标，不是屏幕坐标
+5. **性能考虑**：`drag` 事件频繁触发，避免在处理器中进行复杂计算
+
+## 迁移指南
+
+如果您使用的是旧版 GE 自定义拖拽系统，迁移到新系统：
+
+### 旧配置（已弃用）
+```typescript
+// ❌ 旧方式
+const node = new Node({
+  draggable: true,
+  sourceConnectable: true,  // 已弃用
+  targetConnectable: true,  // 已弃用
+});
+```
+
+### 新配置
+```typescript
+// ✅ 新方式
+const node = new Node({
+  style: {
+    draggable: true,
+    linkable: true,   // 替代 sourceConnectable
+    linkto: true,     // 替代 targetConnectable
+  },
+});
+```
+
+### 旧事件（已弃用）
+```typescript
+// ❌ 旧事件
+graph.addEventListener('node:dragstart', ...);
+graph.addEventListener('node:drag', ...);
+graph.addEventListener('node:dragend', ...);
+graph.addEventListener('connect:start', ...);
+graph.addEventListener('connect:drag', ...);
+graph.addEventListener('connect:end', ...);
+```
+
+### 新事件
+```typescript
+// ✅ 新事件（g-plugin-dragndrop 标准事件）
+graph.addEventListener('dragstart', ...);
+graph.addEventListener('drag', ...);
+graph.addEventListener('dragend', ...);
+graph.addEventListener('drop', ...);
+
+// ✅ GE 特有事件（应用层使用）
+graph.addEventListener('node:moved', ...);
+graph.addEventListener('node:added', ...);
+```
+
+## 参考
+
+- [g-plugin-dragndrop 官方文档](https://g.antv.antgroup.com/en/plugins/dragndrop)
+- [MovePlugin 源码](../src/plugins/MovePlugin.ts)
+- [ConnectionPlugin 源码](../src/plugins/ConnectionPlugin.ts)

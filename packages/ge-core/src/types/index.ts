@@ -157,6 +157,8 @@ export interface EdgeLayoutOptions {
 // Graph configuration
 export interface GraphOptions extends CanvasConfig {
   renderer?: unknown;
+  /** Whether the canvas background is draggable (for camera panning) */
+  draggable?: boolean;
 }
 
 // ============================================================================

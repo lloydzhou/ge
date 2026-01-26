@@ -11,7 +11,7 @@ graph TB
     end
 
     subgraph "Layer 1.5: GE 中间层"
-        GEInteractive["GEInteractiveElement<br/>交互元素基类<br/>- 拖拽状态管理<br/>- 数据传输 (DataTransfer)<br/>- 通用拖拽事件处理<br/>- primaryShape/labelShape 管理"]
+        GEInteractive["GEInteractiveElement<br/>交互元素基类<br/>- primaryShape/labelShape 管理<br/>- ID 生成和管理<br/>- 双击支持<br/>- 光标样式"]
         ItemElement["ItemElement<br/>集合管理基类<br/>- tools[] 集合<br/>- ports[] 集合<br/>- labels[] 集合<br/>- distributeItems() 布局算法"]
         ItemToolElement["ItemToolElement<br/>单项定位基类<br/>- owner 引用<br/>- calculatePosition() 统一定位<br/>- distance/offset/angle 参数<br/>- getSiblings()/getIndex()"]
     end
@@ -29,6 +29,12 @@ graph TB
         Port["Port<br/>端口"]
     end
 
+    subgraph "Layer 4: 插件层"
+        DragndropPlugin["g-plugin-dragndrop<br/>官方拖拽插件"]
+        MovePlugin["MovePlugin<br/>节点移动"]
+        ConnectionPlugin["ConnectionPlugin<br/>连线创建"]
+    end
+
     Canvas -->|"继承"| Graph
     CustomElement -->|"继承"| GEInteractive
     GEInteractive -->|"继承"| ItemElement
@@ -37,6 +43,10 @@ graph TB
     ItemElement -->|"继承"| Edge
     ItemToolElement -->|"继承"| Port
     DisplayObject -->|"继承"| CustomElement
+
+    DragndropPlugin -.-"监听"
+    MovePlugin -.-"监听"
+    ConnectionPlugin -.-"监听"
 ```
 
 ## 类继承关系图
@@ -69,23 +79,15 @@ classDiagram
     class GEInteractiveElement {
         <<abstract>>
         #primaryShape: TShape
-        #_isDragging: boolean
-        #_dragType: GEInteractionType
-        #_dataTransfer: GEDataTransfer
-        #_pointerId: number
-        #_dragStartPos: [number, number]
+        +getId(): string
         +getPrimaryShape(): TShape
         +getLabelShape(): Text
-        +getLabel(id?): Text
         +setLabelShape(config): void
-        +findLabelInChildren(): Text
-        +_getEventPrefix(type): string
-        +_createDataTransfer(): GEDataTransfer
-        +_endDrag(): void
-        +_cancelDrag(): void
-        +_handleConnectOver(e): boolean
-        +_handleConnectDrop(e): boolean
-        +getData(): any
+        +_isDraggable(): boolean
+        +_isSourceConnectable(): boolean
+        +_isTargetConnectable(): boolean
+        +_applyCursorStyleTo(target)
+        +_setupDblClick(element)
     }
 
     class ItemElement {
@@ -140,7 +142,7 @@ classDiagram
         +appendChild(child): this
         +removeChild(child): this
         +getPrimaryShape()
-        +addPort(config): Port
+        +createPort(config): Port
         +getPort(id): Port
         +getPorts(): Port[]
         +computeAnchorForLayout()
@@ -198,6 +200,26 @@ classDiagram
         +getEdgeAnchor()
     }
 
+    %% 插件
+    class RenderingPlugin {
+        <<interface>>
+        +name: string
+        +apply(context, runtime): void
+        +destroy(): void
+    }
+
+    class MovePlugin {
+        +name: 'move'
+        +apply(context): void
+        +destroy(): void
+    }
+
+    class ConnectionPlugin {
+        +name: 'connection'
+        +apply(context): void
+        +destroy(): void
+    }
+
     %% 继承关系
     DisplayObject <|-- CustomElement
     CustomElement <|-- GEInteractiveElement
@@ -208,9 +230,13 @@ classDiagram
     ItemElement <|-- Edge
     ItemToolElement <|-- Port
 
+    %% 插件实现
+    RenderingPlugin <|.. MovePlugin
+    RenderingPlugin <|.. ConnectionPlugin
+
     %% 组合关系
     Graph *-- AnchorRegistry : contains
-    Graph *-- CommandHistory : contains
+    Graph "1" --> "0..*" RenderingPlugin : uses
     Node "1" *-- "1..*" Port : contains
     Edge "1" --> "1" EdgeRouter : uses
     Edge "1" --> "1" EdgeConnector : uses
@@ -309,53 +335,57 @@ graph LR
     E -->|"target"| P3
 ```
 
-## 事件驱动交互系统
+## 基于 g-plugin-dragndrop 的事件系统
 
-GE 采用事件驱动的交互设计，模仿浏览器原生 Drag-and-Drop API。系统分为两套独立的事件流：
+GE 使用 @antv/g 的官方 [g-plugin-dragndrop](https://g.antv.antgroup.com/en/plugins/dragndrop) 插件，该插件基于 PointerEvents 实现，提供标准 DOM 风格的拖拽事件。
 
 ```mermaid
 graph TB
     subgraph "交互事件源"
-        Node["Node<br/>节点"]
-        Port["Port<br/>端口"]
+        Node["Node<br/>节点<br/>style.draggable=true<br/>style.linkable=true<br/>style.linkto=true"]
+        Port["Port<br/>端口<br/>style.linkable=true<br/>style.linkto=true"]
+        Document["Graph.document<br/>画布背景<br/>style.draggable=true"]
     end
 
-    subgraph "事件派发"
-        E1["node:dragstart<br/>开始拖拽节点"]
-        E2["node:drag<br/>拖拽中"]
-        E3["node:dragend<br/>拖拽结束"]
-        E4["connect:start<br/>开始连线"]
-        E5["connect:drag<br/>连线拖拽中"]
-        E6["connect:end<br/>连线结束"]
+    subgraph "g-plugin-dragndrop"
+        Plugin["g-plugin-dragndrop<br/>监听 pointerdown<br/>派发 dragstart/drag/dragend/drop"]
     end
 
-    subgraph "事件处理器"
-        Graph1["Graph<br/>处理节点移动"]
-        Plugin["ConnectionPlugin<br/>处理连线创建"]
-        Custom["用户自定义<br/>监听器"]
+    subgraph "标准事件"
+        E1["dragstart<br/>开始拖拽"]
+        E2["drag<br/>拖拽中"]
+        E3["dragend<br/>拖拽结束"]
+        E4["drop<br/>放置"]
     end
 
-    Node -->|"派发"| E1
-    Node -->|"派发"| E2
-    Node -->|"派发"| E3
-    Node -->|"派发"| E4
-    Node -->|"派发"| E5
-    Node -->|"派发"| E6
+    subgraph "插件处理"
+        MovePlugin["MovePlugin<br/>处理节点移动<br/>处理画布平移"]
+        ConnectionPlugin["ConnectionPlugin<br/>处理连线创建"]
+    end
 
-    Port -->|"派发"| E4
-    Port -->|"派发"| E5
-    Port -->|"派发"| E6
+    subgraph "GE 特有事件"
+        E5["node:moved<br/>节点移动后"]
+        E6["node:added<br/>节点添加后"]
+    end
 
-    E1 --> Graph1
-    E2 --> Graph1
-    E3 --> Graph1
+    Node -->|"pointerdown"| Plugin
+    Port -->|"pointerdown"| Plugin
+    Document -->|"pointerdown"| Plugin
 
-    E4 --> Plugin
-    E5 --> Plugin
-    E6 --> Plugin
+    Plugin -->|"派发"| E1
+    Plugin -->|"派发"| E2
+    Plugin -->|"派发"| E3
+    Plugin -->|"派发"| E4
 
-    E1 -.->|"可选"| Custom
-    E4 -.->|"可选"| Custom
+    E1 -->|"监听"| MovePlugin
+    E1 -->|"监听"| ConnectionPlugin
+    E2 -->|"监听"| MovePlugin
+    E2 -->|"监听"| ConnectionPlugin
+    E3 -->|"监听"| MovePlugin
+    E4 -->|"监听"| ConnectionPlugin
+
+    MovePlugin -->|"处理完成派发"| E5
+    Graph -.->|"派发"| E6
 ```
 
 ### 节点拖拽流程
@@ -364,25 +394,27 @@ graph TB
 sequenceDiagram
     participant U as User
     participant N as Node
-    participant G as Graph
+    participant D as g-plugin-dragndrop
+    participant M as MovePlugin
 
-    U->>N: pointerdown (draggable=true)
-    N->>N: _startDrag(NODE_DRAG)
-    N->>N: dispatchEvent('node:dragstart')
-    N->>G: event bubbles up
-    G->>G: _handleNodeDragStart()
+    U->>N: pointerdown
+    N->>D: 检测到拖拽开始
+    D->>D: 计算初始位置和偏移量
+    D->>M: dispatchEvent('dragstart', {target, canvasX, canvasY})
+    M->>M: 存储拖拽状态 (offset, startPos)
 
     U->>N: pointermove
-    N->>N: _handlePointerMove()
-    N->>N: dispatchEvent('node:drag')
-    N->>G: event bubbles up
-    G->>N: setPosition(deltaX, deltaY)
+    N->>D: 计算位置变化
+    D->>M: dispatchEvent('drag', {dx, dy, canvasX, canvasY})
+    M->>M: 计算新位置 (应用 offset)
+    M->>M: 使用 requestAnimationFrame 批量更新
+    M->>N: setPosition(newX, newY)
 
     U->>N: pointerup
-    N->>N: _handlePointerUp()
-    N->>N: dispatchEvent('node:dragend')
-    N->>G: event bubbles up
-    G->>G: _handleNodeDragEnd()
+    N->>D: 拖拽结束
+    D->>M: dispatchEvent('dragend')
+    M->>N: 应用最终位置
+    M->>M: 派发 'node:moved' 事件
 ```
 
 ### 连线创建流程
@@ -390,127 +422,123 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant S as Source (Node/Port)
-    participant P as ConnectionPlugin
-    participant T as Target (Node/Port)
+    participant S as Source Node/Port
+    participant D as g-plugin-dragndrop
+    participant C as ConnectionPlugin
+    participant T as Target Node/Port
 
-    U->>S: pointerdown (sourceConnectable=true)
-    S->>S: _startDrag(CONNECTION)
-    S->>S: dispatchEvent('connect:start')
-    S->>P: event bubbles up
-    P->>P: 创建临时边 (tempEdge)
+    U->>S: pointerdown (style.linkable=true)
+    S->>D: 检测到拖拽开始
+    D->>C: dispatchEvent('dragstart', {target, canvasX, canvasY})
+    C->>C: 检查 target.style.linkable
+    C->>C: 创建临时边 (tempEdge)
+    C->>C: 将 tempEdge 添加到 graph
 
     U->>S: pointermove
-    S->>S: _handlePointerMove()
-    S->>S: dispatchEvent('connect:drag', {x, y})
-    S->>P: event bubbles up
-    P->>P: 更新临时边位置
-    P->>P: 磁力吸附检测
+    S->>D: 计算位置变化
+    D->>C: dispatchEvent('drag', {canvasX, canvasY})
+    C->>C: 更新 tempEdge.target = {x, y}
 
-    U->>S: pointerup
-    S->>S: _handlePointerUp()
-    S->>S: dispatchEvent('connect:end', {x, y})
-    S->>P: event bubbles up
-    P->>P: 检测目标位置
-    P->>T: _canConnectTo(source, target)
-    T-->>P: 验证通过
-    P->>P: 创建实际边
-    P->>P: 移除临时边
+    U->>T: pointerup (在 target 上)
+    D->>C: dispatchEvent('drop', {target: T})
+    C->>C: 检查 target.style.linkto
+    C->>C: 验证连接有效性
+    C->>C: 创建实际边 Edge
+    C->>C: 移除临时边 tempEdge
 ```
 
-### 事件类型定义
+### 画布平移流程
 
-```typescript
-// 交互类型枚举
-enum GEInteractionType {
-  NODE_DRAG = 'ge:nodedrag',    // 节点拖拽
-  CONNECTION = 'ge:connection',  // 连线创建
-}
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant D as Graph.document
+    participant P as g-plugin-dragndrop
+    participant M as MovePlugin
+    participant C as Camera
 
-// 数据传输对象（类似浏览器 dataTransfer）
-interface GEDataTransfer {
-  setData(type: string, data: unknown): void;
-  getData(type: string): unknown;
-  hasType(type: string): boolean;
-  clearData(): void;
-  effectAllowed: 'move' | 'copy' | 'link' | 'none';
-  dropEffect: 'move' | 'copy' | 'link' | 'none';
-}
+    U->>D: pointerdown (画布背景)
+    D->>P: 检测到文档拖拽
+    P->>M: dispatchEvent('dragstart', {target: document})
+    M->>M: 设置光标为 'grabbing'
 
-// 事件详情
-interface NodeDragEventDetail {
-  type: GEInteractionType;
-  source: Node;
-  x: number;
-  y: number;
-  dataTransfer: GEDataTransfer;
-}
+    U->>D: pointermove
+    D->>P: 计算位移 (dx, dy)
+    P->>M: dispatchEvent('drag', {dx, dy, target: document})
+    M->>C: camera.x += dx
+    M->>C: camera.y += dy
 
-interface ConnectEventDetail {
-  source: Node | Port;
-  x: number;
-  y: number;
-  dataTransfer: GEDataTransfer;
-}
-```
-
-### 配置示例
-
-```typescript
-// 节点配置
-const node = graph.addNode({
-  id: 'node1',
-  x: 100,
-  y: 100,
-
-  // 拖拽配置
-  draggable: {
-    enabled: true,
-    onDragStart: (e) => console.log('开始拖拽'),
-    onDrag: (e) => console.log('拖拽中'),
-  },
-
-  // 作为连线源
-  sourceConnectable: {
-    enabled: true,
-    onDragStart: (e) => console.log('开始连线'),
-  },
-
-  // 作为连线目标
-  targetConnectable: {
-    enabled: true,
-    onDragOver: (e) => true,  // 接受悬停
-    onDrop: (e) => true,       // 接受放置
-  },
-
-  // 连接验证
-  connectable: (source, target) => {
-    // 自定义验证逻辑
-    return source.id !== target.id;
-  },
-});
+    U->>D: pointerup
+    D->>P: 拖拽结束
+    P->>M: dispatchEvent('dragend', {target: document})
+    M->>M: 恢复光标为 'grab'
 ```
 
 ## 插件系统架构
 
 ```mermaid
 graph TB
-    subgraph "Canvas RenderingPlugin"
+    subgraph "RenderingPlugin 接口"
         Plugin["RenderingPlugin<br/>{ name, apply, destroy }"]
     end
 
-    subgraph "插件示例"
-        CP["ConnectionPlugin<br/>处理连线交互"]
-        GP["GridPlugin<br/>绘制网格背景"]
-        ZP["ZoomPlugin<br/>缩放控制"]
+    subgraph "Level 1: Renderer 插件"
+        Dragndrop["g-plugin-dragndrop<br/>官方拖拽插件<br/>renderer.registerPlugin()"]
     end
 
-    Graph["Graph"] -->|"extends"| Canvas
-    Graph -->|"use()"| Plugin
-    Graph -->|"dispose()"| Plugin
-    Plugin -.->|"implemented by"| CP
-    Plugin -.->|"implemented by"| GP
-    Plugin -.->|"implemented by"| ZP
+    subgraph "Level 2: Graph 插件"
+        Move["MovePlugin<br/>处理节点移动<br/>处理画布平移"]
+        Conn["ConnectionPlugin<br/>处理连线创建"]
+        Other["其他插件..."]
+    end
+
+    subgraph "注册方式"
+        R1["renderer.registerPlugin()<br/>渲染级别插件"]
+        R2["graph.use()<br/>应用级别插件"]
+    end
+
+    Plugin -.-"实现于"
+    Dragndrop -.-"实现于"
+    Move -.-"实现于"
+    Conn -.-"实现于"
+    Other -.-"实现于"
+
+    Dragndrop -->|"注册于"| R1
+    Move -->|"注册于"| R2
+    Conn -->|"注册于"| R2
+    Other -->|"注册于"| R2
+```
+
+### 插件注册流程
+
+```mermaid
+sequenceDiagram
+    participant Dev as 开发者
+    participant R as Renderer
+    participant G as Graph
+    participant MP as MovePlugin
+    participant CP as ConnectionPlugin
+
+    Note over Dev,R: 方式 1: 手动注册 g-plugin-dragndrop
+    Dev->>R: renderer.registerPlugin(new DragndropPlugin())
+    Dev->>G: new Graph({ renderer })
+
+    Note over Dev,G: 方式 2: 让插件自动注册
+    Dev->>G: graph.use(new MovePlugin())
+    G->>MP: apply(context)
+    MP->>R: 检查是否已注册 g-plugin-dragndrop
+    alt 未注册
+        MP->>R: renderer.registerPlugin(new DragndropPlugin())
+    end
+    MP->>G: 监听 dragstart/drag/dragend 事件
+
+    Dev->>G: graph.use(new ConnectionPlugin())
+    G->>CP: apply(context)
+    CP->>R: 检查是否已注册 g-plugin-dragndrop
+    alt 未注册
+        CP->>R: renderer.registerPlugin(new DragndropPlugin())
+    end
+    CP->>G: 监听 dragstart/drag/drop 事件
 ```
 
 ## 核心概念对照表
@@ -519,39 +547,202 @@ graph TB
 |------|-------|--------|------|------|
 | Canvas | Layer 1 | ✅ | - | 画布容器，DOM 管理 |
 | CustomElement | Layer 1 | ✅ | DisplayObject | 自定义元素基类 |
-| **GEInteractiveElement** | **Layer 1.5** | **❌** | **CustomElement** | **交互元素基类：拖拽状态、DataTransfer、primaryShape/labelShape** |
+| **GEInteractiveElement** | **Layer 1.5** | **❌** | **CustomElement** | **交互元素基类：primaryShape/labelShape 管理、ID 生成** |
 | **ItemElement** | **Layer 1.5** | **❌** | **GEInteractiveElement** | **集合管理基类：tools/ports/labels 数组、distributeItems 布局** |
 | **ItemToolElement** | **Layer 1.5** | **❌** | **GEInteractiveElement** | **单项定位基类：owner 引用、calculatePosition 统一定位** |
-| Graph | Layer 3 | ✅ | Canvas | 图编辑容器，处理 node:drag* |
+| Graph | Layer 3 | ✅ | Canvas | 图编辑容器，插件管理 |
 | Node | Layer 3 | ✅ | ItemElement | 节点，管理 ports 集合 |
 | Edge | Layer 3 | ✅ | ItemElement | 边，管理 labels 集合 |
 | Port | Layer 3 | ✅ | ItemToolElement | 端口/连接桩，位置计算 |
 | Router | Layer 2 | ❌ | (纯类) | 计算路径点 |
 | Connector | Layer 2 | ❌ | (纯类) | 生成图形 |
 | Anchor | Layer 2 | ❌ | (策略函数) | 计算连接点 |
-| ConnectionPlugin | Layer 3 | ❌ | RenderingPlugin | 处理 connect:* 事件 |
+| g-plugin-dragndrop | Layer 4 | ❌ | RenderingPlugin | 官方拖拽插件，派发标准事件 |
+| MovePlugin | Layer 4 | ❌ | RenderingPlugin | 处理节点移动、画布平移 |
+| ConnectionPlugin | Layer 4 | ❌ | RenderingPlugin | 处理连线创建 |
 
-## 事件系统对照表（与浏览器 Drag-Drop API 对应）
+## 事件系统对照表
 
-| 浏览器 API | GE 事件 | 说明 |
-|-----------|---------|------|
-| `draggable="true"` | `draggable: true` | 标记元素可拖拽 |
-| `ondragstart` | `node:dragstart` / `connect:start` | 开始拖拽 |
-| `ondrag` | `node:drag` / `connect:drag` | 拖拽中 |
-| `ondragend` | `node:dragend` / `connect:end` | 拖拽结束 |
-| `ondragover` | `connect:over` | 悬停在目标上 |
-| `ondrop` | `connect:drop` | 放置到目标 |
-| `dataTransfer` | `GEDataTransfer` | 拖拽数据传输 |
+| g-plugin-dragndrop 事件 | GE 插件处理者 | 说明 |
+|----------------------|--------------|------|
+| `dragstart` | MovePlugin, ConnectionPlugin | 开始拖拽 |
+| `drag` | MovePlugin, ConnectionPlugin | 拖拽中 |
+| `dragend` | MovePlugin | 拖拽结束 |
+| `drop` | ConnectionPlugin | 放置到目标 |
+| `dragenter` | - | 进入放置区（预留） |
+| `dragleave` | - | 离开放置区（预留） |
+| `dragover` | - | 在放置区上方（预留） |
+
+| GE 特有事件 | 派发者 | 说明 |
+|-----------|-------|------|
+| `node:moved` | Node | 节点移动完成后 |
+| `node:added` | Graph | 节点添加到图后 |
+
+## 配置对照表
+
+| 配置属性 | 位置 | 作用 | 对应 g-plugin-dragndrop |
+|---------|------|------|---------------------|
+| `style.draggable` | Node/Port | 可拖拽移动 | draggable |
+| `style.linkable` | Node/Port | 可作为连线源 | draggable + ConnectionPlugin 处理 |
+| `style.linkto` | Node/Port | 可作为连线目标 | droppable + ConnectionPlugin 处理 |
+| `document.style.draggable` | Graph | 画布可拖拽（平移） | isDocumentDraggable |
+| `graph.draggable` | Graph 配置 | 设置画布光标为 grab | - |
 
 ## 设计模式应用
 
 | 模式 | 应用位置 | 说明 |
 |------|----------|------|
 | 继承模式 | Graph extends Canvas | 复用 Canvas 的渲染能力 |
-| **中间层模式** | **GEInteractiveElement** | **共享交互逻辑，减少代码重复** |
+| **中间层模式** | **GEInteractiveElement** | **共享 ID 管理、Shape 管理，减少代码重复** |
 | 组合模式 | Node 包含 primaryShape + label + ports | 灵活组合可视化元素 |
 | 策略模式 | Router/Connector/Anchor | 可替换的算法实现 |
 | 注册表模式 | AnchorRegistry, customElements | 可扩展的组件注册 |
 | 观察者模式 | DOM 事件系统 (addEventListener/dispatchEvent) | 事件通信，解耦组件 |
-| **事件发射器模式** | **Node/Port 派发事件** | **分离事件发射和处理** |
-| 插件模式 | RenderingPlugin | 功能扩展，ConnectionPlugin 处理连线 |
+| **插件模式** | **RenderingPlugin** | **功能扩展，g-plugin-dragndrop 提供底层拖拽** |
+| 事件委托 | Graph 级别监听事件 | 统一处理多个元素的交互 |
+| 防重复注册 | renderer.plugins 检查 | 避免重复注册 g-plugin-dragndrop |
+
+## 配置示例
+
+### 节点配置
+
+```typescript
+// 基础节点
+const node = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: {
+    width: 100,
+    height: 60,
+    fill: '#f0f0f0',
+    draggable: true,   // 可拖拽
+    linkable: true,    // 可作为连线源
+    linkto: true,      // 可作为连线目标
+  },
+});
+
+graph.appendChild(node);
+```
+
+### 插件配置
+
+```typescript
+// 注册 g-plugin-dragndrop（可选，插件会自动注册）
+const renderer = new CanvasRenderer();
+renderer.registerPlugin(new DragndropPlugin({
+  isDocumentDraggable: true,  // 启用画布拖拽
+}));
+
+// 创建图
+const graph = new Graph({
+  container: 'container',
+  width: 800,
+  height: 600,
+  draggable: true,  // 设置画布可拖拽（显示 grab 光标）
+  renderer,
+});
+
+// 使用插件
+graph.use(new MovePlugin({
+  snapToGrid: true,
+  gridSize: 10,
+}));
+
+graph.use(new ConnectionPlugin({
+  defaultEdgeStyle: {
+    stroke: '#1890ff',
+    lineWidth: 2,
+  },
+}));
+```
+
+### 端口配置
+
+```typescript
+const node = new Node({
+  id: 'node1',
+  x: 100,
+  y: 100,
+  style: { width: 100, height: 60, fill: '#f0f0f0' },
+});
+
+// 创建可连线端口
+node.createPort({
+  id: 'output',
+  layout: 'right',
+  style: {
+    linkable: true,   // 可作为连线源
+  },
+});
+
+node.createPort({
+  id: 'input',
+  layout: 'left',
+  style: {
+    linkto: true,     // 可作为连线目标
+  },
+});
+
+graph.appendChild(node);
+```
+
+## 与旧系统的迁移
+
+### 旧配置（已弃用）
+
+```typescript
+// ❌ 旧方式
+const node = new Node({
+  draggable: true,
+  sourceConnectable: true,  // 已弃用
+  targetConnectable: true,  // 已弃用
+});
+```
+
+### 新配置
+
+```typescript
+// ✅ 新方式
+const node = new Node({
+  style: {
+    draggable: true,
+    linkable: true,   // 替代 sourceConnectable
+    linkto: true,     // 替代 targetConnectable
+  },
+});
+```
+
+### 旧事件（已弃用）
+
+```typescript
+// ❌ 旧事件
+graph.addEventListener('node:dragstart', ...);
+graph.addEventListener('node:drag', ...);
+graph.addEventListener('node:dragend', ...);
+graph.addEventListener('connect:start', ...);
+graph.addEventListener('connect:drag', ...);
+graph.addEventListener('connect:end', ...);
+```
+
+### 新事件
+
+```typescript
+// ✅ 新事件（g-plugin-dragndrop 标准事件）
+graph.addEventListener('dragstart', ...);
+graph.addEventListener('drag', ...);
+graph.addEventListener('dragend', ...);
+graph.addEventListener('drop', ...);
+
+// ✅ GE 特有事件（应用层使用）
+graph.addEventListener('node:moved', ...);
+graph.addEventListener('node:added', ...);
+```
+
+## 参考
+
+- [g-plugin-dragndrop 官方文档](https://g.antv.antgroup.com/en/plugins/dragndrop)
+- [EVENTS.md](./EVENTS.md) - 事件系统详细文档
+- [MovePlugin 源码](../src/plugins/MovePlugin.ts)
+- [ConnectionPlugin 源码](../src/plugins/ConnectionPlugin.ts)
+- [GEInteractiveElement 源码](../src/core/GEInteractiveElement.ts)

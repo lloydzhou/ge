@@ -63,7 +63,7 @@ export class ItemLabelElement extends ItemToolElement<Text> {
       }
     }
 
-    // Create primaryShape (Text)
+    // 创建 primaryShape (Text)
     this.primaryShape = this.createPrimaryShape({
       id: `${this.id}-primary`,
       style: {
@@ -74,7 +74,9 @@ export class ItemLabelElement extends ItemToolElement<Text> {
         textAlign: 'center',
         textBaseline: 'middle',
         zIndex: config.style?.zIndex ?? 1,
-        ...config.style
+        ...config.style,
+        // Force prevent text selection during drag/connection
+        'user-select': 'none',
       }
     });
 
@@ -86,7 +88,7 @@ export class ItemLabelElement extends ItemToolElement<Text> {
 
     // Enable editing if editable is true
     if (config.editable === true) {
-      this.setAttribute('contenteditable', 'true');
+      this.setEditable(true);
     }
   }
 
@@ -145,13 +147,6 @@ export class ItemLabelElement extends ItemToolElement<Text> {
         const args = (this.layout as any).args || {};
         const distance = args.distance ?? 0.5;
 
-        console.log('[ItemLabelElement.updatePosition] Path label:', {
-          id: this.id,
-          args,
-          offset: args.offset,
-          distance
-        });
-
         // Backfill position.offset/angle from layout.args so calculatePositionOnPath can use them
         this.position.distance = distance;
         if (args.offset) {
@@ -161,14 +156,8 @@ export class ItemLabelElement extends ItemToolElement<Text> {
           this.position.angle = args.angle;
         }
 
-        console.log('[ItemLabelElement.updatePosition] After backfill:', {
-          position: this.position
-        });
-
         // Get position along path with offset applied
         const pos = this.calculatePositionOnPath(ownerShape, distance);
-
-        console.log('[ItemLabelElement.updatePosition] Final position:', pos);
 
         // For Edge labels, the path position is already in canvas coordinates
         this.setPosition(pos);
@@ -191,10 +180,13 @@ export class ItemLabelElement extends ItemToolElement<Text> {
   }
 
   connectedCallback(): void {
-    // Initialize interaction event listeners (from ItemToolElement)
-    this._initInteraction();
-
     // Update position on connection
     this.updatePosition();
+
+    // Prevent text selection during drag/connection
+    this.addEventListener('selectstart', (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
   }
 }

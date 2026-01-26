@@ -91,66 +91,44 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
   /** Original z-index before editing (for restore) */
   private _originalZIndex: number | null = null;
 
-  /**
-   * Get attribute value (DOM-like API)
-   * Supports: contenteditable
-   * @param name - Attribute name
-   * @returns Attribute value or null
-   */
-  getAttribute(name: string): string | null {
-    if (name === 'contenteditable') {
-      if (this._contenteditable === true) return 'true';
-      if (this._contenteditable === false) return 'false';
-      return String(this._contenteditable);
-    }
-    return null;
-  }
+  /** Whether editing has been set up */
+  private _editingSetup: boolean = false;
 
   /**
-   * Set attribute value (DOM-like API)
-   * Supports: contenteditable
-   * @param name - Attribute name
-   * @param value - Attribute value
+   * Set editable state (enables/disables inline editing)
+   * @param editable - Whether element should be editable
    */
-  setAttribute(name: string, value: string | boolean | null): void {
-    if (name === 'contenteditable') {
-      const oldValue = this._contenteditable;
+  setEditable(editable: boolean): void {
+    const oldValue = this._contenteditable;
+    this._contenteditable = editable;
 
-      if (value === true || value === 'true') {
-        this._contenteditable = true;
-      } else if (value === false || value === 'false') {
-        this._contenteditable = false;
-      } else {
-        this._contenteditable = String(value);
-      }
-
-      // Enable/disable editing based on contenteditable state
-      if (!oldValue && this._contenteditable) {
-        // Enable editing
-        this._setupEditing();
-      } else if (oldValue && !this._contenteditable) {
-        // Disable editing
-        this._cleanupEditing();
-      }
-    }
-  }
-
-  /**
-   * Remove attribute (DOM-like API)
-   * @param name - Attribute name
-   */
-  removeAttribute(name: string): void {
-    if (name === 'contenteditable') {
-      this._contenteditable = false;
+    if (!oldValue && editable) {
+      this._setupEditing();
+    } else if (oldValue && !editable) {
       this._cleanupEditing();
+      // Reset flag so editing can be set up again if re-enabled
+      this._editingSetup = false;
     }
   }
 
   /**
-   * Setup editing handlers when contenteditable is enabled
-   * Uses parent's _setupDblClick method and listens for dblclick event
+   * Check if element is editable
+   * @returns True if editable
    */
-  private _setupEditing(): void {
+  isEditable(): boolean {
+    return this._contenteditable === true || this._contenteditable === 'true';
+  }
+
+  /**
+   * Setup editing handlers when editable is enabled
+   * Uses parent's _setupDblClick method and listens for dblclick event
+   * @protected
+   */
+  protected _setupEditing(): void {
+    // Prevent duplicate setup
+    if (this._editingSetup) return;
+    this._editingSetup = true;
+
     const label = this.getLabelShape();
     if (!label) return;
 
@@ -452,13 +430,6 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
           }
         }
 
-        console.log('[calculatePositionOnPath] Path API result:', {
-          hasPointAtLength: typeof (path as any).getPointAtLength === 'function',
-          pos,
-          tangent,
-          hasOffset: !!this.position.offset
-        });
-
         return this.applyOffsetAndAngle(pos, tangent);
       }
 
@@ -480,13 +451,6 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
         const dy = y2 - y1;
         const length = Math.sqrt(dx * dx + dy * dy);
         const tangent: Vec2 = length > 0 ? [dx / length, dy / length] : [0, 0];
-
-        console.log('[calculatePositionOnPath] Line fallback:', {
-          x1, y1, x2, y2,
-          pos,
-          tangent,
-          hasOffset: !!this.position.offset
-        });
 
         return this.applyOffsetAndAngle(pos, tangent);
       }
@@ -569,46 +533,18 @@ export abstract class ItemToolElement<TShape extends DisplayObject = DisplayObje
   protected applyOffsetAndAngle(point: Vec2, tangent?: Vec2): Vec2 {
     let result = [...point] as Vec2;
 
-    console.log('[applyOffsetAndAngle] Input:', {
-      point,
-      offset: this.position.offset,
-      angle: this.position.angle,
-      tangent
-    });
-
     // Apply normal offset (perpendicular to tangent)
     if (this.position.offset?.normal && tangent) {
       const normal = [-tangent[1], tangent[0]]; // Perpendicular
       result[0] += normal[0] * this.position.offset.normal;
       result[1] += normal[1] * this.position.offset.normal;
-
-      console.log('[applyOffsetAndAngle] Applied normal offset:', {
-        normal,
-        offsetValue: this.position.offset.normal,
-        result
-      });
     }
 
     // Apply tangent offset (parallel to tangent)
     if (this.position.offset?.tangent && tangent) {
       result[0] += tangent[0] * this.position.offset.tangent;
       result[1] += tangent[1] * this.position.offset.tangent;
-
-      console.log('[applyOffsetAndAngle] Applied tangent offset:', {
-        tangent,
-        offsetValue: this.position.offset.tangent,
-        result
-      });
     }
-
-    // Apply angle rotation (around point itself)
-    if (this.position.angle) {
-      // For now, angle is just stored - actual rotation would be applied to the element
-      // This can be implemented by subclasses
-      console.log('[applyOffsetAndAngle] Angle not implemented yet:', this.position.angle);
-    }
-
-    console.log('[applyOffsetAndAngle] Final result:', result);
 
     return result;
   }

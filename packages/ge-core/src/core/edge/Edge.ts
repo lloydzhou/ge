@@ -232,7 +232,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * Handle source node moved event
    */
   private _handleSourceMoved(_e: Event): void {
-    console.log('[Edge._handleSourceMoved] Source node moved, updating edge', this.data.id);
     this.updatePositionFromNodes();
   }
 
@@ -240,7 +239,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * Handle target node moved event
    */
   private _handleTargetMoved(_e: Event): void {
-    console.log('[Edge._handleTargetMoved] Target node moved, updating edge', this.data.id);
     this.updatePositionFromNodes();
   }
 
@@ -309,6 +307,10 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
         // 第一步：统一获取 primaryShape 和 position
         let primaryShape: DisplayObject | null = null;
         let position: [number, number] = [0, 0];
+
+        if (!endpoint) {
+          return [0, 0];
+        }
 
         if (typeof endpoint === 'string') {
           return [0, 0];
@@ -486,6 +488,9 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
    * 获取端点的中心位置（用于计算方向向量）
    */
   private _getEndpointCenter(endpoint: EdgeEndpoint): [number, number] {
+    if (!endpoint) {
+      return [0, 0];
+    }
     if (typeof endpoint === 'string') {
       return [0, 0];
     }
@@ -628,7 +633,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
   }
 
   connectedCallback() {
-    console.log('[Edge.connectedCallback] Connecting edge', this.data.id, 'source:', this.data.source, 'target:', this.data.target);
     // Connect immediately after being added to DOM
     this._tryConnect();
   }
@@ -660,12 +664,6 @@ export class Edge<TPath extends DisplayObject = Line> extends ItemElement<TPath>
 
       sourceNode = resolveEndpoint(this.data.source);
       targetNode = resolveEndpoint(this.data.target);
-
-      console.log('[Edge._tryConnect] Resolved endpoints:', {
-        edge: this.getId(),
-        sourceNode,
-        targetNode
-      });
 
       if (sourceNode && targetNode) {
         this.connectTo(sourceNode, targetNode);
