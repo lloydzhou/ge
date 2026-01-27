@@ -8,6 +8,7 @@
  * Uses requestAnimationFrame for smooth 60fps updates.
  */
 import type { RenderingPlugin, RenderingPluginContext } from '../types';
+import { CustomEvent } from '@antv/g-lite';
 import type { Node } from '../core/node/Node';
 import { Plugin as DragndropPlugin } from '@antv/g-plugin-dragndrop';
 
@@ -115,18 +116,20 @@ export class MovePlugin implements RenderingPlugin {
         const nodeId = target.getId();
         if (!nodeId) return;
 
-        const { canvasX, canvasY } = e as any;
+        // Use viewport coordinates (world space, accounts for Camera)
+        // NOT canvas coordinates (screen space) which would cause mismatch
+        const { viewportX, viewportY } = e as any;
 
         // Validate coordinates
-        if (typeof canvasX !== 'number' || typeof canvasY !== 'number' ||
-            !isFinite(canvasX) || !isFinite(canvasY)) {
+        if (typeof viewportX !== 'number' || typeof viewportY !== 'number' ||
+            !isFinite(viewportX) || !isFinite(viewportY)) {
           return;
         }
 
         // Calculate offset from node position
         const nodePos = target.getPosition();
-        const offsetX = canvasX - nodePos[0];
-        const offsetY = canvasY - nodePos[1];
+        const offsetX = viewportX - nodePos[0];
+        const offsetY = viewportY - nodePos[1];
 
         this.dragState.set(nodeId, {
           startPos: [nodePos[0], nodePos[1]],
@@ -152,11 +155,12 @@ export class MovePlugin implements RenderingPlugin {
         const nodeId = target.getId();
         if (!nodeId) return;
 
-        const { canvasX, canvasY } = e as any;
+        // Use viewport coordinates (world space, accounts for Camera)
+        const { viewportX, viewportY } = e as any;
 
         // Validate coordinates
-        if (typeof canvasX !== 'number' || typeof canvasY !== 'number' ||
-            !isFinite(canvasX) || !isFinite(canvasY)) {
+        if (typeof viewportX !== 'number' || typeof viewportY !== 'number' ||
+            !isFinite(viewportX) || !isFinite(viewportY)) {
           return;
         }
 
@@ -167,15 +171,15 @@ export class MovePlugin implements RenderingPlugin {
           const nodePos = target.getPosition();
           dragInfo = {
             startPos: [nodePos[0], nodePos[1]],
-            offset: [canvasX - nodePos[0], canvasY - nodePos[1]],
+            offset: [viewportX - nodePos[0], viewportY - nodePos[1]],
             hasMoved: false,
           };
           this.dragState.set(nodeId, dragInfo);
         }
 
         // Calculate new position (keeping offset)
-        let newX = canvasX - dragInfo.offset[0];
-        let newY = canvasY - dragInfo.offset[1];
+        let newX = viewportX - dragInfo.offset[0];
+        let newY = viewportY - dragInfo.offset[1];
 
         // Apply grid snapping if enabled
         if (this.opts.snapToGrid!) {
@@ -344,6 +348,14 @@ export class MovePlugin implements RenderingPlugin {
         const node = graph.getNodeById?.(nodeId);
         if (node) {
           node.setPosition(pos.x, pos.y);
+
+          // 派发 node:moved 事件，让其他插件可以监听节点移动
+          console.log('[MovePlugin] Dispatching node:moved event:', { nodeId, x: pos.x, y: pos.y });
+          graph.dispatchEvent(
+            new CustomEvent('node:moved', {
+              detail: { node, nodeId, x: pos.x, y: pos.y },
+            })
+          );
         }
       } catch (e) {
         console.error('MovePlugin: Error moving node', { nodeId, pos, error: e });
