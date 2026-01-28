@@ -74,6 +74,93 @@ isEditable(): boolean {
 
 ---
 
+## 🚨 CRITICAL: 绝对禁止简化渲染
+
+**渲染图形时必须渲染真实的形状，绝对不能只绘制边界框！**
+
+### 禁止的行为
+
+| 行为 | 禁止原因 |
+|------|----------|
+| 绘制边界矩形代替真实形状 | 用户看到的是简化的方块，而不是实际的圆形、椭圆、路径等 |
+| 使用 `getRenderBounds()` 进行形状渲染 | `getRenderBounds()` 只用于碰撞检测，不能用于绘制 |
+| 使用 `fillRect(x, y, w, h)` 渲染圆形/椭圆 | 这会绘制矩形，而不是实际的形状 |
+
+### 正确做法
+
+**❌ 错误示例** (简化渲染 - 严格禁止):
+```typescript
+// 简化渲染 - 只绘制边界框
+private renderCircle(object: DisplayObject, context: CanvasRenderingContext2D, style: any): void {
+  const bounds = object.getRenderBounds();
+  const x = bounds.min[0];
+  const y = bounds.min[1];
+  const w = bounds.max[0] - bounds.min[0];
+  const h = bounds.max[1] - bounds.min[1];
+
+  // ❌ 错误：绘制矩形代替圆形
+  context.fillRect(x, y, w, h);
+}
+```
+
+**✅ 正确做法** (渲染真实形状):
+```typescript
+// 渲染真实形状
+private renderCircle(object: DisplayObject, context: CanvasRenderingContext2D, style: any): void {
+  // ✅ 正确：使用对象的实际属性
+  const cx = style.cx || 0;
+  const cy = style.cy || 0;
+  const r = style.r || 0;
+
+  context.beginPath();
+  context.arc(cx, cy, r, 0, Math.PI * 2);
+
+  if (style.fill) {
+    context.fillStyle = style.fill;
+    context.fill();
+  }
+
+  if (style.stroke) {
+    context.strokeStyle = style.stroke;
+    context.lineWidth = style.lineWidth || 1;
+    context.stroke();
+  }
+}
+```
+
+### 各形状类型的真实渲染
+
+| 形状类型 | 使用属性 | Canvas 方法 |
+|---------|---------|-------------|
+| Rect | `x`, `y`, `width`, `height`, `radius` | `rect()`, `roundRect()` |
+| Circle | `cx`, `cy`, `r` | `arc()` |
+| Ellipse | `cx`, `cy`, `rx`, `ry` | `ellipse()` |
+| Line | `x1`, `y1`, `x2`, `y2` | `moveTo()`, `lineTo()` |
+| Polygon | `points` (数组) | `moveTo()`, `lineTo()`, `closePath()` |
+| Path | `path` (Path2D) 或 `points` | `fill(Path2D)`, `stroke(Path2D)` |
+| Polyline | `points` (数组) | `moveTo()`, `lineTo()` |
+
+### 关键原则
+
+1. **真实形状优先** - 必须渲染实际的形状（圆形是圆、椭圆是椭圆），不是边界框
+2. **使用对象属性** - 从 `style` 对象中获取形状的实际属性（cx, cy, r, width, height 等）
+3. **完整样式支持** - 支持填充、描边、透明度、线宽等所有样式属性
+4. **变换正确应用** - 对象的变换通过 `context.transform()` 叠加到 camera transform 上
+
+### 历史教训
+
+**案例**: CanvasMinimapPlugin 实现中，多次尝试使用简化渲染（边界框）代替真实形状。
+
+**后果**:
+- Minimap 显示的是矩形方块，而不是真实的圆形、椭圆等
+- 用户多次提醒"不要自作主张做什么简化"
+- 浪费了大量时间在错误的实现上
+
+**教训**:
+> 渲染时必须渲染真实的形状！即使 Minimap 是小尺寸预览，也必须显示真实的形状（圆形是圆、椭圆是椭圆），不能为了"简化"而只绘制边界框！
+
+---
+
 ## 项目概述
 
 **GE (Graph Editor)** 是基于 [AntV/G](https://g.antv.antgroup.com/) 的现代化图编辑器库。它采用类 DOM 的 API 设计，对于熟悉文档对象模型 (DOM) 的 Web 开发者来说非常直观。

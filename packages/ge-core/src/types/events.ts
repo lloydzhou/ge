@@ -42,7 +42,7 @@ export interface GEDataTransfer {
   hasType(type: string): boolean;
   clearData(): void;
   effectAllowed: 'move' | 'copy' | 'link' | 'none';
-  dropEffect: 'move' | 'copy' | 'link' | 'none;
+  dropEffect: 'move' | 'copy' | 'link' | 'none';
 }
 
 // ============================================================================

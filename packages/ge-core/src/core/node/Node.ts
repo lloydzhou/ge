@@ -255,8 +255,6 @@ export class Node<TShape extends DisplayObject = Rect> extends ItemElement<TShap
     // 基类统一设置交互属性（draggable, linkable, droppable, linkto）
     super.connectedCallback();
 
-    console.log('[Node.connectedCallback] nodeId:', this.getId(), 'has label:', !!this._nodeLabel);
-
     // Apply cursor style based on interaction capabilities
     this._applyCursorStyleTo(this.primaryShape);
 

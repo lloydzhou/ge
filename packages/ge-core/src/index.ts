@@ -12,6 +12,7 @@ export * from './core/anchor';
 export * from './types';
 export * from './plugins/ConnectionPlugin';
 export * from './plugins/MovePlugin';
+export * from './plugins/MinimapPlugin';
 
 // Re-export runtime values (enums) for UMD builds
 export { GEInteractionType } from './types/events';

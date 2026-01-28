@@ -320,18 +320,9 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
    * 3. primaryShape - 如果存在，确保点击时能识别
    */
   connectedCallback(): void {
-    console.log('[GEInteractiveElement.connectedCallback] ENTER:', this.getId());
-
     const isSourceConnectable = this._isSourceConnectable();
     const isTargetConnectable = this._isTargetConnectable();
     const isDraggable = this._isDraggable();
-
-    console.log('[GEInteractiveElement.connectedCallback] config:', {
-      id: this.getId(),
-      sourceConnectable: isSourceConnectable,
-      targetConnectable: isTargetConnectable,
-      draggable: isDraggable,
-    });
 
     // 根据配置设置属性（不判断元素类型）
     // sourceConnectable/linkable: 设置 draggable + linkable
@@ -348,15 +339,6 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
     if (isTargetConnectable) {
       this._setDroppableProperties(true);
     }
-
-    console.log('[GEInteractiveElement.connectedCallback] AFTER:', this.getId(), {
-      styleLinkable: this.style.linkable,
-      styleDraggable: this.style.draggable,
-      styleDroppable: this.style.droppable,
-      styleLinkto: this.style.linkto,
-      attrLinkable: this.getAttribute('linkable'),
-      attrDraggable: this.getAttribute('draggable'),
-    });
   }
 
   /**
@@ -370,7 +352,6 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
       this.removeAttribute('draggable');
       this.style.draggable = false;
     }
-    console.log("_setDraggableProperties", this.getId(), enabled, 'attr:', this.getAttribute('draggable'), 'style:', this.style.draggable);
   }
 
   /**
@@ -384,7 +365,6 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
       this.removeAttribute('linkable');
       this.style.linkable = false;
     }
-    console.log("_setLinkableProperties", this.getId(), enabled, 'attr:', this.getAttribute('linkable'), 'style:', this.style.linkable);
   }
 
   /**
@@ -402,6 +382,5 @@ export abstract class GEInteractiveElement<TShape extends DisplayObject = Displa
       this.style.droppable = false;
       this.style.linkto = false;
     }
-    console.log("_setDroppableProperties", this.getId(), enabled, 'attr droppable:', this.getAttribute('droppable'), 'attr linkto:', this.getAttribute('linkto'), 'style droppable:', this.style.droppable, 'style linkto:', this.style.linkto);
   }
 }

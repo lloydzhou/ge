@@ -16,23 +16,34 @@
       width: 800px;
       height: 600px;
     }
+
+    #minimap {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      border: 1px solid #ccc;
+      background: #f5f5f5;
+      width: 200px;
+      height: 150px;
+    }
   </style>
 </head>
 <body>
   <h1>Custom Shape Node Example</h1>
   <div id="container"></div>
+  <div id="minimap"></div>
 
   <script src="../node_modules/@antv/g-lite/dist/index.umd.min.js"></script>
-  <script src="../node_modules/@antv/g-svg/dist/index.umd.min.js"></script>
-  <script src="../node_modules/@antv/g-plugin-annotation/dist/index.umd.min.js"></script>
+  <script src="../node_modules/@antv/g-canvas/dist/index.umd.min.js"></script>
   <script src="../node_modules/@antv/g-plugin-dragndrop/dist/index.umd.min.js"></script>
   <script src="../packages/ge-core/dist/index.umd.min.js"></script>
   <script>
     const { Canvas, Rect, Circle, Line, Polyline, Annotation, Dragndrop, Shape, Polygon, Ellipse } = window.G;
-    const { Graph, Node, Edge, ConnectionPlugin, MovePlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, NormalConnector, PolylineConnector } = window.GE;
+    const { Graph, Node, Edge, ConnectionPlugin, MovePlugin, MinimapPlugin, NormalRouter, OrthogonalRouter, ManhattanRouter, NormalConnector, PolylineConnector } = window.GE;
 
-    const renderer = new window.G.SVG.Renderer()
-    renderer.registerPlugin(new Annotation.Plugin());
+    // Use Canvas 2D renderer for CanvasMinimapPlugin
+    const renderer = new window.G.Canvas2D.Renderer();
+    // renderer.registerPlugin(new Annotation.Plugin());
     // Register DragndropPlugin with isDocumentDraggable for canvas panning
     renderer.registerPlugin(new Dragndrop.Plugin({
       isDocumentDraggable: true,
@@ -64,7 +75,15 @@
       // Enable node movement
       const move = new MovePlugin();
       graph.use(move);
-      
+
+      // Enable minimap (Canvas 2D version)
+      const minimap = new MinimapPlugin({
+        container: 'minimap',
+        width: 200,
+        height: 150,
+      });
+      graph.use(minimap);
+
       // Create a circle node using registry name
       const circleNode = new Node({
         id: 'circle-node',

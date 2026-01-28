@@ -161,6 +161,20 @@ export interface GraphOptions extends CanvasConfig {
   draggable?: boolean;
 }
 
+// Minimap configuration
+export interface MinimapConfig {
+  container: HTMLElement | string;
+  width?: number;
+  height?: number;
+  scale?: number;
+  /**
+   * Optional renderer for minimap.
+   * If not provided, will attempt to clone the main graph's renderer.
+   * Note: The minimap renderer should be the same type as the main renderer (e.g., SVGRenderer).
+   */
+  renderer?: any;
+}
+
 // ============================================================================
 // 交互配置类型
 // ============================================================================

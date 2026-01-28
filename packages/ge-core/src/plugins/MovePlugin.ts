@@ -43,10 +43,7 @@ export class MovePlugin implements RenderingPlugin {
   // Helper: Check if g-plugin-dragndrop is already registered
   private _isDragndropRegistered(renderer: any): boolean {
     if (!renderer?.plugins) return false;
-    return renderer.plugins.some((p: any) =>
-      p?.constructor?.name === 'DragndropPlugin' ||
-      p?.name === 'dragndrop'
-    );
+    return renderer.plugins.some((p: any) => p?.name === 'dragndrop');
   }
 
   // requestAnimationFrame ID for throttling
@@ -75,7 +72,7 @@ export class MovePlugin implements RenderingPlugin {
   /**
    * Apply plugin to graph (following Canvas's plugin.apply pattern)
    */
-  apply(context: RenderingPluginContext, runtime?: any): void {
+  apply(context: RenderingPluginContext, _runtime?: any): void {
     this.context = context;
     const graph = (context as any).graph;
 
@@ -116,20 +113,16 @@ export class MovePlugin implements RenderingPlugin {
         const nodeId = target.getId();
         if (!nodeId) return;
 
-        // Use viewport coordinates (world space, accounts for Camera)
-        // NOT canvas coordinates (screen space) which would cause mismatch
-        const { viewportX, viewportY } = e as any;
-
-        // Validate coordinates
-        if (typeof viewportX !== 'number' || typeof viewportY !== 'number' ||
-            !isFinite(viewportX) || !isFinite(viewportY)) {
+        // Use canvasX/canvasY from drag event
+        const { canvasX, canvasY } = e as any;
+        if (typeof canvasX !== 'number' || typeof canvasY !== 'number') {
           return;
         }
 
         // Calculate offset from node position
         const nodePos = target.getPosition();
-        const offsetX = viewportX - nodePos[0];
-        const offsetY = viewportY - nodePos[1];
+        const offsetX = canvasX - nodePos[0];
+        const offsetY = canvasY - nodePos[1];
 
         this.dragState.set(nodeId, {
           startPos: [nodePos[0], nodePos[1]],
@@ -155,12 +148,9 @@ export class MovePlugin implements RenderingPlugin {
         const nodeId = target.getId();
         if (!nodeId) return;
 
-        // Use viewport coordinates (world space, accounts for Camera)
-        const { viewportX, viewportY } = e as any;
-
-        // Validate coordinates
-        if (typeof viewportX !== 'number' || typeof viewportY !== 'number' ||
-            !isFinite(viewportX) || !isFinite(viewportY)) {
+        // Use canvasX/canvasY from drag event
+        const { canvasX, canvasY } = e as any;
+        if (typeof canvasX !== 'number' || typeof canvasY !== 'number') {
           return;
         }
 
@@ -171,15 +161,15 @@ export class MovePlugin implements RenderingPlugin {
           const nodePos = target.getPosition();
           dragInfo = {
             startPos: [nodePos[0], nodePos[1]],
-            offset: [viewportX - nodePos[0], viewportY - nodePos[1]],
+            offset: [canvasX - nodePos[0], canvasY - nodePos[1]],
             hasMoved: false,
           };
           this.dragState.set(nodeId, dragInfo);
         }
 
         // Calculate new position (keeping offset)
-        let newX = viewportX - dragInfo.offset[0];
-        let newY = viewportY - dragInfo.offset[1];
+        let newX = canvasX - dragInfo.offset[0];
+        let newY = canvasY - dragInfo.offset[1];
 
         // Apply grid snapping if enabled
         if (this.opts.snapToGrid!) {
@@ -297,32 +287,24 @@ export class MovePlugin implements RenderingPlugin {
     graph.addEventListener('dragend', this._onDragEnd);
 
     // ========================================
-    // 3. Handle document dragging (camera panning)
-    // ========================================
+    // Handle document dragging (camera panning)
     this._onDocumentDrag = (e: Event) => {
       try {
         // Check if the drag target is the document (canvas background)
         if ((e as any).target === graph.document) {
           const camera = graph.getCamera();
-          // Pan the camera in opposite direction of drag
-          // Try different API methods for camera translation
           const dx = -(e as any).dx;
           const dy = -(e as any).dy;
 
-          // Method 1: Direct property access
-          if (typeof camera.x === 'number' && typeof camera.y === 'number') {
-            camera.x += dx;
-            camera.y += dy;
-          }
-          // Method 2: translate method
-          else if (typeof camera.translate === 'function') {
-            camera.translate(dx, dy);
-          }
-          // Method 3: setPosition method
-          else if (typeof camera.setPosition === 'function') {
-            const [x, y] = camera.getPosition();
-            camera.setPosition(x + dx, y + dy);
-          }
+          // Canvas 2D picking fix: Use setPosition + setFocalPoint for camera panning
+          // @ts-ignore
+          const [x, y, z] = camera.getPosition();
+          // @ts-ignore
+          const [fx, fy, fz] = camera.getFocalPoint();
+          // @ts-ignore
+          camera.setPosition([x + dx, y + dy, z]);
+          // @ts-ignore
+          camera.setFocalPoint([fx + dx, fy + dy, fz]);
         }
       } catch (err) {
         console.error('[MovePlugin] Document drag error:', err);
@@ -350,7 +332,6 @@ export class MovePlugin implements RenderingPlugin {
           node.setPosition(pos.x, pos.y);
 
           // 派发 node:moved 事件，让其他插件可以监听节点移动
-          console.log('[MovePlugin] Dispatching node:moved event:', { nodeId, x: pos.x, y: pos.y });
           graph.dispatchEvent(
             new CustomEvent('node:moved', {
               detail: { node, nodeId, x: pos.x, y: pos.y },
@@ -376,6 +357,8 @@ export class MovePlugin implements RenderingPlugin {
     }
 
     if (!this.context) return;
+
+    const graph = (this.context as any).graph;
 
     // Remove node drag listeners
     if (this._onDrag) {

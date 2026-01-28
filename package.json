@@ -33,7 +33,7 @@
     "serve": "http-server -c-1 -o ./examples/"
   },
   "dependencies": {
-    "@antv/g-canvas": "^2.0.0",
+    "@antv/g-canvas": "^2.0.48",
     "@antv/g-lite": "^2.0.0",
     "@antv/g-plugin-annotation": "^1.0.0",
     "@antv/g-plugin-dragndrop": "^2.0.0",
