@@ -50,11 +50,9 @@ export class Node extends Cell {
   private appliedState: Record<string, unknown> = {};
 
   constructor(config: Record<string, any> = {}) {
-    super({
-      className: CLASS.node,
-      ...config,
-      style: { ...DEFAULTS, ...config?.style },
-    });
+    const style = { ...DEFAULTS, ...config?.style };
+    super({ className: CLASS.node, ...config, style });
+    this.initProps({ id: config?.id, style });
   }
 
   protected render(): void {
@@ -124,6 +122,7 @@ export class Node extends Cell {
     newV: any,
   ): void {
     if (oldV === newV) return;
+    this.syncProp(name as string, newV);
     if (!this.rendered) return; // 构造期间不处理，等 connectedCallback 统一渲染
     switch (name) {
       case 'x':

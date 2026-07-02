@@ -16,6 +16,15 @@ export abstract class Cell extends CustomElement<any> {
   /** 可序列化业务数据 */
   protected model: Record<string, unknown> = {};
 
+  /** 完整属性 model（序列化用，含用户设的所有字段，随 setAttribute 同步） */
+  props: Record<string, any> = {};
+
+  /** 初始化 props（子类 constructor 在 super 后调用，避免干扰 g-lite CustomElement 初始化） */
+  protected initProps(config: any): void {
+    this.props = { ...(config?.style || {}) };
+    if (config?.id) this.props.id = config.id;
+  }
+
   connectedCallback(): void {
     if (!this.rendered) {
       this.render();
@@ -33,6 +42,13 @@ export abstract class Cell extends CustomElement<any> {
   /** 派发自定义事件（避免与 g-lite 公有 emit 冲突，命名为 fire） */
   protected fire(type: string, detail?: object): void {
     this.dispatchEvent(new CustomEvent(type, detail ? { detail } : undefined));
+  }
+
+  /** 同步属性变化到 props model（Node/Edge 的 attributeChangedCallback 调用） */
+  protected syncProp(name: string, value: any): void {
+    // super() 执行中 g-lite 可能触发 attributeChangedCallback，此时类字段尚未初始化，需惰性兜底
+    if (!this.props) this.props = {};
+    this.props[name] = value;
   }
 
   getData(): Record<string, unknown> {

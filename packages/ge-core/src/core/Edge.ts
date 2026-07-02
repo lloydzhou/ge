@@ -57,11 +57,9 @@ export class Edge extends Cell {
   private boundNodes = new Set<string>();
 
   constructor(config: Record<string, any> = {}) {
-    super({
-      className: CLASS.edge,
-      ...config,
-      style: { ...DEFAULTS, ...config?.style },
-    });
+    const style = { ...DEFAULTS, ...config?.style };
+    super({ className: CLASS.edge, ...config, style });
+    this.initProps({ id: config?.id, style });
   }
 
   protected render(): void {
@@ -86,6 +84,7 @@ export class Edge extends Cell {
     newV: any,
   ): void {
     if (oldV === newV) return;
+    this.syncProp(name as string, newV);
     if (!this.rendered) return;
     switch (name) {
       case 'source':

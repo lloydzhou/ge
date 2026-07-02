@@ -148,15 +148,9 @@ export class Graph extends Canvas {
 
   // ---- 序列化 ----
   toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
-    const pick = (a: any, keys: string[]): Record<string, unknown> => {
-      const out: Record<string, unknown> = {};
-      for (const k of keys) if (a[k] !== undefined) out[k] = a[k];
-      return out;
-    };
-    const nodeKeys = ['x', 'y', 'width', 'height', 'shape', 'fill', 'stroke', 'strokeWidth', 'radius', 'label'];
-    const edgeKeys = ['source', 'target', 'router', 'connector', 'stroke', 'strokeWidth'];
-    const nodes = this.getNodes().map((n: any) => ({ ...pick(n.attributes, nodeKeys), id: n.id }));
-    const edges = this.getEdges().map((e: any) => ({ ...pick(e.attributes, edgeKeys), id: e.id }));
+    // 直接返回 Cell 的 props model（用户设的所有字段都保留，不漏 data/stateStyles 等）
+    const nodes = this.getNodes().map((n: any) => ({ ...n.props }));
+    const edges = this.getEdges().map((e: any) => ({ ...e.props }));
     return { nodes, edges };
   }
 
