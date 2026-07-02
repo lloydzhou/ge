@@ -10,6 +10,7 @@
 export const VERSION = '2.0.0-alpha.0';
 
 export * from './core';
+export * from './shape';
 export * from './layout';
 export * from './plugins';
 export * from './anchor';

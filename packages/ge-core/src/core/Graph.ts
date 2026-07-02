@@ -32,6 +32,7 @@ import {
   createDefaultConnectorRegistry,
   type ConnectorRegistry,
 } from '../edge/connector';
+import { createDefaultShapeRegistry, type ShapeRegistry } from '../shape';
 import type { Plugin } from '../plugins/plugin';
 
 const resolveContainer = (c: HTMLElement | string): HTMLElement =>
@@ -39,6 +40,7 @@ const resolveContainer = (c: HTMLElement | string): HTMLElement =>
 
 export class Graph extends Canvas {
   readonly anchors: AnchorRegistry;
+  readonly shapes: ShapeRegistry;
   readonly routers: RouterRegistry;
   readonly connectors: ConnectorRegistry;
   private plugins: Plugin[] = [];
@@ -56,6 +58,7 @@ export class Graph extends Canvas {
       background: options.background,
     });
     this.anchors = createDefaultAnchorRegistry();
+    this.shapes = createDefaultShapeRegistry();
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
     this.registerElements();

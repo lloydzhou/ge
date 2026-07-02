@@ -69,21 +69,20 @@ export class Node extends Cell {
   }
 
   protected createBody(s: NodeStyleProps): DisplayObject {
-    const { shape, fill, stroke, strokeWidth, radius, width, height } = s;
-    const w = width as number;
-    const h = height as number;
-    switch (shape) {
-      case 'circle': {
-        const r = Math.min(w, h) / 2;
-        return new Circle({ style: { cx: w / 2, cy: h / 2, r, fill, stroke, lineWidth: strokeWidth } });
-      }
-      case 'ellipse': {
-        return new Ellipse({ style: { cx: w / 2, cy: h / 2, rx: w / 2, ry: h / 2, fill, stroke, lineWidth: strokeWidth } });
-      }
-      case 'rect':
-      default:
-        return new Rect({ style: { width: w, height: h, fill, stroke, lineWidth: strokeWidth, radius: radius as number } });
-    }
+    // 通过 graph 的 ShapeRegistry 解析（支持自定义 shape）；找不到时回退到 rect
+    const graph: any = (this.ownerDocument as any)?.defaultView;
+    const def = graph?.shapes?.resolve(s.shape as string);
+    if (def) return def.create(s) as DisplayObject;
+    return new Rect({
+      style: {
+        width: s.width as number,
+        height: s.height as number,
+        fill: s.fill,
+        stroke: s.stroke,
+        lineWidth: s.strokeWidth,
+        radius: s.radius as number,
+      },
+    });
   }
 
   protected applyPosition(): void {
