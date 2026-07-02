@@ -16,7 +16,7 @@ export const pathLength = (points: Point[]): number => {
 };
 
 /** 按 t∈[0,1] 沿路径长度取点（默认 0.5 中点） */
-export const edgeAnchorRatio: EdgeAnchorFn = (points, args) => {
+export const edgeAnchorRatio: EdgeAnchorFn = (points, args = {}) => {
   const t = clamp01(args.t ?? 0.5);
   const total = pathLength(points);
   let target = total * t;
@@ -37,7 +37,7 @@ export const edgeAnchorRatio: EdgeAnchorFn = (points, args) => {
 };
 
 /** 按绝对长度（从起点）取点 */
-export const edgeAnchorLength: EdgeAnchorFn = (points, args) => {
+export const edgeAnchorLength: EdgeAnchorFn = (points, args = {}) => {
   const total = pathLength(points);
   return edgeAnchorRatio(points, { t: total === 0 ? 0 : (args.length ?? 0) / total });
 };
@@ -46,7 +46,7 @@ export const edgeAnchorLength: EdgeAnchorFn = (points, args) => {
 export const edgeAnchorMid: EdgeAnchorFn = (points) => edgeAnchorRatio(points, { t: 0.5 });
 
 /** 在指定段的 t 位置取点 */
-export const edgeAnchorSegment: EdgeAnchorFn = (points, args) => {
+export const edgeAnchorSegment: EdgeAnchorFn = (points, args = {}) => {
   const idx = Math.min(Math.max(args.segmentIndex ?? 0, 0), points.length - 2);
   const a = points[idx];
   const b = points[idx + 1];

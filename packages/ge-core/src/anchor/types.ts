@@ -34,7 +34,7 @@ export interface EdgeAnchorArgs {
 }
 
 /** 线性锚点函数：给定路径点序列 + 参数 → 返回锚点坐标 */
-export type EdgeAnchorFn = (points: Point[], args: EdgeAnchorArgs) => Point;
+export type EdgeAnchorFn = (points: Point[], args?: EdgeAnchorArgs) => Point;
 
 /** 锚点计算结果（含可选方向角，供端点箭头旋转用） */
 export interface AnchorResult extends Point {

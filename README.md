@@ -12,6 +12,7 @@
 - **Web Components 心智**：领域元素 = 领域特化的 `CustomElement`，`attributeChangedCallback` 做响应式，`className` 做类型识别。
 - **统一锚点模块**：Node/Port/Edge 共用唯一的 Anchor 类型源与注册表（消除旧版 5 文件碎片化）。
 - **边原地更新**：Router/Connector 计算路径后 `setAttribute('d', ...)` 原地写回 Path，不销毁重建。
+- **边视觉**：终点方向箭头（marker，颜色跟随 stroke）+ 边标签（自动定位路径中点）。
 - **事件驱动联动**：节点移动派发 `node:boundschange`，相连边监听后自动重算路径。
 - **渲染引擎可插拔**：基于 g-canvas / g-svg。
 - **交互编辑（L3）**：`Drag`（拖拽·边跟随）/ `Selection`（单/多选）/ `CreateEdge`（Alt+拖出连线）/ `Keyboard`（Delete 删除）/ `Clipboard`（复制·粘贴·克隆）/ `Transform`（选中集变换）/ `History`（撤销重做）/ `Scroller`（缩放·平移）/ `Snapline`（对齐线）/ Group embedding（分组移动）。

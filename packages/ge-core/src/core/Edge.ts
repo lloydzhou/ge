@@ -6,10 +6,11 @@
  * - 事件驱动联动：监听两端节点的 `node:boundschange`，节点移动时自动重算路径。
  * - Anchor/Router/Connector 解析器由 Graph 注入（registry 统一管理）。
  */
-import { Path, type DisplayObject } from '@antv/g-lite';
+import { Path, Text, type DisplayObject } from '@antv/g-lite';
 import { Cell } from './Cell';
 import { CLASS, type EndpointConfig } from './types';
 import { computeEdgePoints } from './compute';
+import { edgeAnchorMid } from '../anchor/edge-anchor';
 import { updatePath, type ConnectorFn, type ConnectorOptions } from '../edge/connector';
 import type { RouterFn } from '../edge/router';
 import type { NodeAnchorFn } from '../anchor/types';
@@ -46,6 +47,8 @@ export class Edge extends Cell {
   static readonly tag = 'ge-edge';
 
   protected body?: DisplayObject;
+  protected endMarker?: Path;
+  protected labelText?: Text;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
@@ -63,6 +66,7 @@ export class Edge extends Cell {
 
   protected render(): void {
     const s = this.styleProps();
+    this.endMarker = this.createMarker(s.stroke as string);
     this.body = new Path({
       style: {
         d: 'M 0 0',
@@ -72,6 +76,7 @@ export class Edge extends Cell {
       },
     });
     this.appendChild(this.body);
+    this.syncLabel();
     this.update();
   }
 
@@ -94,6 +99,10 @@ export class Edge extends Cell {
         break;
       case 'stroke':
         this.body?.setAttribute('stroke', newV);
+        this.endMarker?.setAttribute('fill', newV);
+        break;
+      case 'label':
+        this.syncLabel();
         break;
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
@@ -132,6 +141,10 @@ export class Edge extends Cell {
     if (s.connectorRadius != null) opts.radius = s.connectorRadius as number;
     if (s.connectorTension != null) opts.tension = s.connectorTension as number;
     updatePath(this.body, points, connectorFn, opts);
+    if (this.endMarker && !this.body.getAttribute('markerEnd')) {
+      this.body.setAttribute('markerEnd', this.endMarker);
+    }
+    this.positionLabel(points);
   }
 
   protected resolveNode(e?: EndpointConfig | string): Node | null {
@@ -147,6 +160,37 @@ export class Edge extends Cell {
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
     node.addEventListener('node:boundschange', () => this.update());
+  }
+
+  /** 创建终点箭头 marker（颜色跟随 stroke） */
+  protected createMarker(color: string): Path {
+    return new Path({ style: { d: 'M 0 0 L 10 5 L 0 10 Z', fill: color } });
+  }
+
+  /** 同步边标签 */
+  protected syncLabel(): void {
+    const s = this.styleProps();
+    const text = s.label as string | undefined;
+    if (!text) {
+      this.labelText?.destroy();
+      this.labelText = undefined;
+      return;
+    }
+    if (!this.labelText) {
+      this.labelText = new Text({
+        style: { text, fontSize: 12, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
+      });
+      this.appendChild(this.labelText);
+    } else {
+      this.labelText.setAttribute('text', text as any);
+    }
+  }
+
+  /** 把标签定位到路径中点 */
+  protected positionLabel(points: Point[]): void {
+    if (!this.labelText || points.length === 0) return;
+    const mid = edgeAnchorMid(points);
+    this.labelText.setLocalPosition(mid.x, mid.y);
   }
 
   protected styleProps(): EdgeStyleProps {
