@@ -14,6 +14,8 @@
 - **边原地更新**：Router/Connector 计算路径后 `setAttribute('d', ...)` 原地写回 Path，不销毁重建。
 - **事件驱动联动**：节点移动派发 `node:boundschange`，相连边监听后自动重算路径。
 - **渲染引擎可插拔**：基于 g-canvas / g-svg。
+- **交互编辑（L3）**：`DragPlugin`（拖拽移动，边实时跟随）/ `SelectionPlugin`（单/多选高亮）/ `HistoryPlugin`（撤销重做）。
+- **数据能力（L4）**：`graph.toJSON()` / `fromJSON()` 序列化往返；`MinimapPlugin` 缩略导航。
 
 ## 架构分层
 
@@ -64,6 +66,7 @@ graph.getNodes();       // getElementsByClassName('ge-node')
 | `examples/01-basic.html` | Node × 3 + Edge × 3，perimeter 锚点 + 不同 connector |
 | `examples/02-ports.html` | Port 挂载 + ratio 锚点精确定位连接点 |
 | `examples/03-router.html` | normal / orthogonal / manhattan 路由 × rounded / smooth 连接器对比 |
+| `examples/04-interaction.html` | 拖拽 + 选中 + 撤销/重做 + 序列化 + 小地图（完整交互编辑） |
 
 ## 核心原语
 
@@ -113,8 +116,8 @@ ge/
 - [x] **L0** 工程地基（pnpm / TS5 / tsup / Vite / Vitest）
 - [x] **L1** 核心原语 + 单测（Anchor / Router / Connector / utils）
 - [x] **L2** 领域元素 + Graph（最小可渲染 + 校验）
-- [ ] **L3** 交互与编辑（Selection / History / Scroller / Snapline / Transform / Group embedding）
-- [ ] **L4** 生态（序列化 / Dnd / Stencil / Minimap / Export / 布局 / @antv/ge-react）
+- [~] **L3** 交互与编辑：✅ Drag / Selection / History / 序列化 / Minimap　⬜ Scroller / Snapline / Transform / Group embedding
+- [~] **L4** 生态：✅ 序列化 / Minimap　⬜ Dnd / Stencil / Export / 布局 / @antv/ge-react
 
 ## License
 
