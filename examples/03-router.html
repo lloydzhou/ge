@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 03 Router / Connector</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    .panel { position: fixed; top: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); font-size: 13px; max-width: 320px; }
+    .panel h1 { font-size: 15px; margin: 0 0 6px; }
+    .panel code { background: #f5f5f5; padding: 1px 5px; border-radius: 4px; }
+    .panel li { margin: 3px 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="panel">
+    <h1>GE · 03 Router / Connector</h1>
+    <div>同两端节点，对比路由与连接器：</div>
+    <ul>
+      <li><span style="color:#52c41a">●</span> normal / normal（直线）</li>
+      <li><span style="color:#1890ff">●</span> orthogonal / rounded（直角圆角）</li>
+      <li><span style="color:#722ed1">●</span> manhattan / rounded（Z 形）</li>
+      <li><span style="color:#fa541c">●</span> manhattan / smooth（平滑）</li>
+    </ul>
+  </div>
+  <script type="module">
+    import { Graph } from '@ge';
+
+    const graph = new Graph({ container: '#app', background: '#fafafa' });
+    await graph.ready;
+
+    graph.addNode({ id: 's', x: 100, y: 120, width: 120, height: 48, fill: '#fff', stroke: '#8c8c8c', label: 'Source' });
+    graph.addNode({ id: 't', x: 520, y: 360, width: 120, height: 48, fill: '#fff', stroke: '#8c8c8c', label: 'Target' });
+
+    graph.addEdge({ source: 's', target: 't', router: 'normal', connector: 'normal', stroke: '#52c41a' });
+    graph.addEdge({ source: 's', target: 't', router: 'orthogonal', connector: 'rounded', stroke: '#1890ff' });
+    graph.addEdge({ source: 's', target: 't', router: 'manhattan', connector: 'rounded', stroke: '#722ed1' });
+    graph.addEdge({ source: 's', target: 't', router: 'manhattan', connector: 'smooth', stroke: '#fa541c' });
+  </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 02 端口</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    .panel { position: fixed; top: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); font-size: 13px; max-width: 300px; }
+    .panel h1 { font-size: 15px; margin: 0 0 6px; }
+    .panel code { background: #f5f5f5; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="panel">
+    <h1>GE · 02 端口 (Port)</h1>
+    <div>节点挂载 <code>Port</code>，边端点用 <code>ratio</code> 锚点指定连接位置。</div>
+  </div>
+  <script type="module">
+    import { Graph } from '@ge';
+
+    const graph = new Graph({ container: '#app', background: '#fafafa' });
+    await graph.ready;
+
+    const a = graph.addNode({ id: 'a', x: 100, y: 160, width: 150, height: 60, label: 'Node A' });
+    const b = graph.addNode({ id: 'b', x: 440, y: 160, width: 150, height: 60, label: 'Node B' });
+
+    // 右侧端口 / 左侧端口（相对 owner 的局部坐标）
+    graph.addPort(a, { id: 'pa-r', x: 150, y: 30, fill: '#1890ff' });
+    graph.addPort(b, { id: 'pb-l', x: 0, y: 30, fill: '#1890ff' });
+    graph.addPort(a, { id: 'pa-b', x: 75, y: 60, fill: '#fa541c' });
+    graph.addPort(b, { id: 'pb-b', x: 75, y: 60, fill: '#fa541c' });
+
+    // 端点用 ratio 锚点精确定位（dx/dy 相对中心比例）
+    graph.addEdge({
+      source: { cell: 'a', anchor: 'ratio', anchorArgs: { dx: 0.5, dy: 0 } },
+      target: { cell: 'b', anchor: 'ratio', anchorArgs: { dx: -0.5, dy: 0 } },
+      connector: 'rounded',
+      stroke: '#1890ff',
+    });
+    graph.addEdge({
+      source: { cell: 'a', anchor: 'ratio', anchorArgs: { dx: 0, dy: 0.5 } },
+      target: { cell: 'b', anchor: 'ratio', anchorArgs: { dx: 0, dy: 0.5 } },
+      router: 'orthogonal',
+      connector: 'rounded',
+      stroke: '#fa541c',
+    });
+  </script>
+</body>
+</html>
