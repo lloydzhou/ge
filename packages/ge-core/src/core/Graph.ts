@@ -145,6 +145,14 @@ export class Graph extends Canvas {
     for (const edge of data.edges ?? []) this.addEdge(edge as EdgeProps & { id?: string });
   }
 
+  // ---- 布局 ----
+  /** 应用布局结果（节点 id → 世界坐标）到图中 */
+  applyLayout(positions: Map<string, { x: number; y: number }>): void {
+    positions.forEach((p, id) => {
+      this.getNode(id)?.moveTo(p.x, p.y);
+    });
+  }
+
   // ---- 插件 ----
   use<T extends Plugin>(plugin: T): T {
     plugin.init(this);

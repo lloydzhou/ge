@@ -26,7 +26,13 @@
   },
   "devDependencies": {
     "@antv/ge-core": "workspace:*",
+    "@antv/ge-react": "workspace:*",
     "@types/node": "^20.11.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tsup": "^8.0.2",
     "typescript": "^5.4.5",
     "vite": "^5.2.0",

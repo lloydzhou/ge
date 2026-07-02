@@ -16,6 +16,9 @@
 - **渲染引擎可插拔**：基于 g-canvas / g-svg。
 - **交互编辑（L3）**：`DragPlugin`（拖拽，边实时跟随）/ `SelectionPlugin`（单/多选）/ `HistoryPlugin`（撤销重做）/ `ScrollerPlugin`（滚轮缩放·空白平移）/ `SnaplinePlugin`（对齐辅助线）/ Group embedding（分组整体移动）。
 - **数据能力（L4）**：`graph.toJSON()` / `fromJSON()` 序列化往返；`graph.toDataURL()` 导出 PNG；`MinimapPlugin` 缩略导航。
+- **自动布局（L4）**：`gridLayout` / `circularLayout` / `forceLayout`（力导向 FR）/ `hierarchicalLayout`（DAG 分层），纯函数 + `graph.applyLayout()`。
+- **拖拽创建（L4）**：`DndPlugin` + Stencil 面板，从模板拖出节点。
+- **框架封装（L4）**：`@antv/ge-react` 声明式 `<GraphView>` 组件。
 
 ## 架构分层
 
@@ -68,6 +71,8 @@ graph.getNodes();       // getElementsByClassName('ge-node')
 | `examples/03-router.html` | normal / orthogonal / manhattan 路由 × rounded / smooth 连接器对比 |
 | `examples/04-interaction.html` | 拖拽 + 选中 + 撤销/重做 + 序列化 + 小地图（完整交互编辑） |
 | `examples/05-advanced.html` | 滚轮缩放/平移 + 分组嵌入 + 对齐辅助线 + 导出 PNG |
+| `examples/06-stencil.html` | Stencil 拖拽创建 + 一键布局（grid/环形/力导向/层次） |
+| `examples/07-react.html` | `@antv/ge-react` 声明式 `<GraphView>` |
 
 ## 核心原语
 
@@ -99,17 +104,21 @@ pnpm test
 
 ```
 ge/
-├─ packages/ge-core/
-│  ├─ src/
-│  │  ├─ core/        Cell/Node/Edge/Port/Group/Graph + types/compute
-│  │  ├─ anchor/      统一锚点（node-anchor / edge-anchor / registry）
-│  │  ├─ edge/        router / connector（含 updatePath 原地更新）
-│  │  └─ utils/       几何 / 向量（纯函数）
-│  └─ __tests__/      Vitest 单测
-├─ examples/          嵌入式 HTML
-├─ vite.config.ts     examples dev server
-├─ vitest.config.ts   测试配置
-└─ tsconfig.base.json TS5 strict
+├─ packages/
+│  ├─ ge-core/           核心包
+│  │  ├─ src/
+│  │  │  ├─ core/        Cell/Node/Edge/Port/Group/Graph + types/compute
+│  │  │  ├─ anchor/      统一锚点（node-anchor / edge-anchor / registry）
+│  │  │  ├─ edge/        router / connector（含 updatePath 原地更新）
+│  │  │  ├─ plugins/     Drag/Selection/History/Scroller/Snapline/Dnd/Minimap
+│  │  │  ├─ layout/      grid/circular/force/hierarchical 自动布局
+│  │  │  └─ utils/       几何 / 向量（纯函数）
+│  │  └─ __tests__/      Vitest 单测
+│  └─ ge-react/          React 封装（<GraphView>）
+├─ examples/             嵌入式 HTML（01–07）
+├─ vite.config.ts        examples dev server（含 React 插件）
+├─ vitest.config.ts      测试配置
+└─ tsconfig.base.json    TS5 strict
 ```
 
 ## 路线图
@@ -118,7 +127,7 @@ ge/
 - [x] **L1** 核心原语 + 单测（Anchor / Router / Connector / utils）
 - [x] **L2** 领域元素 + Graph（最小可渲染 + 校验）
 - [~] **L3** 交互与编辑：✅ Drag / Selection / History / Scroller / Snapline / Group embedding　⬜ Transform
-- [~] **L4** 生态：✅ 序列化 / Minimap / Export（PNG）　⬜ Dnd / Stencil / 布局 / @antv/ge-react
+- [~] **L4** 生态：✅ 序列化 / Minimap / Export / Layout / Dnd / `@antv/ge-react`　⬜ Stencil 独立组件 / 更多布局算法
 
 ## License
 

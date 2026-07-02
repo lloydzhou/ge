@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 06 Stencil & Layout</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    .stencil { position: fixed; top: 16px; left: 16px; width: 150px; background: rgba(255,255,255,.92); padding: 12px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+    .stencil h3 { font-size: 13px; margin: 0 0 8px; color: #555; }
+    .tpl { padding: 10px; margin-bottom: 6px; background: #f5f7fa; border: 1px dashed #bbb; border-radius: 6px; text-align: center; cursor: grab; font-size: 13px; user-select: none; }
+    .tpl:hover { border-color: #1890ff; color: #1890ff; }
+    .tpl:active { cursor: grabbing; }
+    .toolbar { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
+    .toolbar button { padding: 8px 12px; border: 1px solid #d9d9d9; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .toolbar button:hover { border-color: #1890ff; color: #1890ff; }
+    .hint { position: fixed; bottom: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 10px 14px; border-radius: 8px; font-size: 12px; color: #555; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="stencil">
+    <h3>节点模板（拖到画布）</h3>
+    <div class="tpl" draggable="true" data-type="rect">矩形</div>
+    <div class="tpl" draggable="true" data-type="circle">圆形</div>
+    <div class="tpl" draggable="true" data-type="green">绿色块</div>
+  </div>
+  <div class="toolbar">
+    <button id="b-grid">网格布局</button>
+    <button id="b-circ">环形布局</button>
+    <button id="b-force">力导向</button>
+    <button id="b-hier">层次布局</button>
+  </div>
+  <div class="hint">从左侧拖模板到画布创建节点 → 右上按钮一键布局</div>
+  <script type="module">
+    import {
+      Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin,
+      ScrollerPlugin, DndPlugin,
+      gridLayout, circularLayout, forceLayout, hierarchicalLayout,
+    } from '@ge';
+
+    const graph = new Graph({ container: '#app', background: '#fafafa' });
+    await graph.ready;
+    graph.use(new DragPlugin());
+    graph.use(new SelectionPlugin());
+    graph.use(new HistoryPlugin());
+    graph.use(new MinimapPlugin());
+    graph.use(new ScrollerPlugin());
+    const dnd = graph.use(new DndPlugin());
+
+    dnd.registerTemplate({ type: 'rect', props: { width: 120, height: 50, shape: 'rect', fill: '#e6f7ff', stroke: '#1890ff', label: '矩形' } });
+    dnd.registerTemplate({ type: 'circle', props: { width: 70, height: 70, shape: 'circle', fill: '#fff7e6', stroke: '#fa8c16', label: '圆' } });
+    dnd.registerTemplate({ type: 'green', props: { width: 120, height: 50, fill: '#f6ffed', stroke: '#52c41a', label: '绿块' } });
+
+    // HTML5 拖拽：模板项 dragstart 写 dataTransfer
+    document.querySelectorAll('.tpl').forEach((el) => {
+      el.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/ge-template', el.dataset.type);
+      });
+    });
+
+    // 初始示例节点
+    graph.addNode({ id: 'n1', x: 320, y: 160, width: 120, height: 50, label: 'N1' });
+    graph.addNode({ id: 'n2', x: 560, y: 160, width: 120, height: 50, label: 'N2' });
+    graph.addNode({ id: 'n3', x: 440, y: 320, width: 120, height: 50, label: 'N3' });
+    graph.addEdge({ source: 'n1', target: 'n2' });
+    graph.addEdge({ source: 'n2', target: 'n3' });
+    graph.addEdge({ source: 'n1', target: 'n3' });
+
+    const toNodes = () => graph.getNodes().map((n) => ({ id: n.id }));
+    const toEdges = () => graph.getEdges().map((e) => {
+      const s = e.getAttribute('source'); const t = e.getAttribute('target');
+      return { source: typeof s === 'string' ? s : s.cell, target: typeof t === 'string' ? t : t.cell };
+    });
+
+    document.getElementById('b-grid').onclick = () => graph.applyLayout(gridLayout(toNodes(), { gap: 150, startX: 120, startY: 120 }));
+    document.getElementById('b-circ').onclick = () => graph.applyLayout(circularLayout(toNodes(), { cx: 560, cy: 320, radius: 220 }));
+    document.getElementById('b-force').onclick = () => graph.applyLayout(forceLayout(toNodes(), toEdges(), { iterations: 250, width: 1000, height: 600 }));
+    document.getElementById('b-hier').onclick = () => graph.applyLayout(hierarchicalLayout(toNodes(), toEdges(), { startX: 120, startY: 120 }));
+
+    window.ge = graph;
+    window.dnd = dnd;
+  </script>
+</body>
+</html>

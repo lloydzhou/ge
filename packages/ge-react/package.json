@@ -1,0 +1,30 @@
+{
+  "name": "@antv/ge-react",
+  "version": "2.0.0-alpha.0",
+  "description": "React bindings for GE (graph editor)",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "peerDependencies": {
+    "@antv/ge-core": "workspace:*",
+    "react": ">=17"
+  },
+  "devDependencies": {
+    "@types/react": "*",
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.5"
+  }
+}
