@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "pnpm run -r build",
+    "build": "pnpm --filter @antv/ge-core build && pnpm --filter @antv/ge-react build",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
