@@ -103,6 +103,7 @@ export class Edge extends Cell {
         break;
       case 'label':
         this.syncLabel();
+        this.update();
         break;
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);

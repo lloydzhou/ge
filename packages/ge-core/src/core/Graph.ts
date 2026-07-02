@@ -117,12 +117,17 @@ export class Graph extends Canvas {
   }
 
   // ---- 导出 ----
-  /** 导出为 data URL（PNG），底层取渲染 canvas 的 toDataURL */
+  /** 导出为 data URL：canvas 渲染→PNG，svg 渲染→SVG data URL */
   toDataURL(type: string = 'image/png', quality?: number): string {
     const container = this.getConfig().container as HTMLElement;
     const canvas = container.querySelector('canvas');
-    if (!canvas) throw new Error('[GE] canvas element not found for export');
-    return (canvas as HTMLCanvasElement).toDataURL(type, quality);
+    if (canvas) return (canvas as HTMLCanvasElement).toDataURL(type, quality);
+    const svg = container.querySelector('svg');
+    if (svg) {
+      const xml = new XMLSerializer().serializeToString(svg);
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    }
+    throw new Error('[GE] no canvas/svg element found for export');
   }
 
   // ---- 序列化 ----
