@@ -24,6 +24,7 @@ export class DragPlugin extends Plugin {
     super.init(graph);
 
     graph.addEventListener('pointerdown', (e: any) => {
+      if (e.altKey) return; // 触发键按下时交给 CreateEdge 接管连线创建
       const node = closestCell(e.target);
       if (!node) return;
       this.dragging = {

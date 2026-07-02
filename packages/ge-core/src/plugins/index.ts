@@ -6,3 +6,7 @@ export { MinimapPlugin } from './MinimapPlugin';
 export { ScrollerPlugin, type ScrollerOptions } from './ScrollerPlugin';
 export { SnaplinePlugin, type SnaplineOptions } from './SnaplinePlugin';
 export { DndPlugin, type DndTemplate } from './DndPlugin';
+export { CreateEdgePlugin, type CreateEdgeOptions } from './CreateEdgePlugin';
+export { KeyboardPlugin, type KeyboardOptions } from './KeyboardPlugin';
+export { ClipboardPlugin } from './ClipboardPlugin';
+export { TransformPlugin } from './TransformPlugin';

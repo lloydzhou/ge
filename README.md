@@ -14,7 +14,7 @@
 - **边原地更新**：Router/Connector 计算路径后 `setAttribute('d', ...)` 原地写回 Path，不销毁重建。
 - **事件驱动联动**：节点移动派发 `node:boundschange`，相连边监听后自动重算路径。
 - **渲染引擎可插拔**：基于 g-canvas / g-svg。
-- **交互编辑（L3）**：`DragPlugin`（拖拽，边实时跟随）/ `SelectionPlugin`（单/多选）/ `HistoryPlugin`（撤销重做）/ `ScrollerPlugin`（滚轮缩放·空白平移）/ `SnaplinePlugin`（对齐辅助线）/ Group embedding（分组整体移动）。
+- **交互编辑（L3）**：`Drag`（拖拽·边跟随）/ `Selection`（单/多选）/ `CreateEdge`（Alt+拖出连线）/ `Keyboard`（Delete 删除）/ `Clipboard`（复制·粘贴·克隆）/ `Transform`（选中集变换）/ `History`（撤销重做）/ `Scroller`（缩放·平移）/ `Snapline`（对齐线）/ Group embedding（分组移动）。
 - **数据能力（L4）**：`graph.toJSON()` / `fromJSON()` 序列化往返；`graph.toDataURL()` 导出 PNG；`MinimapPlugin` 缩略导航。
 - **自动布局（L4）**：`gridLayout` / `circularLayout` / `forceLayout`（力导向 FR）/ `hierarchicalLayout`（DAG 分层），纯函数 + `graph.applyLayout()`。
 - **拖拽创建（L4）**：`DndPlugin` + Stencil 面板，从模板拖出节点。
@@ -73,6 +73,7 @@ graph.getNodes();       // getElementsByClassName('ge-node')
 | `examples/05-advanced.html` | 滚轮缩放/平移 + 分组嵌入 + 对齐辅助线 + 导出 PNG |
 | `examples/06-stencil.html` | Stencil 拖拽创建 + 一键布局（grid/环形/力导向/层次） |
 | `examples/07-react.html` | `@antv/ge-react` 声明式 `<GraphView>` |
+| `examples/08-edit.html` | 拖出连线 + 键盘删除 + 复制粘贴克隆 + 多选变换 |
 
 ## 核心原语
 
@@ -126,7 +127,7 @@ ge/
 - [x] **L0** 工程地基（pnpm / TS5 / tsup / Vite / Vitest）
 - [x] **L1** 核心原语 + 单测（Anchor / Router / Connector / utils）
 - [x] **L2** 领域元素 + Graph（最小可渲染 + 校验）
-- [~] **L3** 交互与编辑：✅ Drag / Selection / History / Scroller / Snapline / Group embedding　⬜ Transform
+- [x] **L3** 交互与编辑：Drag / Selection / CreateEdge / Keyboard / Clipboard / Transform / History / Scroller / Snapline / Group embedding
 - [~] **L4** 生态：✅ 序列化 / Minimap / Export / Layout / Dnd / `@antv/ge-react`　⬜ Stencil 独立组件 / 更多布局算法
 
 ## License
