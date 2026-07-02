@@ -98,9 +98,19 @@ export class Graph extends Canvas {
 
   removeCell(id: string): void {
     const cell = this.document.getElementById(id);
-    if (cell) {
-      cell.remove();
+    if (!cell) return;
+    // 删除节点时连带清理以其为端点的边，避免孤儿边 / 数据不一致
+    const cls = (cell as any).className;
+    if (typeof cls === 'string' && cls.includes(CLASS.node)) {
+      for (const e of this.getEdges()) {
+        const s = e.getAttribute('source');
+        const t = e.getAttribute('target');
+        const sid = typeof s === 'string' ? s : s?.cell;
+        const tid = typeof t === 'string' ? t : t?.cell;
+        if (sid === id || tid === id) e.remove();
+      }
     }
+    cell.remove();
   }
 
   // ---- 查询 API（走 document API，无平行 Map） ----

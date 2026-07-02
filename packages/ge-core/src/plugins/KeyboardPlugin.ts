@@ -29,24 +29,11 @@ export class KeyboardPlugin extends Plugin {
       if (sel.length === 0) return;
       e.preventDefault();
       for (const id of sel) {
-        this.removeConnectedEdges(id);
-        this.graph.removeCell(id);
+        this.graph.removeCell(id); // removeCell 已连带清理相连边
       }
       (this.graph.getPlugin('selection') as any)?.clear?.();
     };
     window.addEventListener('keydown', this.handler);
-  }
-
-  /** 删除与节点相连的所有边 */
-  private removeConnectedEdges(nodeId: string): void {
-    const edges = this.graph.getEdges();
-    for (const edge of edges) {
-      const s = edge.getAttribute('source');
-      const t = edge.getAttribute('target');
-      const sid = typeof s === 'string' ? s : s?.cell;
-      const tid = typeof t === 'string' ? t : t?.cell;
-      if (sid === nodeId || tid === nodeId) edge.remove();
-    }
   }
 
   destroy(): void {
