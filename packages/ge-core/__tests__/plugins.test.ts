@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HistoryPlugin } from '../src/plugins/HistoryPlugin';
-import { closestCell } from '../src/plugins/plugin';
+import { closestCell, addClass, removeClass } from '../src/plugins/plugin';
 
 describe('HistoryPlugin 栈逻辑', () => {
   it('push / undo / redo 顺序', () => {
@@ -66,5 +66,26 @@ describe('closestCell', () => {
 
   it('空输入安全返回 null', () => {
     expect(closestCell(null)).toBeNull();
+  });
+});
+
+describe('addClass / removeClass', () => {
+  it('addClass 添加 + 去重', () => {
+    const el: any = { className: 'ge-node' };
+    addClass(el, 'hover');
+    expect(el.className).toBe('ge-node hover');
+    addClass(el, 'hover');
+    expect(el.className).toBe('ge-node hover');
+  });
+
+  it('removeClass 移除', () => {
+    const el: any = { className: 'ge-node hover selected' };
+    removeClass(el, 'hover');
+    expect(el.className).toBe('ge-node selected');
+  });
+
+  it('空输入安全', () => {
+    expect(() => addClass(null, 'x')).not.toThrow();
+    expect(() => removeClass(null, 'x')).not.toThrow();
   });
 });
