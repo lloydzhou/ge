@@ -130,9 +130,12 @@ export class Edge extends Cell {
     const srcCfg = normalizeEndpoint(s.source);
     const tgtCfg = normalizeEndpoint(s.target);
 
+    const srcShape = srcNode.getAttribute('shape');
+    const tgtShape = tgtNode.getAttribute('shape');
+
     const points = computeEdgePoints(
-      { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: srcCfg.anchorArgs },
-      { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: tgtCfg.anchorArgs },
+      { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
+      { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
       routerFn,
       s.waypoints as Point[] | undefined,
     );

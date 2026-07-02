@@ -56,6 +56,18 @@ export const anchorPerimeter: NodeAnchorFn = (bbox, args) => {
   const center = bboxCenter(bbox);
   const dir = args.direction;
   if (!dir) return center;
+  // 圆/椭圆：沿方向到真实圆弧（而非 bbox 方框），避免边连到圆外
+  if (args.shape === 'circle' || args.shape === 'ellipse') {
+    const rx = bbox.width / 2;
+    const ry = bbox.height / 2;
+    const dx = dir.x - center.x;
+    const dy = dir.y - center.y;
+    if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return center;
+    const sx = dx / rx;
+    const sy = dy / ry;
+    const sl = Math.hypot(sx, sy) || 1;
+    return { x: center.x + (sx / sl) * rx, y: center.y + (sy / sl) * ry };
+  }
   const box = args.padding ? expandBBox(bbox, args.padding) : bbox;
   return getBBoxEdgePoint(center, dir, box);
 };

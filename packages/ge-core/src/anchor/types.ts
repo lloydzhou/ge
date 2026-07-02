@@ -17,6 +17,8 @@ export interface NodeAnchorArgs {
   direction?: Point;
   /** 额外边距（perimeter 模式向外膨胀 bbox） */
   padding?: number;
+  /** 节点形状（perimeter 对 circle/ellipse 用真实圆弧求交，而非 bbox 方框） */
+  shape?: string;
 }
 
 /** 节点锚点函数：给定节点 bbox + 参数 → 返回锚点坐标 */
