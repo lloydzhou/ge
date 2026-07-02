@@ -62,7 +62,8 @@ export class ScrollerPlugin extends Plugin {
       const dx = e.viewportX - this.panning.x;
       const dy = e.viewportY - this.panning.y;
       const z = camera.getZoom() || 1;
-      camera.pan(-dx / z, -dy / z);
+      const pos = camera.getPosition();
+      camera.setPosition(pos[0] - dx / z, pos[1] - dy / z, pos[2]);
       this.panning = { x: e.viewportX, y: e.viewportY };
     });
 
