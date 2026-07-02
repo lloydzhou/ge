@@ -22,6 +22,17 @@ export class Group extends Node {
     });
   }
 
+  /** 移动分组时，同步通知组内子节点重发 boundschange（其世界位置已变，触发相连 edge 更新） */
+  protected applyPosition(): void {
+    super.applyPosition();
+    for (const child of this.children) {
+      const c = child as any;
+      if (c && typeof c.fire === 'function' && typeof c.className === 'string' && c.className.includes(CLASS.node)) {
+        c.fire('node:boundschange');
+      }
+    }
+  }
+
   /** 把节点嵌入分组：转为相对 group 的局部坐标，移动 group 时子节点自动跟随 */
   embed(node: Node): void {
     const world = node.getWorldBBox();
