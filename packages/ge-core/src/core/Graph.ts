@@ -31,6 +31,7 @@ import {
   createDefaultConnectorRegistry,
   type ConnectorRegistry,
 } from '../edge/connector';
+import type { Plugin } from '../plugins/plugin';
 
 const resolveContainer = (c: HTMLElement | string): HTMLElement =>
   typeof c === 'string' ? document.querySelector<HTMLElement>(c)! : c;
@@ -39,6 +40,7 @@ export class Graph extends Canvas {
   readonly anchors: AnchorRegistry;
   readonly routers: RouterRegistry;
   readonly connectors: ConnectorRegistry;
+  private plugins: Plugin[] = [];
 
   constructor(options: GraphOptions) {
     const container = resolveContainer(options.container);
@@ -111,5 +113,37 @@ export class Graph extends Canvas {
 
   getEdges(): Edge[] {
     return this.document.getElementsByClassName<Edge>(CLASS.edge);
+  }
+
+  // ---- 序列化 ----
+  toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
+    const pick = (a: any, keys: string[]): Record<string, unknown> => {
+      const out: Record<string, unknown> = {};
+      for (const k of keys) if (a[k] !== undefined) out[k] = a[k];
+      return out;
+    };
+    const nodeKeys = ['x', 'y', 'width', 'height', 'shape', 'fill', 'stroke', 'strokeWidth', 'radius', 'label'];
+    const edgeKeys = ['source', 'target', 'router', 'connector', 'stroke', 'strokeWidth'];
+    const nodes = this.getNodes().map((n: any) => ({ ...pick(n.attributes, nodeKeys), id: n.id }));
+    const edges = this.getEdges().map((e: any) => ({ ...pick(e.attributes, edgeKeys), id: e.id }));
+    return { nodes, edges };
+  }
+
+  fromJSON(data: { nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[] }): void {
+    for (const n of this.getNodes()) n.remove();
+    for (const e of this.getEdges()) e.remove();
+    for (const node of data.nodes ?? []) this.addNode(node as NodeProps & { id?: string });
+    for (const edge of data.edges ?? []) this.addEdge(edge as EdgeProps & { id?: string });
+  }
+
+  // ---- 插件 ----
+  use<T extends Plugin>(plugin: T): T {
+    plugin.init(this);
+    this.plugins.push(plugin);
+    return plugin;
+  }
+
+  getPlugin(name: string): Plugin | undefined {
+    return this.plugins.find((p) => p.name === name);
   }
 }

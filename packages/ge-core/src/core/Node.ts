@@ -41,6 +41,8 @@ export class Node extends Cell {
 
   protected body?: DisplayObject;
   protected labelText?: Text;
+  private _origStroke?: string;
+  private _origLineWidth?: number;
 
   constructor(config: Record<string, any> = {}) {
     super({
@@ -114,6 +116,9 @@ export class Node extends Cell {
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
         break;
+      case 'selected':
+        this.applySelected(newV);
+        break;
       case 'label':
         this.syncLabel();
         break;
@@ -141,6 +146,24 @@ export class Node extends Cell {
     } else {
       this.labelText.setAttribute('text', text as any);
       this.labelText.setLocalPosition(w / 2, h / 2);
+    }
+  }
+
+  /** 选中态视觉强调 */
+  protected applySelected(selected: any): void {
+    if (!this.body) return;
+    if (selected) {
+      if (this._origStroke === undefined) {
+        const s = this.styleProps();
+        this._origStroke = s.stroke as string;
+        this._origLineWidth = s.strokeWidth as number;
+      }
+      this.body.setAttribute('stroke', '#fa541c');
+      this.body.setAttribute('lineWidth', 2.5);
+    } else if (this._origStroke !== undefined) {
+      this.body.setAttribute('stroke', this._origStroke);
+      this.body.setAttribute('lineWidth', this._origLineWidth);
+      this._origStroke = undefined;
     }
   }
 
