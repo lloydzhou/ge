@@ -21,6 +21,8 @@ export interface NodeStyleProps {
   strokeWidth?: number;
   radius?: number;
   label?: string;
+  /** 交互状态样式：{ hover: {...}, selected: {...} }，按 className 上的状态 token 触发 */
+  stateStyles?: Record<string, Record<string, unknown>>;
   [key: string]: any;
 }
 
@@ -41,8 +43,8 @@ export class Node extends Cell {
 
   protected body?: DisplayObject;
   protected labelText?: Text;
-  private _origStroke?: string;
-  private _origLineWidth?: number;
+  /** 当前被状态样式覆盖的属性原值（状态移除时还原） */
+  private appliedState: Record<string, unknown> = {};
 
   constructor(config: Record<string, any> = {}) {
     super({
@@ -56,6 +58,7 @@ export class Node extends Cell {
     this.buildBody();
     this.applyPosition();
     this.syncLabel();
+    this.applyStates();
   }
 
   protected buildBody(): void {
@@ -116,8 +119,9 @@ export class Node extends Cell {
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
         break;
-      case 'selected':
-        this.applySelected(newV);
+      case 'class':
+      case 'stateStyles':
+        this.applyStates();
         break;
       case 'label':
         this.syncLabel();
@@ -149,21 +153,38 @@ export class Node extends Cell {
     }
   }
 
-  /** 选中态视觉强调 */
-  protected applySelected(selected: any): void {
+  /**
+   * 根据 className 上的状态 token 应用 stateStyles（可配置）。
+   * - 先还原上次覆盖的属性，再按当前激活状态重新合并应用。
+   * - stateStyles 与内置默认合并；strokeWidth 自动映射为 body 的 lineWidth。
+   */
+  protected applyStates(): void {
     if (!this.body) return;
-    if (selected) {
-      if (this._origStroke === undefined) {
-        const s = this.styleProps();
-        this._origStroke = s.stroke as string;
-        this._origLineWidth = s.strokeWidth as number;
+    for (const [k, v] of Object.entries(this.appliedState)) {
+      this.body.setAttribute(k as any, v as any);
+    }
+    this.appliedState = {};
+    const s = this.styleProps();
+    const defaults: Record<string, Record<string, unknown>> = {
+      hover: { stroke: '#69b1ff' },
+      selected: { stroke: '#fa541c', strokeWidth: 2.5 },
+    };
+    const all = { ...defaults, ...((s.stateStyles as Record<string, Record<string, unknown>>) || {}) };
+    const tokens = (this.className || '')
+      .split(/\s+/)
+      .filter((t) => t && t !== CLASS.node && t !== CLASS.cell && t !== CLASS.group);
+    const merged: Record<string, unknown> = {};
+    for (const token of tokens) {
+      const st = all[token];
+      if (st) Object.assign(merged, st);
+    }
+    const mapKey = (k: string): string => (k === 'strokeWidth' ? 'lineWidth' : k);
+    for (const [k, v] of Object.entries(merged)) {
+      const bk = mapKey(k);
+      if (!(bk in this.appliedState)) {
+        this.appliedState[bk] = this.body.getAttribute(bk as any);
       }
-      this.body.setAttribute('stroke', '#fa541c');
-      this.body.setAttribute('lineWidth', 2.5);
-    } else if (this._origStroke !== undefined) {
-      this.body.setAttribute('stroke', this._origStroke);
-      this.body.setAttribute('lineWidth', this._origLineWidth);
-      this._origStroke = undefined;
+      this.body.setAttribute(bk as any, v as any);
     }
   }
 

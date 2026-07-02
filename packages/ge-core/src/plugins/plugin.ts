@@ -28,3 +28,16 @@ export const closestCell = (el: any): any => {
   }
   return null;
 };
+
+/** DOM 风格的 className 操作（g-lite className 为字符串） */
+export const addClass = (el: any, cls: string): void => {
+  if (!el) return;
+  const cur = (el.className || '').split(/\s+/).filter(Boolean);
+  if (!cur.includes(cls)) cur.push(cls);
+  el.className = cur.join(' ');
+};
+
+export const removeClass = (el: any, cls: string): void => {
+  if (!el) return;
+  el.className = (el.className || '').split(/\s+/).filter((c: string) => c && c !== cls).join(' ');
+};

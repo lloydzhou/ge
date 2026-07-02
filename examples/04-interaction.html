@@ -38,7 +38,7 @@
   </div>
   <div class="status" id="status">selected: 无</div>
   <script type="module">
-    import { Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin } from '@ge';
+    import { Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin, HoverPlugin } from '@ge';
 
     const graph = new Graph({ container: '#app', background: '#fafafa' });
     await graph.ready;
@@ -47,6 +47,7 @@
     const selection = graph.use(new SelectionPlugin());
     const history = graph.use(new HistoryPlugin());
     graph.use(new MinimapPlugin());
+    graph.use(new HoverPlugin());
 
     graph.addNode({ id: 'a', x: 120, y: 160, width: 140, height: 54, fill: '#e6f7ff', stroke: '#1890ff', label: '拖我' });
     graph.addNode({ id: 'b', x: 480, y: 110, width: 140, height: 54, label: '连到这里' });

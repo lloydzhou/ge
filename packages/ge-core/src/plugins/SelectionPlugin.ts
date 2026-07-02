@@ -5,7 +5,7 @@
  * - Shift / Cmd / Ctrl + 点击：多选切换。
  * - 选中通过 node.setAttribute('selected', true)，视觉由 Node 响应。
  */
-import { Plugin, closestCell } from './plugin';
+import { Plugin, closestCell, addClass, removeClass } from './plugin';
 
 export class SelectionPlugin extends Plugin {
   readonly name = 'selection';
@@ -33,12 +33,12 @@ export class SelectionPlugin extends Plugin {
 
   select(id: string): void {
     this.selected.add(id);
-    this.graph.getNode(id)?.setAttribute('selected', true);
+    addClass(this.graph.getNode(id), 'selected');
   }
 
   deselect(id: string): void {
     this.selected.delete(id);
-    this.graph.getNode(id)?.setAttribute('selected', false);
+    removeClass(this.graph.getNode(id), 'selected');
   }
 
   clear(): void {

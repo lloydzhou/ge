@@ -15,7 +15,8 @@
 - **边视觉**：终点方向箭头（marker，颜色跟随 stroke）+ 边标签（自动定位路径中点）。
 - **事件驱动联动**：节点移动派发 `node:boundschange`，相连边监听后自动重算路径。
 - **渲染引擎可插拔**：默认 `g-svg`（每图形即真实 DOM 元素，便于 querySelector 检视/自动化验证），大图可切 `renderer: 'canvas'`（g-canvas，性能更优）。
-- **交互编辑（L3）**：`Drag`（拖拽·边跟随）/ `Selection`（单/多选）/ `CreateEdge`（Alt+拖出连线）/ `Keyboard`（Delete 删除）/ `Clipboard`（复制·粘贴·克隆）/ `Transform`（选中集变换）/ `History`（撤销重做）/ `Scroller`（缩放·平移）/ `Snapline`（对齐线）/ Group embedding（分组移动）。
+- **交互编辑（L3）**：`Drag`（拖拽·边跟随）/ `Selection`（单/多选）/ `Hover`（悬停高亮）/ `CreateEdge`（Alt+拖出连线）/ `Keyboard`（Delete 删除）/ `Clipboard`（复制·粘贴·克隆）/ `Transform`（选中集变换）/ `History`（撤销重做）/ `Scroller`（缩放·平移）/ `Snapline`（对齐线）/ Group embedding（分组移动）。
+- **状态样式可配置**：交互状态（hover/selected/...）通过 `className` 触发（DOM 风格），样式由 `stateStyles` 配置，含默认值。
 - **数据能力（L4）**：`graph.toJSON()` / `fromJSON()` 序列化往返；`graph.toDataURL()` 导出 PNG；`MinimapPlugin` 缩略导航。
 - **自动布局（L4）**：`gridLayout` / `circularLayout` / `forceLayout`（力导向 FR）/ `hierarchicalLayout`（DAG 分层），纯函数 + `graph.applyLayout()`。
 - **拖拽创建（L4）**：`DndPlugin` + Stencil 面板，从模板拖出节点。
