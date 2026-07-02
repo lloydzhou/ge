@@ -40,14 +40,11 @@ export class ScrollerPlugin extends Plugin {
       const cur = camera.getZoom();
       const next = clamp(cur * factor, minZoom, maxZoom);
       if (Math.abs(next - cur) < 1e-6) return;
-      // 以光标为中心：保持光标处世界坐标不变（pan 未实现时退化为中心缩放）
-      const wBefore = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-      camera.setZoom(next);
+      // 以光标为中心缩放：优先用 g-lite 原生 setZoomByViewportPoint，失败则退化为普通缩放
       try {
-        const wAfter = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-        camera.pan((wBefore as any).x - (wAfter as any).x, (wBefore as any).y - (wAfter as any).y);
+        camera.setZoomByViewportPoint(next, e.viewportX, e.viewportY);
       } catch {
-        /* 退化为中心缩放 */
+        camera.setZoom(next);
       }
     });
 
