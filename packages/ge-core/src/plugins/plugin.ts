@@ -41,3 +41,13 @@ export const removeClass = (el: any, cls: string): void => {
   if (!el) return;
   el.className = (el.className || '').split(/\s+/).filter((c: string) => c && c !== cls).join(' ');
 };
+
+/** 向上查找最近的边（ge-edge） */
+export const closestEdge = (el: any): any => {
+  let cur: any = el;
+  while (cur) {
+    if (typeof cur.className === 'string' && cur.className.includes(CLASS.edge)) return cur;
+    cur = cur.parentNode;
+  }
+  return null;
+};

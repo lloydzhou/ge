@@ -12,3 +12,4 @@ export { ClipboardPlugin } from './ClipboardPlugin';
 export { TransformPlugin } from './TransformPlugin';
 export { HoverPlugin } from './HoverPlugin';
 export { ResizePlugin } from './ResizePlugin';
+export { VertexPlugin } from './VertexPlugin';
