@@ -70,6 +70,9 @@ export class Graph extends Canvas {
 
   // ---- 增删 API（走 document.createElement + appendChild） ----
   addNode(props: NodeProps & { id?: string }): Node {
+    if (props.id && this.getNode(props.id)) {
+      console.warn(`[GE] Duplicate node id "${props.id}" — getElementById will return the first match`);
+    }
     const node = this.document.createElement<Node, any>(TAG.node, { id: props.id, style: props as any });
     this.appendChild(node);
     return node;
