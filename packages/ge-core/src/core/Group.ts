@@ -21,4 +21,14 @@ export class Group extends Node {
       },
     });
   }
+
+  /** 把节点嵌入分组：转为相对 group 的局部坐标，移动 group 时子节点自动跟随 */
+  embed(node: Node): void {
+    const world = node.getWorldBBox();
+    const gx = (this.getAttribute('x') as number) ?? 0;
+    const gy = (this.getAttribute('y') as number) ?? 0;
+    this.appendChild(node);
+    node.setAttribute('x', world.x - gx);
+    node.setAttribute('y', world.y - gy);
+  }
 }

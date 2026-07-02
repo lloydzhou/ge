@@ -186,14 +186,21 @@ export class Node extends Cell {
     return this;
   }
 
-  /** 世界坐标包围盒（供 Edge 计算） */
+  /** 世界坐标包围盒（供 Edge 计算；用 g-lite getBounds 以支持 group 嵌套） */
   getWorldBBox(): BBox {
-    const s = this.styleProps();
-    return {
-      x: s.x as number,
-      y: s.y as number,
-      width: s.width as number,
-      height: s.height as number,
-    };
+    try {
+      const b = this.getBounds();
+      const hx = b.halfExtents[0];
+      const hy = b.halfExtents[1];
+      return {
+        x: b.center[0] - hx,
+        y: b.center[1] - hy,
+        width: hx * 2,
+        height: hy * 2,
+      };
+    } catch {
+      const s = this.styleProps();
+      return { x: s.x as number, y: s.y as number, width: s.width as number, height: s.height as number };
+    }
   }
 }

@@ -115,6 +115,15 @@ export class Graph extends Canvas {
     return this.document.getElementsByClassName<Edge>(CLASS.edge);
   }
 
+  // ---- 导出 ----
+  /** 导出为 data URL（PNG），底层取渲染 canvas 的 toDataURL */
+  toDataURL(type: string = 'image/png', quality?: number): string {
+    const container = this.getConfig().container as HTMLElement;
+    const canvas = container.querySelector('canvas');
+    if (!canvas) throw new Error('[GE] canvas element not found for export');
+    return (canvas as HTMLCanvasElement).toDataURL(type, quality);
+  }
+
   // ---- 序列化 ----
   toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
     const pick = (a: any, keys: string[]): Record<string, unknown> => {
