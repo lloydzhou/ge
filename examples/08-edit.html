@@ -35,7 +35,7 @@
   <script type="module">
     import {
       Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin,
-      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin,
+      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin, ResizePlugin,
     } from '@ge';
 
     const graph = new Graph({ container: '#app', background: '#fafafa' });
@@ -48,6 +48,7 @@
     graph.use(new KeyboardPlugin());
     const clipboard = graph.use(new ClipboardPlugin());
     graph.use(new TransformPlugin());
+    graph.use(new ResizePlugin());
 
     graph.addNode({ id: 'a', x: 200, y: 240, width: 130, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'A' });
     graph.addNode({ id: 'b', x: 540, y: 180, width: 130, height: 50, label: 'B' });

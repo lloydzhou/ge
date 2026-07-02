@@ -11,3 +11,4 @@ export { KeyboardPlugin, type KeyboardOptions } from './KeyboardPlugin';
 export { ClipboardPlugin } from './ClipboardPlugin';
 export { TransformPlugin } from './TransformPlugin';
 export { HoverPlugin } from './HoverPlugin';
+export { ResizePlugin } from './ResizePlugin';
