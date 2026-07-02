@@ -71,6 +71,8 @@ export interface GraphOptions {
   width?: number;
   height?: number;
   background?: string;
+  /** 底层渲染器：'svg'（默认，DOM 可检视）| 'canvas'（大图性能更优） */
+  renderer?: 'canvas' | 'svg';
 }
 
 /** 自定义元素 tag 名（用于 customElements.define / createElement） */

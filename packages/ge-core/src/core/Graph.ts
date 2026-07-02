@@ -8,6 +8,7 @@
  */
 import { Canvas } from '@antv/g-lite';
 import { Renderer as CanvasRenderer } from '@antv/g-canvas';
+import { Renderer as SVGRenderer } from '@antv/g-svg';
 import { Node } from './Node';
 import { Edge } from './Edge';
 import { Port } from './Port';
@@ -46,7 +47,7 @@ export class Graph extends Canvas {
     const container = resolveContainer(options.container);
     const width = options.width ?? container.clientWidth ?? 800;
     const height = options.height ?? container.clientHeight ?? 600;
-    const renderer = new CanvasRenderer();
+    const renderer = options.renderer === 'canvas' ? new CanvasRenderer() : new SVGRenderer();
     super({
       container,
       width,
