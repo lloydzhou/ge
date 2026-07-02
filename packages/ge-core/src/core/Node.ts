@@ -164,6 +164,7 @@ export class Node extends Cell {
     if (!text) {
       this.labelText?.destroy();
       this.labelText = undefined;
+      this.subElements.delete('label');
       return;
     }
     const w = s.width as number;
@@ -173,6 +174,7 @@ export class Node extends Cell {
         style: { text, x: w / 2, y: h / 2, fontSize: 14, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
       });
       this.appendChild(this.labelText);
+      this.subElements.set('label', this.labelText);
     } else {
       this.labelText.setAttribute('text', text as any);
       this.labelText.setLocalPosition(w / 2, h / 2);
@@ -186,31 +188,52 @@ export class Node extends Cell {
    */
   protected applyStates(): void {
     if (!this.body) return;
-    for (const [k, v] of Object.entries(this.appliedState)) {
-      this.body.setAttribute(k as any, v as any);
+    // 还原：appliedState 的 key 形如 "selector::attr"
+    for (const [sk, v] of Object.entries(this.appliedState)) {
+      const idx = sk.indexOf('::');
+      const selector = idx > 0 ? sk.slice(0, idx) : 'body';
+      const attr = idx > 0 ? sk.slice(idx + 2) : sk;
+      const el = this.subElements.get(selector) || this.body;
+      el?.setAttribute(attr as any, v as any);
     }
     this.appliedState = {};
     const s = this.styleProps();
-    const defaults: Record<string, Record<string, unknown>> = {
-      hover: { stroke: '#69b1ff' },
-      selected: { stroke: '#fa541c', strokeWidth: 2.5 },
+    // 默认按 selector 粒度
+    const defaults: Record<string, Record<string, Record<string, unknown>>> = {
+      hover: { body: { stroke: '#69b1ff' } },
+      selected: { body: { stroke: '#fa541c', lineWidth: 2.5 } },
     };
-    const all = { ...defaults, ...((s.stateStyles as Record<string, Record<string, unknown>>) || {}) };
+    const all = { ...defaults, ...((s.stateStyles as Record<string, any>) || {}) };
     const tokens = (this.className || '')
       .split(/\s+/)
       .filter((t) => t && t !== CLASS.node && t !== CLASS.cell && t !== CLASS.group);
-    const merged: Record<string, unknown> = {};
+    // 合并激活状态 → selector -> props
+    const merged: Record<string, Record<string, unknown>> = {};
     for (const token of tokens) {
-      const st = all[token];
-      if (st) Object.assign(merged, st);
+      const attrs = all[token];
+      if (!attrs) continue;
+      for (const [k, v] of Object.entries(attrs)) {
+        if (v && typeof v === 'object') {
+          // selector 粒度：{ body: {...}, label: {...} }
+          if (!merged[k]) merged[k] = {};
+          Object.assign(merged[k], v as object);
+        } else {
+          // 旧格式（直接属性）→ 作用于 body
+          if (!merged.body) merged.body = {};
+          merged.body[k] = v;
+        }
+      }
     }
     const mapKey = (k: string): string => (k === 'strokeWidth' ? 'lineWidth' : k);
-    for (const [k, v] of Object.entries(merged)) {
-      const bk = mapKey(k);
-      if (!(bk in this.appliedState)) {
-        this.appliedState[bk] = this.body.getAttribute(bk as any);
+    for (const [selector, props] of Object.entries(merged)) {
+      const el = this.subElements.get(selector) || (selector === 'body' ? this.body : undefined);
+      if (!el) continue;
+      for (const [k, v] of Object.entries(props)) {
+        const bk = mapKey(k);
+        const sk = `${selector}::${bk}`;
+        if (!(sk in this.appliedState)) this.appliedState[sk] = el.getAttribute(bk as any);
+        el.setAttribute(bk as any, v as any);
       }
-      this.body.setAttribute(bk as any, v as any);
     }
   }
 
