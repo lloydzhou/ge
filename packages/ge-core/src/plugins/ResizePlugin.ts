@@ -37,12 +37,12 @@ export class ResizePlugin extends Plugin {
     this.handle.addEventListener('pointerdown', (e: PointerEvent) => {
       if (!this.target) return;
       e.stopPropagation();
-      const zoom = graph.getCamera().getZoom() || 1;
       this.resizing = {
         startX: e.clientX,
         startY: e.clientY,
-        startW: (this.target.getAttribute('width') as number) / zoom,
-        startH: (this.target.getAttribute('height') as number) / zoom,
+        // 存世界坐标的初始尺寸（不除 zoom），与 dx/dy（世界 delta）单位一致
+        startW: this.target.getAttribute('width') as number,
+        startH: this.target.getAttribute('height') as number,
       };
     });
     window.addEventListener('pointermove', (e: PointerEvent) => {
