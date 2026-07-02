@@ -8,12 +8,24 @@
 import type { DisplayObject } from '@antv/g-lite';
 import type { NodeStyleProps } from '../core/Node';
 
+export interface MarkupItem {
+  /** g-lite 形状标签：rect / circle / path / text ... */
+  tagName: string;
+  /** 选择器，用于后续按 selector 寻址（如 'body' / 'header' / 'label'） */
+  selector?: string;
+  /** 该子元素的样式 */
+  attrs?: Record<string, unknown>;
+}
+export type Markup = MarkupItem[];
+
 export interface ShapeDefinition {
   name: string;
   /** 该 shape 的默认样式（合并到节点属性） */
   defaults?: Partial<NodeStyleProps>;
-  /** 创建主体渲染元素（rect / circle / path ...） */
-  create: (style: NodeStyleProps) => DisplayObject;
+  /** 声明式子元素（与 create 二选一；有 markup 时按其渲染并建立 selector 索引） */
+  markup?: Markup;
+  /** 创建主体渲染元素（与 markup 二选一） */
+  create?: (style: NodeStyleProps) => DisplayObject;
 }
 
 export class ShapeRegistry {

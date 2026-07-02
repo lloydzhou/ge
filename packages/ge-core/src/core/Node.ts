@@ -9,6 +9,7 @@ import { Rect, Circle, Ellipse, Text, type DisplayObject } from '@antv/g-lite';
 import { Cell } from './Cell';
 import { CLASS, type ShapeName } from './types';
 import type { BBox } from '../utils/types';
+import type { Markup } from '../shape/registry';
 
 export interface NodeStyleProps {
   x?: number;
@@ -42,6 +43,8 @@ export class Node extends Cell {
   static readonly tag: string = 'ge-node';
 
   protected body?: DisplayObject;
+  /** 子元素 selector 索引（markup 模式下由 shape 声明，create 模式下含 'body'） */
+  protected subElements = new Map<string, DisplayObject>();
   protected labelText?: Text;
   /** 当前被状态样式覆盖的属性原值（状态移除时还原） */
   private appliedState: Record<string, unknown> = {};
@@ -63,9 +66,33 @@ export class Node extends Cell {
 
   protected buildBody(): void {
     const s = this.styleProps();
-    this.body?.destroy();
-    this.body = this.createBody(s);
-    this.appendChild(this.body);
+    for (const el of this.subElements.values()) el.destroy();
+    this.subElements.clear();
+    this.body = undefined;
+    const graph: any = (this.ownerDocument as any)?.defaultView;
+    const def = graph?.shapes?.resolve(s.shape as string);
+    if (def?.markup?.length && this.ownerDocument) {
+      this.buildFromMarkup(def.markup);
+      this.body = this.subElements.get('body');
+    } else {
+      this.body = this.createBody(s);
+      this.subElements.set('body', this.body);
+      if (this.body) this.appendChild(this.body);
+    }
+  }
+
+  /** 按 markup 声明创建子元素并建立 selector 索引 */
+  protected buildFromMarkup(markup: Markup): void {
+    for (const item of markup) {
+      const el = this.ownerDocument!.createElement<DisplayObject, any>(item.tagName, { style: item.attrs || {} });
+      if (item.selector) this.subElements.set(item.selector, el);
+      this.appendChild(el);
+    }
+  }
+
+  /** 按 selector 获取子元素（'body' / 'header' / 'label' ...） */
+  getSubElement(selector: string): DisplayObject | undefined {
+    return this.subElements.get(selector);
   }
 
   protected createBody(s: NodeStyleProps): DisplayObject {
