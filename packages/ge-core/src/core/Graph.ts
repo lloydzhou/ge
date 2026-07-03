@@ -64,6 +64,7 @@ export class Graph extends Canvas {
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
     this.registerElements();
+    this.addEventListener('afterrender', () => { if (this._culling) this.cullViewport(); });
   }
 
   /** 平移画布（dx,dy 视口像素）。用 root.translate（2D）而非 camera.position（g-lite SVG 下不一致） */
@@ -216,6 +217,33 @@ export class Graph extends Canvas {
   clear(): void {
     for (const e of this.getEdges()) e.remove();
     for (const n of this.getNodes()) n.remove();
+  }
+
+  // ---- 虚拟渲染（viewport culling） ----
+  private _culling = false;
+  /** 启用/禁用视口裁剪（大图性能优化，只渲染可见节点） */
+  set culling(v: boolean) {
+    this._culling = v;
+    if (!v) { for (const n of this.getNodes() as any[]) if (n.getAttribute('visible') !== false) (n as any).visible = true; }
+    else this.cullViewport();
+  }
+  get culling(): boolean { return this._culling; }
+
+  /** 裁剪视口外节点（隐藏不可见的，提升大图性能） */
+  cullViewport(): void {
+    if (!this._culling) return;
+    const cfg = this.getConfig();
+    const w = cfg.width ?? 800, h = cfg.height ?? 600;
+    const tl = this.viewport2Canvas({ x: 0, y: 0 });
+    const br = this.viewport2Canvas({ x: w, y: h });
+    const minX = Math.min(tl.x, br.x), maxX = Math.max(tl.x, br.x);
+    const minY = Math.min(tl.y, br.y), maxY = Math.max(tl.y, br.y);
+    for (const n of this.getNodes() as any[]) {
+      if (n.getAttribute('visible') === false) continue;
+      const bb = n.getWorldBBox();
+      const inView = bb.x + bb.width >= minX && bb.x <= maxX && bb.y + bb.height >= minY && bb.y <= maxY;
+      if ((n as any).visible !== inView) (n as any).visible = inView;
+    }
   }
 
   // ---- 导出 ----
