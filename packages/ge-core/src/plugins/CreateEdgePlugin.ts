@@ -44,12 +44,13 @@ export class CreateEdgePlugin extends Plugin {
 
     graph.addEventListener('pointerdown', (e: any) => {
       if (!matchTrigger(e)) return;
-      const node = closestCell(e.target);
+      const node = graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
       const c = bboxCenter(node.getWorldBBox());
+      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
       const ghost = new Path({
         style: {
-          d: `M ${c.x} ${c.y} L ${e.canvasX} ${e.canvasY}`,
+          d: `M ${c.x} ${c.y} L ${w.x} ${w.y}`,
           stroke: this.opts.stroke,
           lineWidth: 1.5,
           lineDash: [5, 5],
@@ -64,7 +65,8 @@ export class CreateEdgePlugin extends Plugin {
     graph.addEventListener('pointermove', (e: any) => {
       if (!this.connecting) return;
       const c = bboxCenter(this.connecting.source.getWorldBBox());
-      this.connecting.ghost.setAttribute('d', `M ${c.x} ${c.y} L ${e.canvasX} ${e.canvasY}`);
+      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
+      this.connecting.ghost.setAttribute('d', `M ${c.x} ${c.y} L ${w.x} ${w.y}`);
     });
 
     const end = (e: any): void => {
@@ -72,7 +74,7 @@ export class CreateEdgePlugin extends Plugin {
       const { source, ghost } = this.connecting;
       this.connecting = null;
       ghost.destroy();
-      const target = closestCell(e.target);
+      const target = graph.pickNode(e.viewportX, e.viewportY);
       if (target && target !== source) {
         this.graph.addEdge({
           source: source.id,
