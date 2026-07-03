@@ -51,6 +51,7 @@ export class Edge extends Cell {
   protected startMarker?: Path;
   protected labelText?: Text;
   protected _labelTexts: Text[] = [];
+  private dashRafId: number | null = null;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
@@ -120,6 +121,9 @@ export class Edge extends Cell {
       case 'opacity':
         this.body?.setAttribute('opacity', newV);
         break;
+      case 'lineDashFlow':
+        if (newV) this.startDashFlow(); else this.stopDashFlow();
+        break;
       case 'visible':
         this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
         break;
@@ -185,6 +189,21 @@ export class Edge extends Cell {
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
     node.addEventListener('node:boundschange', () => this.update());
+  }
+
+  /** 流动虚线动画 */
+  protected startDashFlow(): void {
+    if (this.dashRafId != null) return;
+    let offset = 0;
+    const animate = (): void => {
+      offset -= 0.5;
+      this.body?.setAttribute('lineDashOffset', offset);
+      this.dashRafId = requestAnimationFrame(animate);
+    };
+    this.dashRafId = requestAnimationFrame(animate);
+  }
+  protected stopDashFlow(): void {
+    if (this.dashRafId != null) { cancelAnimationFrame(this.dashRafId); this.dashRafId = null; }
   }
 
   /** 创建终点箭头 marker（颜色跟随 stroke） */
