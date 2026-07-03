@@ -14,6 +14,7 @@ export class VertexPlugin extends Plugin {
   private activeEdge?: any;
   private handles: HTMLDivElement[] = [];
   private srcHandle?: HTMLDivElement;
+  private edgeDrag: { sx: number; sy: number; wps: any[] } | null = null;
   private tgtHandle?: HTMLDivElement;
 
   init(graph: any): void {
@@ -35,10 +36,26 @@ export class VertexPlugin extends Plugin {
 
     graph.addEventListener('afterrender', () => { if (this.activeEdge) this.syncHandles(); });
     graph.addEventListener('pointerdown', (e: any) => {
-      if (closestEdge(e.target) || e.target?.getAttribute?.('data-ge-vertex') || e.target?.getAttribute?.('data-ge-endpoint')) return;
+      const edge = closestEdge(e.target);
+      // 已激活边的 body → 整段拖拽（所有 waypoints 平移）
+      if (edge && edge === this.activeEdge) {
+        this.edgeDrag = { sx: e.clientX, sy: e.clientY, wps: ((edge.getAttribute('waypoints') as Point[]) || []).map((p: Point) => ({ ...p })) };
+        return;
+      }
+      if (edge || e.target?.getAttribute?.('data-ge-vertex') || e.target?.getAttribute?.('data-ge-endpoint')) return;
       this.activeEdge = undefined;
       this.clearHandles();
     });
+    graph.addEventListener('pointermove', (e: any) => {
+      if (!this.edgeDrag || !this.activeEdge) return;
+      const zoom = graph.getCamera().getZoom() || 1;
+      const dx = (e.clientX - this.edgeDrag.sx) / zoom;
+      const dy = (e.clientY - this.edgeDrag.sy) / zoom;
+      const newWps = this.edgeDrag.wps.map((wp: any) => ({ x: wp.x + dx, y: wp.y + dy }));
+      this.activeEdge.setAttribute('waypoints', newWps);
+    });
+    graph.addEventListener('pointerup', () => { this.edgeDrag = null; });
+    graph.addEventListener('pointerupoutside', () => { this.edgeDrag = null; });
 
     this.srcHandle = this.createEndpointHandle(container, 'source');
     this.tgtHandle = this.createEndpointHandle(container, 'target');
