@@ -288,4 +288,14 @@ export class Node extends Cell {
       height: (s.height as number) ?? 0,
     };
   }
+
+  /** 置顶（DOM 最后 = 最上层渲染） */
+  toFront(): void {
+    this.parentNode?.appendChild(this);
+  }
+
+  /** 置底（DOM 最前 = 最下层渲染） */
+  toBack(): void {
+    this.parentNode?.insertBefore(this, this.parentNode.firstChild);
+  }
 }
