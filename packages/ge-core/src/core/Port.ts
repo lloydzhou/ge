@@ -47,10 +47,20 @@ export class Port extends Cell {
     const pw = (parent?.getAttribute?.('width') as number) ?? 100;
     const ph = (parent?.getAttribute?.('height') as number) ?? 50;
     let x = s.x as number, y = s.y as number;
-    if (layout === 'top') { x = pw / 2; y = 0; }
-    else if (layout === 'bottom') { x = pw / 2; y = ph; }
-    else if (layout === 'left') { x = 0; y = ph / 2; }
-    else if (layout === 'right') { x = pw; y = ph / 2; }
+    if (layout) {
+      // 同方向 sibling ports → 均匀排列
+      const siblings = (parent?.childNodes as any[])?.filter((c) => (c.getAttribute?.('layout') ?? '') === layout) ?? [];
+      const idx = siblings.indexOf(this);
+      const count = siblings.length || 1;
+      const ratio = count <= 1 ? 0.5 : idx / (count - 1);
+      const margin = 0.15; // 两侧留 15%
+      const span = 1 - 2 * margin;
+      const pos = margin + ratio * span;
+      if (layout === 'top') { x = pw * pos; y = 0; }
+      else if (layout === 'bottom') { x = pw * pos; y = ph; }
+      else if (layout === 'left') { x = 0; y = ph * pos; }
+      else if (layout === 'right') { x = pw; y = ph * pos; }
+    }
     this.setLocalPosition(x, y);
   }
 

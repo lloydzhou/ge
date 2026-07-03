@@ -50,6 +50,7 @@ export class Edge extends Cell {
   protected endMarker?: Path;
   protected startMarker?: Path;
   protected labelText?: Text;
+  protected _labelTexts: Text[] = [];
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
