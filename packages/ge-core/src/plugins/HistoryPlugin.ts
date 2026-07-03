@@ -22,7 +22,7 @@ export class HistoryPlugin extends Plugin {
     super.init(graph);
 
     graph.addEventListener('pointerdown', (e: any) => {
-      const node = closestCell(e.target);
+      const node = graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
       this.pending = {
         id: node.id,

@@ -44,6 +44,8 @@ export class Graph extends Canvas {
   readonly routers: RouterRegistry;
   readonly connectors: ConnectorRegistry;
   private plugins: Plugin[] = [];
+  /** pan 偏移（世界坐标），由 panBy 累积；坐标转换用 2D 公式保证与 SVG 渲染一致 */
+  panOffset = { x: 0, y: 0 };
 
   constructor(options: GraphOptions) {
     const container = resolveContainer(options.container);
@@ -62,6 +64,46 @@ export class Graph extends Canvas {
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
     this.registerElements();
+  }
+
+  /** 平移画布（dx,dy 视口像素）。用 root.translate（2D）而非 camera.position（g-lite SVG 下不一致） */
+  panBy(dvx: number, dvy: number): void {
+    const zoom = this.getCamera().getZoom() || 1;
+    const dwx = dvx / zoom;
+    const dwy = dvy / zoom;
+    this.panOffset.x += dwx;
+    this.panOffset.y += dwy;
+    (this as any).document.documentElement.translate(dwx, dwy);
+  }
+
+  /** 世界 → 视口（2D：(world+panOffset)*zoom，与 root.translate 渲染一致） */
+  canvas2Viewport(canvasP: { x: number; y: number }): { x: number; y: number } {
+    const zoom = this.getCamera().getZoom() || 1;
+    return { x: (canvasP.x + this.panOffset.x) * zoom, y: (canvasP.y + this.panOffset.y) * zoom };
+  }
+
+  /** 视口 → 世界 */
+  viewport2Canvas(vp: { x: number; y: number }): { x: number; y: number } {
+    const zoom = this.getCamera().getZoom() || 1;
+    return { x: vp.x / zoom - this.panOffset.x, y: vp.y / zoom - this.panOffset.y };
+  }
+
+  /**
+   * 命中测试：视口点 → 顶层节点。
+   * 用 viewport2Canvas + 节点 world bbox 自行判断（不依赖 g-lite 的 e.target hit test，
+   * 后者不识别 root.translate 平移，pan 后会命中错位）。
+   */
+  pickNode(viewportX: number, viewportY: number): any {
+    const w = this.viewport2Canvas({ x: viewportX, y: viewportY });
+    const nodes = this.getNodes();
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i] as any;
+      const bb = n.getWorldBBox();
+      if (w.x >= bb.x && w.x <= bb.x + bb.width && w.y >= bb.y && w.y <= bb.y + bb.height) {
+        return n;
+      }
+    }
+    return null;
   }
 
   protected registerElements(): void {
@@ -167,7 +209,7 @@ export class Graph extends Canvas {
     positions.forEach((p, id) => {
       this.getNode(id)?.moveTo(p.x, p.y);
     });
-    // g-lite 多节点连续 setLocalPosition 后 body local 可能错位，强制重置到原点
+    // g-lite 多节点连续 setLocalPosition 后 body local 可能错位，强制重置
     for (const n of this.getNodes() as any[]) {
       if (n.body) n.body.setLocalPosition(0, 0);
     }

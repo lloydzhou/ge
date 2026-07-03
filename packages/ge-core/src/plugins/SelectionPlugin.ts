@@ -14,7 +14,7 @@ export class SelectionPlugin extends Plugin {
   init(graph: any): void {
     super.init(graph);
     graph.addEventListener('pointerdown', (e: any) => {
-      const cell = closestCell(e.target);
+      const cell = graph.pickNode(e.viewportX, e.viewportY);
       const additive = !!(e.shiftKey || e.metaKey || e.ctrlKey);
       if (!cell) {
         this.clear();
