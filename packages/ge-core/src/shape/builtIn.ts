@@ -53,7 +53,27 @@ export const diamondShape: ShapeDefinition = {
   },
 };
 
-export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape];
+export const triangleShape: ShapeDefinition = {
+  name: 'triangle',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const hexagonShape: ShapeDefinition = {
+  name: 'hexagon',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w * 0.25} 0 L ${w * 0.75} 0 L ${w} ${h / 2} L ${w * 0.75} ${h} L ${w * 0.25} ${h} L 0 ${h / 2} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape];
 
 import { ShapeRegistry } from './registry';
 
