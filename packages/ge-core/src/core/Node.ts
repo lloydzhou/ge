@@ -170,9 +170,10 @@ export class Node extends Cell {
     const h = s.height as number;
     if (!this.labelText) {
       this.labelText = new Text({
-        style: { text, x: w / 2, y: h / 2, fontSize: 14, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
+        style: { text, fontSize: 14, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
       });
       this.appendChild(this.labelText);
+      this.labelText.setLocalPosition(w / 2, h / 2);
       this.subElements.set('label', this.labelText);
     } else {
       this.labelText.setAttribute('text', text as any);
