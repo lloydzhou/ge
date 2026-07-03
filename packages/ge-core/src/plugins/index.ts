@@ -15,4 +15,5 @@ export { ResizePlugin } from './ResizePlugin';
 export { RotatePlugin } from './RotatePlugin';
 export { GridPlugin, type GridPluginOptions } from './GridPlugin';
 export { ContextMenuPlugin, type ContextMenuItem } from './ContextMenuPlugin';
+export { TooltipPlugin, type TooltipOptions } from './TooltipPlugin';
 export { VertexPlugin } from './VertexPlugin';
