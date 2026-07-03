@@ -30,10 +30,12 @@ export abstract class Cell extends CustomElement<any> {
       this.render();
       this.rendered = true;
     }
+    this.fire('cell:added', { id: this.id, cell: this });
   }
 
   disconnectedCallback(): void {
     this.rendered = false;
+    this.fire('cell:removed', { id: this.id, cell: this });
   }
 
   /** 首次连接时构建渲染元素 */
