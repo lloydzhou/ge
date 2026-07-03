@@ -167,7 +167,9 @@ export class Edge extends Cell {
 
   /** 创建终点箭头 marker（颜色跟随 stroke） */
   protected createMarker(color: string): Path {
-    return new Path({ style: { d: 'M 10 0 L 0 5 L 10 10 Z', fill: color } });
+    // 尖端在 (0,0)（= 路径终点/target 边缘），底朝 +x（g-lite orient 使 +x 朝 source，即边外）
+    // 这样箭头完整落在边外、尖端刚好贴 target 边缘，不会伸入节点被遮挡
+    return new Path({ style: { d: 'M 0 0 L 10 -5 L 10 5 Z', fill: color } });
   }
 
   /** 同步边标签 */
