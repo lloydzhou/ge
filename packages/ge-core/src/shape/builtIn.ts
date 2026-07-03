@@ -73,7 +73,17 @@ export const hexagonShape: ShapeDefinition = {
   },
 };
 
-export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape];
+export const parallelogramShape: ShapeDefinition = {
+  name: 'parallelogram',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w * 0.15} 0 L ${w} 0 L ${w * 0.85} ${h} L 0 ${h} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape, parallelogramShape];
 
 import { ShapeRegistry } from './registry';
 
