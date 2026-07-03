@@ -6,7 +6,7 @@
  */
 import { Plugin } from './plugin';
 
-export interface GridOptions {
+export interface GridPluginOptions {
   /** 网格类型：dot 点阵 / line 网格线 */
   type?: 'dot' | 'line';
   /** 网格间距（世界坐标，默认 20） */
@@ -21,10 +21,10 @@ export interface GridOptions {
 
 export class GridPlugin extends Plugin {
   readonly name = 'grid';
-  private opts: Required<GridOptions>;
+  private opts: Required<GridPluginOptions>;
   private layer?: HTMLDivElement;
 
-  constructor(options: GridOptions = {}) {
+  constructor(options: GridPluginOptions = {}) {
     super();
     this.opts = {
       type: options.type ?? 'dot',
