@@ -207,6 +207,17 @@ export class Graph extends Canvas {
     return this.document.getElementsByClassName<Edge>(CLASS.edge);
   }
 
+  /** 获取所有元素（节点 + 边） */
+  getCells(): (Node | Edge)[] {
+    return [...this.getNodes(), ...this.getEdges()];
+  }
+
+  /** 清空所有节点和边 */
+  clear(): void {
+    for (const e of this.getEdges()) e.remove();
+    for (const n of this.getNodes()) n.remove();
+  }
+
   // ---- 导出 ----
   /** 导出为 data URL：canvas 渲染→PNG，svg 渲染→SVG data URL */
   toDataURL(type: string = 'image/png', quality?: number): string {
