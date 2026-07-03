@@ -77,3 +77,12 @@ describe('hierarchicalLayout', () => {
     expect(pos.get('b')!.x).not.toBe(pos.get('c')!.x);
   });
 });
+
+describe('hierarchicalLayout 排序', () => {
+  it('同层节点按父层位置排序（减少交叉）', () => {
+    const nodes = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+    const edges = [{ source: 'a', target: 'c' }, { source: 'b', target: 'd' }];
+    const pos = hierarchicalLayout(nodes, edges);
+    expect(pos.get('c')!.x).toBeLessThan(pos.get('d')!.x);
+  });
+});
