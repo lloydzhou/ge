@@ -25,13 +25,12 @@ export class DragPlugin extends Plugin {
 
     graph.addEventListener('pointerdown', (e: any) => {
       if (e.altKey) return; // 触发键按下时交给 CreateEdge 接管连线创建
-      const node = graph.pickNode(e.viewportX, e.viewportY);
+      const node = closestCell(e.target);
       if (!node) return;
-      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
       this.dragging = {
         node,
-        sx: w.x,
-        sy: w.y,
+        sx: e.canvasX,
+        sy: e.canvasY,
         ox: (node.getAttribute('x') as number) ?? 0,
         oy: (node.getAttribute('y') as number) ?? 0,
       };
@@ -40,8 +39,7 @@ export class DragPlugin extends Plugin {
     graph.addEventListener('pointermove', (e: any) => {
       if (!this.dragging) return;
       const d = this.dragging;
-      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-      d.node.moveTo(d.ox + (w.x - d.sx), d.oy + (w.y - d.sy));
+      d.node.moveTo(d.ox + (e.canvasX - d.sx), d.oy + (e.canvasY - d.sy));
     });
 
     const end = (): void => {

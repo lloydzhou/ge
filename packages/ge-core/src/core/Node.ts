@@ -113,6 +113,7 @@ export class Node extends Cell {
   protected applyPosition(): void {
     const s = this.styleProps();
     this.setLocalPosition(s.x as number, s.y as number);
+    if (this.body) this.body.setLocalPosition(0, 0);
     this.fire('node:boundschange');
   }
 
@@ -256,25 +257,14 @@ export class Node extends Cell {
     return this;
   }
 
-  /** 世界坐标包围盒（供 Edge 计算；用 g-lite getBounds 以支持 group 嵌套） */
+  /** 世界坐标包围盒（直接用 x/y/width/height attribute，避免 getBounds 的 root.translate 污染与副作用） */
   getWorldBBox(): BBox {
-    try {
-      const b = this.getBounds();
-      const hx = b.halfExtents[0];
-      const hy = b.halfExtents[1];
-      // 抵消 root.translate（pan）对 getBounds 的污染，还原模型世界坐标
-      const graph: any = (this as any).ownerDocument?.defaultView;
-      const px = graph?.panOffset?.x ?? 0;
-      const py = graph?.panOffset?.y ?? 0;
-      return {
-        x: b.center[0] - hx - px,
-        y: b.center[1] - hy - py,
-        width: hx * 2,
-        height: hy * 2,
-      };
-    } catch {
-      const s = this.styleProps();
-      return { x: s.x as number, y: s.y as number, width: s.width as number, height: s.height as number };
-    }
+    const s = this.styleProps();
+    return {
+      x: (s.x as number) ?? 0,
+      y: (s.y as number) ?? 0,
+      width: (s.width as number) ?? 0,
+      height: (s.height as number) ?? 0,
+    };
   }
 }

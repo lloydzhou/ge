@@ -23,7 +23,7 @@ export class TransformPlugin extends Plugin {
     graph.addEventListener('pointerdown', (e: any) => {
       const sel = graph.getPlugin('selection');
       if (!sel) return;
-      const node = graph.pickNode(e.viewportX, e.viewportY);
+      const node = closestCell(e.target);
       if (!node) return;
       const selected = sel.getSelected?.() ?? [];
       if (!selected.includes(node.id) || selected.length <= 1) {

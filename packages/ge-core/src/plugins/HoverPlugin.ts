@@ -13,7 +13,7 @@ export class HoverPlugin extends Plugin {
   init(graph: any): void {
     super.init(graph);
     graph.addEventListener('pointermove', (e: any) => {
-      const node = graph.pickNode(e.viewportX, e.viewportY);
+      const node = closestCell(e.target);
       if (node === this.hovered) return;
       if (this.hovered) removeClass(this.hovered, 'hover');
       this.hovered = node;

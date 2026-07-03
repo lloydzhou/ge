@@ -40,17 +40,17 @@ export class ScrollerPlugin extends Plugin {
       const cur = camera.getZoom();
       const next = clamp(cur * factor, minZoom, maxZoom);
       if (Math.abs(next - cur) < 1e-6) return;
-      // 以光标为中心（2D）：记录光标处世界点，缩放后用 panBy 拉回光标
-      const cursor = { x: e.viewportX, y: e.viewportY };
-      const wBefore = graph.viewport2Canvas(cursor);
-      camera.setZoom(next);
-      const vpAfter = graph.canvas2Viewport(wBefore);
-      graph.panBy(cursor.x - vpAfter.x, cursor.y - vpAfter.y);
+      // 以光标为中心缩放：优先用 g-lite 原生 setZoomByViewportPoint，失败则退化为普通缩放
+      try {
+        camera.setZoomByViewportPoint(next, e.viewportX, e.viewportY);
+      } catch {
+        camera.setZoom(next);
+      }
     });
 
     graph.addEventListener('pointerdown', (e: any) => {
       if (!panOnBlank) return;
-      if (graph.pickNode(e.viewportX, e.viewportY)) return; // 点在节点上交给 Drag
+      if (closestCell(e.target)) return; // 点在节点上交给 Drag
       this.panning = { x: e.viewportX, y: e.viewportY };
     });
 
@@ -58,7 +58,9 @@ export class ScrollerPlugin extends Plugin {
       if (!this.panning) return;
       const dx = e.viewportX - this.panning.x;
       const dy = e.viewportY - this.panning.y;
-      graph.panBy(dx, dy);
+      const z = camera.getZoom() || 1;
+      const pos = camera.getPosition();
+      camera.setPosition(pos[0] - dx / z, pos[1] - dy / z, pos[2]);
       this.panning = { x: e.viewportX, y: e.viewportY };
     });
 
