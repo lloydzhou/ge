@@ -107,6 +107,7 @@ export class Edge extends Cell {
         this.startMarker?.setAttribute('fill', newV);
         break;
       case 'label':
+      case 'labels':
         this.syncLabel();
         this.update();
         break;
@@ -196,6 +197,17 @@ export class Edge extends Cell {
   /** 同步边标签 */
   protected syncLabel(): void {
     const s = this.styleProps();
+    const labels = s.labels as { text: string }[] | undefined;
+    if (labels && labels.length > 0) {
+      for (const lt of this._labelTexts) lt.destroy();
+      this._labelTexts = [];
+      for (const item of labels) {
+        const lt = new Text({ style: { text: item.text, fontSize: 12, fill: '#333333', textAlign: 'center', textBaseline: 'middle' } });
+        this.appendChild(lt);
+        this._labelTexts.push(lt);
+      }
+      return;
+    }
     const text = s.label as string | undefined;
     if (!text) {
       this.labelText?.destroy();
@@ -215,6 +227,15 @@ export class Edge extends Cell {
   /** 把标签定位到路径中点 */
   protected positionLabel(points: Point[]): void {
     if (!this.labelText || points.length === 0) return;
+    if (this._labelTexts.length > 0) {
+      const labels = (this.styleProps().labels as { distance?: number }[]) ?? [];
+      this._labelTexts.forEach((lt, i) => {
+        const t = labels[i]?.distance ?? 0.5;
+        const pt = edgeAnchorRatio(points, { t });
+        lt.setLocalPosition(pt.x, pt.y);
+      });
+      return;
+    }
     const mid = edgeAnchorRatio(points, { t: ((this.styleProps().labelDistance as number) ?? 0.5) });
     this.labelText.setLocalPosition(mid.x, mid.y);
   }
