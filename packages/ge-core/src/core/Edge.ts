@@ -147,7 +147,8 @@ export class Edge extends Cell {
     const srcShape = srcNode.getAttribute('shape');
     const tgtShape = tgtNode.getAttribute('shape');
 
-    const obstacles = this.graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
+    const graph = (this as any).ownerDocument?.defaultView;
+    const obstacles = graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
     const points = computeEdgePoints(
       { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
