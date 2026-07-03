@@ -1,7 +1,6 @@
 /**
  * DndPlugin —— 从 Stencil 面板拖拽创建节点。
- *
- * - 放置后用 DOM getBoundingClientRect 迭代校准（阻尼逼近），使节点中心精确落在鼠标释放位置。
+ * 放置后用 DOM getBoundingClientRect + viewport2Canvas delta 迭代校准到鼠标释放位置。
  */
 import { Plugin } from './plugin';
 import type { NodeProps } from '../core/types';
@@ -20,7 +19,6 @@ export class DndPlugin extends Plugin {
     return this;
   }
 
-  /** 在世界坐标 (worldX, worldY) 放置一个模板节点（居中） */
   dropTemplate(type: string, worldX: number, worldY: number): any | null {
     const tpl = this.templates.get(type);
     if (!tpl) return null;
@@ -42,12 +40,12 @@ export class DndPlugin extends Plugin {
       const world = graph.viewport2Canvas({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       const node = this.dropTemplate(type, (world as any).x, (world as any).y);
 
-      // 迭代 DOM 校准（阻尼 0.5，逐步逼近，兼容 pan/zoom 的 3D 投影非线性）
+      // 迭代 DOM 校准：用 viewport2Canvas 的 delta（同 DragPlugin canvasX delta，pan/zoom 后准确）
       const targetCx = e.clientX;
       const targetCy = e.clientY;
       let iter = 0;
       const calibrate = (): void => {
-        if (!node || iter++ > 10) return;
+        if (!node || iter++ > 8) return;
         const domEl = document.querySelector(`[id="${(node as any).id}"]`);
         if (!domEl) return;
         const r = (domEl as HTMLElement).getBoundingClientRect();
@@ -56,12 +54,13 @@ export class DndPlugin extends Plugin {
         const cy = r.top + r.height / 2;
         const dx = targetCx - cx;
         const dy = targetCy - cy;
-        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; // 收敛
-        const zoom = graph.getCamera().getZoom() || 1;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        // viewport2Canvas delta：当前视口 → 目标视口 的世界 delta（delta 抵消绝对偏差）
+        const w1 = graph.viewport2Canvas({ x: cx - rect.left, y: cy - rect.top });
+        const w2 = graph.viewport2Canvas({ x: cx + dx - rect.left, y: cy + dy - rect.top });
         const curX = (node as any).getAttribute('x') as number;
         const curY = (node as any).getAttribute('y') as number;
-        // 阻尼 0.5：每次朝目标移动一半视口偏差，逐步逼近（防 3D 非线性震荡）
-        (node as any).moveTo(curX + (dx / zoom) * 0.5, curY + (dy / zoom) * 0.5);
+        (node as any).moveTo(curX + ((w2 as any).x - (w1 as any).x), curY + ((w2 as any).y - (w1 as any).y));
         requestAnimationFrame(calibrate);
       };
       requestAnimationFrame(calibrate);
