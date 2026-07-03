@@ -10,7 +10,7 @@ import { Path, Text, type DisplayObject } from '@antv/g-lite';
 import { Cell } from './Cell';
 import { CLASS, type EndpointConfig } from './types';
 import { computeEdgePoints } from './compute';
-import { edgeAnchorMid } from '../anchor/edge-anchor';
+import { edgeAnchorRatio } from '../anchor/edge-anchor';
 import { updatePath, type ConnectorFn, type ConnectorOptions } from '../edge/connector';
 import type { RouterFn } from '../edge/router';
 import type { NodeAnchorFn } from '../anchor/types';
@@ -194,7 +194,7 @@ export class Edge extends Cell {
   /** 把标签定位到路径中点 */
   protected positionLabel(points: Point[]): void {
     if (!this.labelText || points.length === 0) return;
-    const mid = edgeAnchorMid(points);
+    const mid = edgeAnchorRatio(points, { t: ((this.styleProps().labelDistance as number) ?? 0.5) });
     this.labelText.setLocalPosition(mid.x, mid.y);
   }
 
