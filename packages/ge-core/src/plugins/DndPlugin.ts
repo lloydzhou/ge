@@ -1,9 +1,8 @@
 /**
  * DndPlugin —— 从 Stencil 面板拖拽创建节点。
  *
- * - registerTemplate 注册模板；dropTemplate(type, x, y) 在世界坐标创建节点（核心逻辑，可编程调用）。
- * - 同时接入 HTML5 Drag and Drop：模板项 dragstart 写 dataTransfer，画布 drop 读出并创建。
- * - 放置后自动选中节点，用户可立即拖动微调到精确位置（DragPlugin 的 delta 机制能抵消 camera 变换偏差）。
+ * - 放置后用 DOM getBoundingClientRect 迭代校准，使节点中心精确落在鼠标释放位置
+ *   （绕过 g-lite viewport2Canvas 在 camera 变换后与渲染不一致的问题）。
  */
 import { Plugin } from './plugin';
 import type { NodeProps } from '../core/types';
@@ -43,8 +42,34 @@ export class DndPlugin extends Plugin {
       const rect = container.getBoundingClientRect();
       const world = graph.viewport2Canvas({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       const node = this.dropTemplate(type, (world as any).x, (world as any).y);
-      // 放置后自动选中：g-lite SVG camera 变换后 viewport2Canvas 绝对位置可能有偏差，
-      // 但 DragPlugin 的 delta（canvasX 差）能抵消偏差，用户放下后立即拖动即可精确定位。
+
+      // 迭代 DOM 校准：读节点实际渲染位置，逼近鼠标释放位置
+      const targetCx = e.clientX;
+      const targetCy = e.clientY;
+      const tpl = this.templates.get(type);
+      const w = (tpl?.props.width as number) ?? 120;
+      const h = (tpl?.props.height as number) ?? 40;
+      let iter = 0;
+      const calibrate = (): void => {
+        if (!node || iter++ > 5) return;
+        const domEl = document.querySelector(`[id="${(node as any).id}"]`);
+        if (!domEl) return;
+        const r = (domEl as HTMLElement).getBoundingClientRect();
+        if (r.width === 0) return;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dx = targetCx - cx;
+        const dy = targetCy - cy;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; // 收敛
+        const zoom = graph.getCamera().getZoom() || 1;
+        const curX = (node as any).getAttribute('x') as number;
+        const curY = (node as any).getAttribute('y') as number;
+        (node as any).moveTo(curX + dx / zoom, curY + dy / zoom);
+        requestAnimationFrame(calibrate);
+      };
+      requestAnimationFrame(calibrate);
+
+      // 自动选中（用户可立即拖动微调）
       const sel = graph.getPlugin('selection');
       if (sel && node) {
         sel.clear();
