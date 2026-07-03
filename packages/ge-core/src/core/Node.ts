@@ -117,6 +117,14 @@ export class Node extends Cell {
     this.fire('node:boundschange');
   }
 
+  /** 应用旋转（angle attribute → setLocalEulerAngles） */
+  protected applyRotation(): void {
+    const s = this.styleProps();
+    const angle = (s.angle as number) ?? 0;
+    this.setLocalEulerAngles(angle);
+    this.fire('node:boundschange');
+  }
+
   attributeChangedCallback(
     name: string | number | symbol,
     oldV: any,
@@ -129,6 +137,9 @@ export class Node extends Cell {
       case 'x':
       case 'y':
         this.applyPosition();
+        break;
+      case 'angle':
+        this.applyRotation();
         break;
       case 'shape':
       case 'width':
@@ -257,14 +268,36 @@ export class Node extends Cell {
     return this;
   }
 
-  /** 世界坐标包围盒（直接用 x/y/width/height attribute，避免 getBounds 的 root.translate 污染与副作用） */
+  /** 世界坐标包围盒（x/y attribute + parent group 偏移，支持嵌套） */
   getWorldBBox(): BBox {
     const s = this.styleProps();
+    let x = (s.x as number) ?? 0;
+    let y = (s.y as number) ?? 0;
+    // 遍历 parent chain，累加 group 偏移（支持嵌套 group）
+    let p: any = this.parentNode;
+    while (p) {
+      if (typeof p.className === 'string' && p.className.includes('ge-group')) {
+        const ps = p.styleProps?.();
+        if (ps) { x += (ps.x as number) ?? 0; y += (ps.y as number) ?? 0; }
+      }
+      p = p.parentNode;
+    }
     return {
-      x: (s.x as number) ?? 0,
-      y: (s.y as number) ?? 0,
+      x, y,
       width: (s.width as number) ?? 0,
       height: (s.height as number) ?? 0,
     };
+  }
+
+  /** 置顶（DOM 最后 = 最上层渲染） */
+  toFront(): this {
+    this.parentNode?.appendChild(this);
+    return this;
+  }
+
+  /** 置底（DOM 最前 = 最下层渲染） */
+  toBack(): this {
+    this.parentNode?.insertBefore(this, this.parentNode.firstChild);
+    return this;
   }
 }

@@ -53,7 +53,48 @@ export const diamondShape: ShapeDefinition = {
   },
 };
 
-export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape];
+export const triangleShape: ShapeDefinition = {
+  name: 'triangle',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const hexagonShape: ShapeDefinition = {
+  name: 'hexagon',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w * 0.25} 0 L ${w * 0.75} 0 L ${w} ${h / 2} L ${w * 0.75} ${h} L ${w * 0.25} ${h} L 0 ${h / 2} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const parallelogramShape: ShapeDefinition = {
+  name: 'parallelogram',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const d = `M ${w * 0.15} 0 L ${w} 0 L ${w * 0.85} ${h} L 0 ${h} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const cylinderShape: ShapeDefinition = {
+  name: 'cylinder',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const ry = h * 0.1; // 椭圆半高
+    const d = `M 0 ${ry} A ${w / 2} ${ry} 0 0 0 ${w} ${ry} L ${w} ${h - ry} A ${w / 2} ${ry} 0 0 1 0 ${h - ry} L 0 ${ry} Z M 0 ${ry} A ${w / 2} ${ry} 0 0 1 ${w} ${ry}`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape, parallelogramShape, cylinderShape];
 
 import { ShapeRegistry } from './registry';
 

@@ -50,6 +50,7 @@ export class ScrollerPlugin extends Plugin {
 
     graph.addEventListener('pointerdown', (e: any) => {
       if (!panOnBlank) return;
+      if (e.button === 0) return; // 左键留给框选（SelectionPlugin）
       if (graph.pickNode(e.viewportX, e.viewportY)) return; // 点在节点上交给 Drag
       this.panning = { x: e.viewportX, y: e.viewportY };
     });

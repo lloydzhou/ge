@@ -542,6 +542,28 @@ layout: { name: 'absolute', args: { x: 10, y: 20 } }
 
 **GE 应尽可能模仿浏览器原生 API。**
 
+#### 数据结构 vs API 的明确决策
+
+- **数据结构**：借鉴 X6（Markup/Selector/Attrs/shape 声明式模型、Cell props）
+- **交互 API**：靠拢 DOM（`setAttribute` / `appendChild` / `addEventListener` / `classList` / `querySelector`）
+
+不用 X6 的命令式 API（`addNode/addTools/graph.on`），用 DOM 标准 API：
+
+| 操作 | ❌ X6 命令式 | ✅ GE DOM 化 |
+|------|------------|-------------|
+| 创建节点 | `graph.addNode({shape,x,y})` | `graph.appendChild(new Node({shape,x,y}))` |
+| 删除 | `graph.removeNode(id)` | `graph.removeChild(node)` |
+| 变换 | `node.resize(w,h)` / `node.rotate(a)` | `node.setAttribute('width',w)` / `setAttribute('angle',a)` |
+| 工具 | `node.addTools(['resize','rotate'])` | `node.setAttribute('resizable',true)` / `setAttribute('rotatable',true)` |
+| 端口 | `node.addPort({id})` | `node.appendChild(new Port({id}))` |
+| 事件 | `graph.on('node:click',fn)` | `graph.addEventListener('node:click',fn)`（事件冒泡） |
+| 属性访问 | `cell.prop('body/fill','#f00')` | `node.getSubElement('body').setAttribute('fill','#f00')` |
+| 序列化 | `cell.toJSON()` | `node.props`（attribute 自动同步）/ `graph.toJSON()` |
+
+**Model = attribute/props**，不独立 Model 类。CustomElement 的 attribute 即模型，`attributeChangedCallback` 即变更监听。
+
+**工具系统声明式**：`setAttribute('resizable'/'rotatable')` 配置，选中时插件读 attribute 渲染手柄。不用 `addTools()` 命令式挂载。
+
 由于 `@antv/g-lite` 已经模拟了 DOM API，GE 的交互系统也应该模拟浏览器内置 API。这确保了：
 
 1. **开发者知识直接迁移** - 现有的浏览器 API 立即可用

@@ -1,7 +1,7 @@
 export * from './plugin';
 export { DragPlugin } from './DragPlugin';
 export { SelectionPlugin } from './SelectionPlugin';
-export { HistoryPlugin, type Command } from './HistoryPlugin';
+export { HistoryPlugin } from './HistoryPlugin';
 export { MinimapPlugin } from './MinimapPlugin';
 export { ScrollerPlugin, type ScrollerOptions } from './ScrollerPlugin';
 export { SnaplinePlugin, type SnaplineOptions } from './SnaplinePlugin';
@@ -12,4 +12,8 @@ export { ClipboardPlugin } from './ClipboardPlugin';
 export { TransformPlugin } from './TransformPlugin';
 export { HoverPlugin } from './HoverPlugin';
 export { ResizePlugin } from './ResizePlugin';
+export { RotatePlugin } from './RotatePlugin';
+export { GridPlugin, type GridPluginOptions } from './GridPlugin';
+export { ContextMenuPlugin, type ContextMenuItem } from './ContextMenuPlugin';
+export { TooltipPlugin, type TooltipOptions } from './TooltipPlugin';
 export { VertexPlugin } from './VertexPlugin';

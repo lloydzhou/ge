@@ -1,18 +1,21 @@
 /**
- * Port —— 节点上的连接端口，挂在 Node 内部，定位为相对 owner 的局部坐标。
+ * Port —— 节点上的连接端口。
+ *
+ * - layout attribute: 'top'/'bottom'/'left'/'right'（自动定位到 owner 边中点）
+ * - 默认 absolute（x/y 局部坐标手动定位）
  */
 import { Circle } from '@antv/g-lite';
 import { Cell } from './Cell';
 import { CLASS } from './types';
 
 export interface PortStyleProps {
-  /** 相对 owner 的局部坐标 */
   x?: number;
   y?: number;
   r?: number;
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
+  layout?: string;
   [key: string]: any;
 }
 
@@ -34,14 +37,28 @@ export class Port extends Cell {
       style: { cx: 0, cy: 0, r: s.r ?? 4, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth },
     });
     this.appendChild(this.body);
-    this.setLocalPosition(s.x as number, s.y as number);
+    this.applyLayout();
+  }
+
+  protected applyLayout(): void {
+    const s = this.styleProps();
+    const layout = (s.layout as string) ?? '';
+    const parent = this.parentNode as any;
+    const pw = (parent?.getAttribute?.('width') as number) ?? 100;
+    const ph = (parent?.getAttribute?.('height') as number) ?? 50;
+    let x = s.x as number, y = s.y as number;
+    if (layout === 'top') { x = pw / 2; y = 0; }
+    else if (layout === 'bottom') { x = pw / 2; y = ph; }
+    else if (layout === 'left') { x = 0; y = ph / 2; }
+    else if (layout === 'right') { x = pw; y = ph / 2; }
+    this.setLocalPosition(x, y);
   }
 
   attributeChangedCallback(name: any, oldV: any, newV: any): void {
     if (oldV === newV || !this.rendered) return;
     const s = this.styleProps();
-    if (name === 'x' || name === 'y') {
-      this.setLocalPosition(s.x as number, s.y as number);
+    if (name === 'x' || name === 'y' || name === 'layout') {
+      this.applyLayout();
     } else if (this.body) {
       if (name === 'r') this.body.setAttribute('r', newV);
       else if (name === 'fill' || name === 'stroke') this.body.setAttribute(name, newV);

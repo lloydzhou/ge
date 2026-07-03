@@ -10,7 +10,7 @@ import { Path, Text, type DisplayObject } from '@antv/g-lite';
 import { Cell } from './Cell';
 import { CLASS, type EndpointConfig } from './types';
 import { computeEdgePoints } from './compute';
-import { edgeAnchorMid } from '../anchor/edge-anchor';
+import { edgeAnchorRatio } from '../anchor/edge-anchor';
 import { updatePath, type ConnectorFn, type ConnectorOptions } from '../edge/connector';
 import type { RouterFn } from '../edge/router';
 import type { NodeAnchorFn } from '../anchor/types';
@@ -48,6 +48,7 @@ export class Edge extends Cell {
 
   protected body?: DisplayObject;
   protected endMarker?: Path;
+  protected startMarker?: Path;
   protected labelText?: Text;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
@@ -65,12 +66,15 @@ export class Edge extends Cell {
   protected render(): void {
     const s = this.styleProps();
     this.endMarker = this.createMarker(s.stroke as string);
+    this.startMarker = (s.startArrow as boolean) ? this.createMarker(s.stroke as string) : undefined;
     this.body = new Path({
       style: {
         d: 'M 0 0',
         stroke: s.stroke,
         lineWidth: s.strokeWidth,
         fill: 'none',
+        lineDash: s.lineDash as number[] | undefined,
+        opacity: s.opacity as number | undefined,
       },
     });
     this.appendChild(this.body);
@@ -99,6 +103,7 @@ export class Edge extends Cell {
       case 'stroke':
         this.body?.setAttribute('stroke', newV);
         this.endMarker?.setAttribute('fill', newV);
+        this.startMarker?.setAttribute('fill', newV);
         break;
       case 'label':
         this.syncLabel();
@@ -106,6 +111,12 @@ export class Edge extends Cell {
         break;
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
+        break;
+      case 'lineDash':
+        this.body?.setAttribute('lineDash', newV);
+        break;
+      case 'opacity':
+        this.body?.setAttribute('opacity', newV);
         break;
       default:
         break;
@@ -146,6 +157,9 @@ export class Edge extends Cell {
     updatePath(this.body, points, connectorFn, opts);
     if (this.endMarker && !this.body.getAttribute('markerEnd')) {
       this.body.setAttribute('markerEnd', this.endMarker);
+    }
+    if (this.startMarker && !this.body.getAttribute('markerStart')) {
+      this.body.setAttribute('markerStart', this.startMarker);
     }
     this.positionLabel(points);
   }
@@ -194,7 +208,7 @@ export class Edge extends Cell {
   /** 把标签定位到路径中点 */
   protected positionLabel(points: Point[]): void {
     if (!this.labelText || points.length === 0) return;
-    const mid = edgeAnchorMid(points);
+    const mid = edgeAnchorRatio(points, { t: ((this.styleProps().labelDistance as number) ?? 0.5) });
     this.labelText.setLocalPosition(mid.x, mid.y);
   }
 
