@@ -186,6 +186,14 @@ export class Graph extends Canvas {
     cell.remove();
   }
 
+  /** 批量操作（History 合并为一次 undo/redo） */
+  batch(fn: () => void): void {
+    const history = this.getPlugin('history') as any;
+    history?.mark?.();
+    fn();
+    history?.commit?.();
+  }
+
   // ---- 查询 API（走 document API，无平行 Map） ----
   getNode(id: string): Node | null {
     return this.document.getElementById<Node>(id);
