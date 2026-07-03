@@ -79,7 +79,7 @@ export class RotatePlugin extends OverlayPlugin {
     this.handle.style.display = 'block';
   }
 
-  protected isActive(): boolean { return !!(this.handle || this.box)?.style && (this.handle || this.box).style.display !== 'none'; }
+  protected isActive(): boolean { return !!this.handle && this.handle.style.display !== 'none'; }
 
   destroy(): void {
     this.handle?.remove();

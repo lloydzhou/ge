@@ -39,7 +39,7 @@ export class BoundaryPlugin extends OverlayPlugin {
     this.box.style.display = 'block';
   }
 
-  protected isActive(): boolean { return !!(this.handle || this.box)?.style && (this.handle || this.box).style.display !== 'none'; }
+  protected isActive(): boolean { return !!this.box && this.box.style.display !== 'none'; }
 
   destroy(): void { this.box?.remove(); }
 }
