@@ -1,8 +1,7 @@
 /**
  * DndPlugin —— 从 Stencil 面板拖拽创建节点。
  *
- * - 放置后用 DOM getBoundingClientRect 迭代校准，使节点中心精确落在鼠标释放位置
- *   （绕过 g-lite viewport2Canvas 在 camera 变换后与渲染不一致的问题）。
+ * - 放置后用 DOM getBoundingClientRect 迭代校准（阻尼逼近），使节点中心精确落在鼠标释放位置。
  */
 import { Plugin } from './plugin';
 import type { NodeProps } from '../core/types';
@@ -43,15 +42,12 @@ export class DndPlugin extends Plugin {
       const world = graph.viewport2Canvas({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       const node = this.dropTemplate(type, (world as any).x, (world as any).y);
 
-      // 迭代 DOM 校准：读节点实际渲染位置，逼近鼠标释放位置
+      // 迭代 DOM 校准（阻尼 0.5，逐步逼近，兼容 pan/zoom 的 3D 投影非线性）
       const targetCx = e.clientX;
       const targetCy = e.clientY;
-      const tpl = this.templates.get(type);
-      const w = (tpl?.props.width as number) ?? 120;
-      const h = (tpl?.props.height as number) ?? 40;
       let iter = 0;
       const calibrate = (): void => {
-        if (!node || iter++ > 5) return;
+        if (!node || iter++ > 10) return;
         const domEl = document.querySelector(`[id="${(node as any).id}"]`);
         if (!domEl) return;
         const r = (domEl as HTMLElement).getBoundingClientRect();
@@ -64,12 +60,12 @@ export class DndPlugin extends Plugin {
         const zoom = graph.getCamera().getZoom() || 1;
         const curX = (node as any).getAttribute('x') as number;
         const curY = (node as any).getAttribute('y') as number;
-        (node as any).moveTo(curX + dx / zoom, curY + dy / zoom);
+        // 阻尼 0.5：每次朝目标移动一半视口偏差，逐步逼近（防 3D 非线性震荡）
+        (node as any).moveTo(curX + (dx / zoom) * 0.5, curY + (dy / zoom) * 0.5);
         requestAnimationFrame(calibrate);
       };
       requestAnimationFrame(calibrate);
 
-      // 自动选中（用户可立即拖动微调）
       const sel = graph.getPlugin('selection');
       if (sel && node) {
         sel.clear();
