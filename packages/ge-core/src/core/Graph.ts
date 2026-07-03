@@ -239,6 +239,13 @@ export class Graph extends Canvas {
     this.panTo((minX + maxX) / 2, (minY + maxY) / 2);
   }
 
+  /** 动态调整画布尺寸 */
+  resize(width: number, height: number): void {
+    const cfg = this.getConfig() as any;
+    cfg.width = width;
+    cfg.height = height;
+  }
+
   // ---- 虚拟渲染（viewport culling） ----
   private _culling = false;
   /** 启用/禁用视口裁剪（大图性能优化，只渲染可见节点） */
