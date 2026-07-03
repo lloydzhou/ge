@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 09 全功能</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #fafafa; }
+    #app { width: 1100px; height: 700px; margin: 0 auto; }
+    .toolbar { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
+    .toolbar button { padding: 8px 16px; border: 1px solid #d9d9d9; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .toolbar button:hover { border-color: #1890ff; color: #1890ff; }
+    .hints { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,.92); padding: 10px 18px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.1); font-size: 12px; color: #666; white-space: nowrap; z-index: 10; }
+    .hints code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="b-fit">zoomToFit</button>
+    <button id="b-png">导出 PNG</button>
+  </div>
+  <div id="app"></div>
+  <div class="hints">
+    快捷键：<code>Delete</code> 删除 · <code>Ctrl+Z</code> 撤销 · <code>Ctrl+Shift+Z</code> 重做 · <code>Ctrl+A</code> 全选 · <code>Ctrl+C/V</code> 复制粘贴 · <code>Ctrl+D</code> 克隆 · <code>Alt+拖拽</code> 连线
+  </div>
+  <script type="module">
+    import {
+      Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin,
+      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin,
+      ResizePlugin, RotatePlugin, GridPlugin, VertexPlugin, BoundaryPlugin, Port,
+    } from '@ge';
+
+    const graph = new Graph({ container: 'app', width: 1100, height: 700, background: '#ffffff' });
+    await graph.ready;
+    graph.use(new DragPlugin());
+    graph.use(new SelectionPlugin());
+    graph.use(new HistoryPlugin());
+    graph.use(new MinimapPlugin());
+    graph.use(new CreateEdgePlugin({ trigger: 'alt' }));
+    graph.use(new KeyboardPlugin());
+    graph.use(new ClipboardPlugin());
+    graph.use(new TransformPlugin());
+    graph.use(new ResizePlugin());
+    graph.use(new RotatePlugin());
+    graph.use(new GridPlugin({ type: 'dot' }));
+    graph.use(new VertexPlugin());
+    graph.use(new BoundaryPlugin());
+
+    // ---- 1. 12 个 shape 节点（3 行 × 4 列）----
+    const shapes = [
+      ['rect', '#e6f7ff', '#1890ff'],
+      ['circle', '#f6ffed', '#52c41a'],
+      ['ellipse', '#fff7e6', '#fa8c16'],
+      ['diamond', '#fff0f6', '#eb2f96'],
+      ['triangle', '#f9f0ff', '#722ed1'],
+      ['hexagon', '#e6fffb', '#13c2c2'],
+      ['parallelogram', '#fcffe6', '#a0d911'],
+      ['cylinder', '#fffbe6', '#fadb14'],
+      ['star', '#fff1f0', '#f5222d'],
+      ['text', '#f5f5f5', '#8c8c8c'],
+      ['cross', '#e6f7ff', '#1890ff'],
+      ['arrow', '#f6ffed', '#52c41a'],
+    ];
+    shapes.forEach(([shape, fill, stroke], i) => {
+      const row = Math.floor(i / 4);
+      const col = i % 4;
+      graph.addNode({
+        id: 's' + i, shape, x: 40 + col * 120, y: 60 + row * 110,
+        width: 90, height: 60, fill, stroke, strokeWidth: 1.5,
+        label: shape, resizable: true, rotatable: true,
+      });
+    });
+
+    // ---- 2. A* 避障边（中间放障碍节点）----
+    graph.addNode({ id: 'astar-s', shape: 'rect', x: 940, y: 60, width: 100, height: 44, fill: '#e6f7ff', stroke: '#1890ff', label: 'A*源' });
+    graph.addNode({ id: 'astar-obstacle', shape: 'rect', x: 940, y: 140, width: 100, height: 44, fill: '#fff1f0', stroke: '#f5222d', label: '障碍' });
+    graph.addNode({ id: 'astar-t', shape: 'rect', x: 940, y: 220, width: 100, height: 44, fill: '#f6ffed', stroke: '#52c41a', label: 'A*终' });
+    graph.addEdge({ id: 'astar-edge', source: 'astar-s', target: 'astar-t', router: 'manhattan-astar', connector: 'rounded', stroke: '#722ed1' });
+
+    // ---- 3. 自环边 ----
+    graph.addNode({ id: 'loop', shape: 'circle', x: 970, y: 320, width: 60, height: 60, fill: '#fff7e6', stroke: '#fa8c16', label: '自环' });
+    graph.addEdge({ id: 'loop-edge', source: 'loop', target: 'loop', stroke: '#fa8c16' });
+
+    // ---- 4. 流动虚线边 ----
+    graph.addNode({ id: 'flow-a', shape: 'rect', x: 920, y: 440, width: 80, height: 40, fill: '#e6f7ff', stroke: '#1890ff', label: '流A' });
+    graph.addNode({ id: 'flow-b', shape: 'rect', x: 920, y: 520, width: 80, height: 40, fill: '#e6f7ff', stroke: '#1890ff', label: '流B' });
+    graph.addEdge({ id: 'flow-edge', source: 'flow-a', target: 'flow-b', lineDash: [6, 4], lineDashFlow: true, stroke: '#1890ff' });
+
+    // ---- 5. 阴影节点 ----
+    graph.addNode({ id: 'shadow', shape: 'rect', x: 80, y: 430, width: 120, height: 60, fill: '#fffbe6', stroke: '#fadb14', shadowColor: 'rgba(0,0,0,.35)', shadowBlur: 12, label: '阴影' });
+
+    // ---- 6. 4 个 Port 的节点 ----
+    graph.addNode({ id: 'port-node', shape: 'rect', x: 320, y: 420, width: 140, height: 90, fill: '#f9f0ff', stroke: '#722ed1', label: 'Ports', resizable: true });
+    const portNode = graph.getNode('port-node');
+    if (portNode) {
+      portNode.appendChild(new Port({ id: 'pt', layout: 'top' }));
+      portNode.appendChild(new Port({ id: 'pb', layout: 'bottom' }));
+      portNode.appendChild(new Port({ id: 'pl', layout: 'left' }));
+      portNode.appendChild(new Port({ id: 'pr', layout: 'right' }));
+    }
+
+    // ---- 7. zoomToFit 按钮 ----
+    document.getElementById('b-fit').onclick = () => graph.zoomToFit();
+
+    // ---- 8. 导出 PNG ----
+    document.getElementById('b-png').onclick = () => {
+      const url = graph.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ge-09.png'; a.click();
+    };
+
+    window.ge = graph;
+  </script>
+</body>
+</html>
