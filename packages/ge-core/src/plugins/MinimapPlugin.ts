@@ -134,6 +134,13 @@ export class MinimapPlugin extends Plugin {
       maxX = Math.max(maxX, it.bbox.x + it.bbox.width);
       maxY = Math.max(maxY, it.bbox.y + it.bbox.height);
     }
+    // 视口大小参与 scale（居中 nodes 中心，pan 时 scale 不变 → 框大小恒定）
+    const ncx = (minX + maxX) / 2;
+    const ncy = (minY + maxY) / 2;
+    minX = Math.min(minX, ncx - view.width / 2);
+    maxX = Math.max(maxX, ncx + view.width / 2);
+    minY = Math.min(minY, ncy - view.height / 2);
+    maxY = Math.max(maxY, ncy + view.height / 2);
 
     const scale = Math.min(
       (W - 2 * pad) / Math.max(1, maxX - minX),
