@@ -74,6 +74,14 @@ export class VertexPlugin extends Plugin {
 
   private bindDrag(h: HTMLDivElement, idx: number): void {
     let start: { cx: number; cy: number; wp: Point } | null = null;
+    h.addEventListener('dblclick', (e: MouseEvent) => {
+      e.stopPropagation();
+      if (!this.activeEdge) return;
+      const wps = (((this.activeEdge.getAttribute('waypoints') as Point[]) || []) as Point[]).slice();
+      wps.splice(idx, 1);
+      this.activeEdge.setAttribute('waypoints', wps);
+      this.syncHandles();
+    });
     h.addEventListener('pointerdown', (e: PointerEvent) => {
       if (!this.activeEdge) return;
       e.stopPropagation();

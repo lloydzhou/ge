@@ -14,4 +14,5 @@ export { HoverPlugin } from './HoverPlugin';
 export { ResizePlugin } from './ResizePlugin';
 export { RotatePlugin } from './RotatePlugin';
 export { GridPlugin, type GridPluginOptions } from './GridPlugin';
+export { ContextMenuPlugin, type ContextMenuItem } from './ContextMenuPlugin';
 export { VertexPlugin } from './VertexPlugin';
