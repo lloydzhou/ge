@@ -17,4 +17,5 @@ export { GridPlugin, type GridPluginOptions } from './GridPlugin';
 export { ContextMenuPlugin, type ContextMenuItem } from './ContextMenuPlugin';
 export { TooltipPlugin, type TooltipOptions } from './TooltipPlugin';
 export { BoundaryPlugin } from './BoundaryPlugin';
+export { EditLabelPlugin } from './EditLabelPlugin';
 export { VertexPlugin } from './VertexPlugin';
