@@ -16,6 +16,24 @@ export abstract class Plugin {
   destroy(): void {}
 }
 
+/**
+ * OverlayPlugin —— DOM overlay 插件基类。
+ * 子类实现 update() + isActive()，不用重复 container position + 事件监听。
+ */
+export abstract class OverlayPlugin extends Plugin {
+  init(graph: Graph): void {
+    super.init(graph);
+    const container = graph.getConfig().container as HTMLElement;
+    if (container && getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    const update = (): void => this.update();
+    graph.addEventListener('pointerdown', () => setTimeout(update, 0));
+    graph.addEventListener('node:dragend', update);
+    graph.addEventListener('afterrender', () => { if (this.isActive()) update(); });
+  }
+  protected isActive(): boolean { return true; }
+  protected abstract update(): void;
+}
+
 /** 向上查找最近的可交互 cell（node / group），按 className 识别 */
 export const closestCell = (el: any): any => {
   let cur: any = el;
