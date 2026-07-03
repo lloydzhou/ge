@@ -48,6 +48,7 @@ export class Edge extends Cell {
 
   protected body?: DisplayObject;
   protected endMarker?: Path;
+  protected startMarker?: Path;
   protected labelText?: Text;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
@@ -65,6 +66,7 @@ export class Edge extends Cell {
   protected render(): void {
     const s = this.styleProps();
     this.endMarker = this.createMarker(s.stroke as string);
+    this.startMarker = (s.startArrow as boolean) ? this.createMarker(s.stroke as string) : undefined;
     this.body = new Path({
       style: {
         d: 'M 0 0',
@@ -99,6 +101,7 @@ export class Edge extends Cell {
       case 'stroke':
         this.body?.setAttribute('stroke', newV);
         this.endMarker?.setAttribute('fill', newV);
+        this.startMarker?.setAttribute('fill', newV);
         break;
       case 'label':
         this.syncLabel();
@@ -146,6 +149,9 @@ export class Edge extends Cell {
     updatePath(this.body, points, connectorFn, opts);
     if (this.endMarker && !this.body.getAttribute('markerEnd')) {
       this.body.setAttribute('markerEnd', this.endMarker);
+    }
+    if (this.startMarker && !this.body.getAttribute('markerStart')) {
+      this.body.setAttribute('markerStart', this.startMarker);
     }
     this.positionLabel(points);
   }
