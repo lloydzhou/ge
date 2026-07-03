@@ -1,10 +1,8 @@
 /**
- * HoverPlugin —— 鼠标悬停高亮（通过 className 触发，样式由 Node 的 stateStyles 配置）。
- *
- * - pointermove 命中检测，进入节点 addClass('hover')，离开 removeClass('hover')。
- * - 不写死任何样式，视觉完全由 stateStyles.hover 决定（Node 自带默认 hover 色）。
+ * HoverPlugin —— 鼠标悬停高亮（节点 + 边）。
+ * pointermove 命中 → addClass('hover')，离开 → removeClass('hover')。
  */
-import { Plugin, closestCell, addClass, removeClass } from './plugin';
+import { Plugin, closestCell, closestEdge, addClass, removeClass } from './plugin';
 
 export class HoverPlugin extends Plugin {
   readonly name = 'hover';
@@ -14,10 +12,12 @@ export class HoverPlugin extends Plugin {
     super.init(graph);
     graph.addEventListener('pointermove', (e: any) => {
       const node = graph.pickNode(e.viewportX, e.viewportY);
-      if (node === this.hovered) return;
+      const edge = node ? null : closestEdge(e.target);
+      const target = node || edge;
+      if (target === this.hovered) return;
       if (this.hovered) removeClass(this.hovered, 'hover');
-      this.hovered = node;
-      if (node) addClass(node, 'hover');
+      this.hovered = target;
+      if (target) addClass(target, 'hover');
     });
   }
 
