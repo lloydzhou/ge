@@ -134,10 +134,6 @@ export class MinimapPlugin extends Plugin {
       maxX = Math.max(maxX, it.bbox.x + it.bbox.width);
       maxY = Math.max(maxY, it.bbox.y + it.bbox.height);
     }
-    minX = Math.min(minX, view.x);
-    minY = Math.min(minY, view.y);
-    maxX = Math.max(maxX, view.x + view.width);
-    maxY = Math.max(maxY, view.y + view.height);
 
     const scale = Math.min(
       (W - 2 * pad) / Math.max(1, maxX - minX),
