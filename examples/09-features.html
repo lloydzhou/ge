@@ -30,7 +30,7 @@
       ResizePlugin, RotatePlugin, GridPlugin, VertexPlugin, BoundaryPlugin, Port,
     } from '@ge';
 
-    const graph = new Graph({ container: 'app', width: 1100, height: 700, background: '#ffffff' });
+    const graph = new Graph({ container: '#app', width: 1100, height: 700, background: '#ffffff' });
     await graph.ready;
     graph.use(new DragPlugin());
     graph.use(new SelectionPlugin());
