@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 07 React</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    .panel { position: fixed; top: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); font-size: 13px; pointer-events: none; z-index: 10; }
+    .panel h1 { font-size: 15px; margin: 0 0 6px; }
+    .panel code { background: #f5f5f5; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div class="panel">
+    <h1>GE · 07 React 封装</h1>
+    <div>声明式 <code>&lt;GraphView&gt;</code> 渲染 + <code>onReady</code> 暴露命令式 graph</div>
+  </div>
+  <script type="module" src="./07-react.jsx"></script>
+</body>
+</html>

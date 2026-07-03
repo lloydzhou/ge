@@ -1,415 +1,253 @@
-import { Canvas, CustomEvent } from '@antv/g-lite';
-import type { GraphData, GraphOptions, RenderingPlugin, RenderingPluginContext } from '../types';
-import { Node } from './node/Node';
-import { Edge } from './edge/Edge';
-import { AnchorRegistry, type NodeAnchorFunction, type EdgeAnchorFunction } from './anchor/Anchor';
+/**
+ * Graph —— 图容器，继承 g-lite Canvas。
+ *
+ * - 构造时注册领域自定义元素（customElements.define）。
+ * - 拥抱 document API：addNode/addEdge 走 createElement + appendChild；
+ *   查询走 getElementById / getElementsByClassName，无平行 Map（修复 P0-4/Registry 双轨）。
+ * - 统一持有 Anchor / Router / Connector 注册表，并注入到 Edge。
+ */
+import { Canvas } from '@antv/g-lite';
+import { Renderer as CanvasRenderer } from '@antv/g-canvas';
+import { Renderer as SVGRenderer } from '@antv/g-svg';
+import { Node } from './Node';
+import { Edge } from './Edge';
+import { Port } from './Port';
+import { Group } from './Group';
+import {
+  TAG,
+  CLASS,
+  type GraphOptions,
+  type NodeProps,
+  type EdgeProps,
+} from './types';
+import {
+  createDefaultAnchorRegistry,
+  type AnchorRegistry,
+} from '../anchor';
+import {
+  createDefaultRouterRegistry,
+  type RouterRegistry,
+} from '../edge/router';
+import {
+  createDefaultConnectorRegistry,
+  type ConnectorRegistry,
+} from '../edge/connector';
+import { createDefaultShapeRegistry, type ShapeRegistry } from '../shape';
+import type { Plugin } from '../plugins/plugin';
+
+const resolveContainer = (c: HTMLElement | string): HTMLElement =>
+  typeof c === 'string' ? document.querySelector<HTMLElement>(c)! : c;
 
 export class Graph extends Canvas {
-  private nodesById: Map<string, Node> = new Map();
-  private edgesById: Map<string, Edge> = new Map();
-  public anchorRegistry: AnchorRegistry;
+  readonly anchors: AnchorRegistry;
+  readonly shapes: ShapeRegistry;
+  readonly routers: RouterRegistry;
+  readonly connectors: ConnectorRegistry;
+  private plugins: Plugin[] = [];
+  /** pan 偏移（世界坐标），由 panBy 累积；坐标转换用 2D 公式保证与 SVG 渲染一致 */
+  panOffset = { x: 0, y: 0 };
 
-  constructor(config: GraphOptions) {
-    super(config as any); // GraphOptions extends CanvasConfig but may have extra properties
-    // Initialize anchor registry
-    this.anchorRegistry = new AnchorRegistry();
-    // expose renderer if provided so plugins can access it
-    try {
-      if (config && config.renderer) {
-        (this as any).renderer = config.renderer;
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    // Add graph reference to context so plugins can access it
-    (this.context as any).graph = this;
-  }
-
-  // ============================================
-  // Plugin Management (directly using Canvas's renderingPlugins)
-  // ============================================
-
-  /**
-   * Apply a plugin to the graph
-   * Plugin is added to Canvas's renderingPlugins array and receives RenderingPluginContext
-   * @param plugin - Plugin with apply(context, runtime) method
-   * @returns this for chaining
-   */
-  use(plugin: RenderingPlugin): this {
-    if (!plugin) {
-      console.warn('Invalid plugin: plugin is undefined or null');
-      return this;
-    }
-
-    try {
-      // Add to Canvas's renderingPlugins array
-      if (this.context?.renderingPlugins) {
-        this.context.renderingPlugins.push(plugin);
-      }
-
-      // Call plugin's apply method with RenderingPluginContext
-      const runtime = (this as any).globalRuntime;
-      plugin.apply(this.context as RenderingPluginContext, runtime);
-    } catch (e) {
-      const pluginName = (plugin as any).name || 'unknown';
-      console.error(`Failed to apply plugin ${pluginName}:`, e);
-    }
-
-    return this;
-  }
-
-  /**
-   * Remove a plugin from the graph
-   * @param pluginName - Name of the plugin to remove
-   * @returns this for chaining
-   */
-  dispose(pluginName: string): this {
-    if (!this.context?.renderingPlugins) {
-      console.warn('Plugin system not available');
-      return this;
-    }
-
-    const index = this.context.renderingPlugins.findIndex((p) => (p as any).name === pluginName);
-    if (index === -1) {
-      console.warn(`Plugin "${pluginName}" not found`);
-      return this;
-    }
-
-    try {
-      const plugin = this.context.renderingPlugins[index] as any;
-      // Call plugin's destroy method if it exists
-      if (typeof plugin.destroy === 'function') {
-        plugin.destroy();
-      }
-      // Remove from renderingPlugins array
-      this.context.renderingPlugins.splice(index, 1);
-    } catch (e) {
-      console.error(`Failed to dispose plugin ${pluginName}:`, e);
-    }
-
-    return this;
-  }
-
-  /**
-   * Get a plugin by name
-   */
-  getPlugin(name: string): RenderingPlugin | undefined {
-    if (!this.context?.renderingPlugins) return undefined;
-    return this.context.renderingPlugins.find((p) => (p as any).name === name);
-  }
-
-  /**
-   * Get all plugins
-   */
-  getPlugins(): RenderingPlugin[] {
-    if (!this.context?.renderingPlugins) return [];
-    return this.context.renderingPlugins;
-  }
-
-  /**
-   * Remove all plugins
-   */
-  disposeAllPlugins(): this {
-    if (!this.context?.renderingPlugins) return this;
-
-    // Collect plugin names first to avoid modification during iteration
-    const pluginsWithNames = this.context.renderingPlugins
-      .map((p, i) => ({ plugin: p, name: (p as any).name, index: i }))
-      .filter(({ name }) => name);
-
-    // Dispose in reverse order to maintain proper cleanup
-    for (let i = pluginsWithNames.length - 1; i >= 0; i--) {
-      const { name } = pluginsWithNames[i];
-      this.dispose(name);
-    }
-
-    return this;
-  }
-
-  // ============================================
-  // Registry Management
-  // ============================================
-
-  registerNode(node: Node): void {
-    try {
-      const id = node.getId();
-      if (id) this.nodesById.set(id, node);
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  unregisterNode(node: Node): void {
-    try {
-      const id = node.getId();
-      if (id) this.nodesById.delete(id);
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  registerEdge(edge: Edge): void {
-    try {
-      const id = edge.getId();
-      if (id) this.edgesById.set(id, edge);
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  unregisterEdge(edge: Edge): void {
-    try {
-      const id = edge.getId();
-      if (id) this.edgesById.delete(id);
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  // ============================================
-  // Anchor Management
-  // ============================================
-
-  /**
-   * Register a custom NodeAnchor
-   * @param name - Anchor name (e.g., 'custom-top')
-   * @param fn - Anchor function
-   */
-  registerNodeAnchor(name: string, fn: NodeAnchorFunction): this {
-    this.anchorRegistry.registerNodeAnchor(name, fn);
-    return this;
-  }
-
-  /**
-   * Register a custom EdgeAnchor
-   * @param name - Anchor name (e.g., 'quarter')
-   * @param fn - Anchor function
-   */
-  registerEdgeAnchor(name: string, fn: EdgeAnchorFunction): this {
-    this.anchorRegistry.registerEdgeAnchor(name, fn);
-    return this;
-  }
-
-  /**
-   * Register both NodeAnchor and EdgeAnchor (same function)
-   * @param name - Anchor name
-   * @param fn - Anchor function
-   */
-  registerAnchor(name: string, fn: NodeAnchorFunction | EdgeAnchorFunction): this {
-    this.anchorRegistry.registerNodeAnchor(name, fn as NodeAnchorFunction);
-    this.anchorRegistry.registerEdgeAnchor(name, fn as EdgeAnchorFunction);
-    return this;
-  }
-
-  /**
-   * Get a NodeAnchor function by name or definition
-   */
-  getNodeAnchor(definition: string | { name: string; args?: any }): NodeAnchorFunction | undefined {
-    if (typeof definition === 'string') {
-      return this.anchorRegistry.getNodeAnchor(definition);
-    }
-    return this.anchorRegistry.resolveNodeAnchor(definition);
-  }
-
-  /**
-   * Get an EdgeAnchor function by name or definition
-   */
-  getEdgeAnchor(definition: string | { name: string; args?: any }): EdgeAnchorFunction | undefined {
-    if (typeof definition === 'string') {
-      return this.anchorRegistry.getEdgeAnchor(definition);
-    }
-    return this.anchorRegistry.resolveEdgeAnchor(definition);
-  }
-
-  /**
-   * List all registered NodeAnchors
-   */
-  listNodeAnchors(): string[] {
-    return this.anchorRegistry.listNodeAnchors();
-  }
-
-  /**
-   * List all registered EdgeAnchors
-   */
-  listEdgeAnchors(): string[] {
-    return this.anchorRegistry.listEdgeAnchors();
-  }
-
-  // Override appendChild/removeChild to keep registry in sync
-  appendChild(child: any): any {
-    const res = super.appendChild(child);
-    if (child && typeof child.getId === 'function') {
-      // Heuristic: if it looks like a Node, register it
-      if ((child as any).className === 'g-node' || typeof (child as any).getPrimaryShape === 'function') {
-        this.registerNode(child as Node);
-      }
-      if ((child as any).className === 'g-edge' || typeof (child as any).getSource === 'function') {
-        this.registerEdge(child as Edge);
-      }
-    }
-    return res;
-  }
-
-  removeChild(child: any): any {
-    const res = super.removeChild(child);
-    if (child && typeof child.getId === 'function') {
-      if ((child as any).className === 'g-node' || typeof (child as any).getPrimaryShape === 'function') {
-        this.unregisterNode(child as Node);
-      }
-      if ((child as any).className === 'g-edge' || typeof (child as any).getSource === 'function') {
-        this.unregisterEdge(child as Edge);
-      }
-    }
-    return res;
-  }
-
-  // ============================================
-  // Data Management
-  // ============================================
-
-  /**
-   * Load graph data
-   */
-  setData(data: GraphData): void {
-    // Clear existing nodes and edges
-    this.document.documentElement.removeChildren();
-
-    // Clear registries
-    this.nodesById.clear();
-    this.edgesById.clear();
-
-    // Create nodes
-    data.nodes.forEach((nodeData) => {
-      try {
-        // 如果 shape 是字符串，尝试从 graph 的 customElements 中解析为 ctor
-        try {
-          if (nodeData && typeof nodeData.shape === 'string') {
-            const ctor = (this as any).customElements?.get?.(nodeData.shape);
-            if (ctor) nodeData = { ...nodeData, shape: ctor };
-          }
-        } catch (e) {
-          // ignore
-        }
-
-        // Cast to NodeConfig (with index signature) from NodeData
-        const node = new Node(nodeData as any);
-        this.appendChild(node);
-      } catch (e) {
-        // ignore
-      }
+  constructor(options: GraphOptions) {
+    const container = resolveContainer(options.container);
+    const width = options.width ?? container.clientWidth ?? 800;
+    const height = options.height ?? container.clientHeight ?? 600;
+    const renderer = options.renderer === 'canvas' ? new CanvasRenderer() : new SVGRenderer();
+    super({
+      container,
+      width,
+      height,
+      renderer,
+      background: options.background,
     });
+    this.anchors = createDefaultAnchorRegistry();
+    this.shapes = createDefaultShapeRegistry();
+    this.routers = createDefaultRouterRegistry();
+    this.connectors = createDefaultConnectorRegistry();
+    this.registerElements();
+  }
 
-    // Create edges
-    data.edges.forEach((edgeData) => {
-      try {
-        // 如果 edge shape 是字符串，尝试从 graph 的 customElements 中解析为 ctor
-        try {
-          if (edgeData && typeof edgeData.shape === 'string') {
-            const ctor = (this as any).customElements?.get?.(edgeData.shape);
-            if (ctor) edgeData = { ...edgeData, shape: ctor };
-          }
-        } catch (e) {
-          // ignore
-        }
+  /** 平移画布（dx,dy 视口像素）。用 root.translate（2D）而非 camera.position（g-lite SVG 下不一致） */
+  panBy(dvx: number, dvy: number): void {
+    const zoom = this.getCamera().getZoom() || 1;
+    const dwx = dvx / zoom;
+    const dwy = dvy / zoom;
+    this.panOffset.x += dwx;
+    this.panOffset.y += dwy;
+    (this as any).document.documentElement.translate(dwx, dwy);
+  }
 
-        // Cast to EdgeConfig (with index signature) from EdgeData
-        const edge = new Edge(edgeData as any);
-        this.appendChild(edge);
-      } catch (e: any) {
-        // Skip edges with missing nodes
-        console.warn(`Failed to create edge ${edgeData.id}: ${e.message}`);
-      }
-    });
+  /** 平移使世界点 (worldX, worldY) 位于视口中心（minimap 导航用） */
+  panTo(worldX: number, worldY: number): void {
+    const zoom = this.getCamera().getZoom() || 1;
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    const targetOffX = cx - worldX;
+    const targetOffY = cy - worldY;
+    const dvx = (targetOffX - this.panOffset.x) * zoom;
+    const dvy = (targetOffY - this.panOffset.y) * zoom;
+    this.panBy(dvx, dvy);
+  }
 
-    // Dispatch a custom event to notify that graph data has been loaded
-    this.dispatchEvent(new CustomEvent('graphdataloaded', { data }));
+  /** 世界 → 视口（2D 中心缩放：与 root.translate + setZoom 渲染一致） */
+  canvas2Viewport(canvasP: { x: number; y: number }): { x: number; y: number } {
+    const zoom = this.getCamera().getZoom() || 1;
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    return {
+      x: (canvasP.x + this.panOffset.x - cx) * zoom + cx,
+      y: (canvasP.y + this.panOffset.y - cy) * zoom + cy,
+    };
+  }
+
+  /** 视口 → 世界 */
+  viewport2Canvas(vp: { x: number; y: number }): { x: number; y: number } {
+    const zoom = this.getCamera().getZoom() || 1;
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    return {
+      x: (vp.x - cx) / zoom - this.panOffset.x + cx,
+      y: (vp.y - cy) / zoom - this.panOffset.y + cy,
+    };
   }
 
   /**
-   * Get current graph data
+   * 命中测试：视口点 → 顶层节点。
+   * 用 viewport2Canvas + 节点 world bbox 自行判断（不依赖 g-lite 的 e.target hit test，
+   * 后者不识别 root.translate 平移，pan 后会命中错位）。
    */
-  getData(): GraphData {
-    const nodes: any[] = [];
-    const edges: any[] = [];
-
-    // Collect all nodes from registry
-    this.nodesById.forEach((node) => {
-      try {
-        nodes.push(node.getData());
-      } catch (e) {}
-    });
-
-    // Collect all edges from registry
-    this.edgesById.forEach((edge) => {
-      try {
-        edges.push(edge.getData());
-      } catch (e) {}
-    });
-
-    // Fallback: if registry empty, use DOM queries
-    if (nodes.length === 0) {
-      this.document.querySelectorAll('g-node').forEach((node: any) => {
-        nodes.push(node.getData());
-      });
+  pickNode(viewportX: number, viewportY: number): any {
+    const w = this.viewport2Canvas({ x: viewportX, y: viewportY });
+    const nodes = this.getNodes();
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i] as any;
+      const bb = n.getWorldBBox();
+      if (w.x >= bb.x && w.x <= bb.x + bb.width && w.y >= bb.y && w.y <= bb.y + bb.height) {
+        return n;
+      }
     }
-
-    if (edges.length === 0) {
-      this.document.querySelectorAll('g-edge').forEach((edge: any) => {
-        edges.push(edge.getData());
-      });
-    }
-
-    return { nodes, edges };
+    return null;
   }
 
-  // ============================================
-  // Element Access
-  // ============================================
-
-  getNodeById(id: string): Node | undefined {
-    const fromMap = this.nodesById.get(id);
-    if (fromMap) return fromMap as unknown as Node;
-    return this.document.getElementById(id) as unknown as Node;
+  protected registerElements(): void {
+    this.customElements.define(TAG.node, Node);
+    this.customElements.define(TAG.edge, Edge);
+    this.customElements.define(TAG.port, Port);
+    this.customElements.define(TAG.group, Group);
   }
 
-  getEdgeById(id: string): Edge | undefined {
-    const fromMap = this.edgesById.get(id);
-    if (fromMap) return fromMap as unknown as Edge;
-    return this.document.getElementById(id) as unknown as Edge;
+  // ---- 增删 API（走 document.createElement + appendChild） ----
+  addNode(props: NodeProps & { id?: string }): Node {
+    if (props.id && this.getNode(props.id)) {
+      console.warn(`[GE] Duplicate node id "${props.id}" — getElementById will return the first match`);
+    }
+    const node = this.document.createElement<Node, any>(TAG.node, { id: props.id, style: props as any });
+    this.appendChild(node);
+    return node;
+  }
+
+  addEdge(props: EdgeProps & { id?: string }): Edge {
+    const edge = this.document.createElement<Edge, any>(TAG.edge, { id: props.id, style: props as any });
+    edge.resolveAnchor = (n) => this.anchors.resolveNode(n ?? 'perimeter');
+    edge.resolveRouter = (n) => this.routers.resolve(n ?? 'normal');
+    edge.resolveConnector = (n) => this.connectors.resolve(n ?? 'rounded');
+    this.appendChild(edge);
+    return edge;
+  }
+
+  addGroup(props: NodeProps & { id?: string }): Group {
+    const group = this.document.createElement<Group, any>(TAG.group, { id: props.id, style: props as any });
+    this.appendChild(group);
+    return group;
+  }
+
+  addPort(node: Node, props: { id?: string; x?: number; y?: number; r?: number; fill?: string }): Port {
+    const port = this.document.createElement<Port, any>(TAG.port, { id: props.id, style: props as any });
+    node.appendChild(port);
+    return port;
+  }
+
+  removeCell(id: string): void {
+    const cell = this.document.getElementById(id);
+    if (!cell) return;
+    // 删除节点时连带清理以其为端点的边，避免孤儿边 / 数据不一致
+    const cls = (cell as any).className;
+    if (typeof cls === 'string' && cls.includes(CLASS.node)) {
+      for (const e of this.getEdges()) {
+        const s = e.getAttribute('source');
+        const t = e.getAttribute('target');
+        const sid = typeof s === 'string' ? s : s?.cell;
+        const tid = typeof t === 'string' ? t : t?.cell;
+        if (sid === id || tid === id) e.remove();
+      }
+    }
+    cell.remove();
+  }
+
+  // ---- 查询 API（走 document API，无平行 Map） ----
+  getNode(id: string): Node | null {
+    return this.document.getElementById<Node>(id);
   }
 
   getNodes(): Node[] {
-    const nodes: Node[] = [];
-    this.nodesById.forEach((n) => nodes.push(n));
-    if (nodes.length === 0) {
-      this.document.querySelectorAll('g-node').forEach((node: any) => {
-        nodes.push(node);
-      });
-    }
-    return nodes;
+    return this.document.getElementsByClassName<Node>(CLASS.node);
   }
 
   getEdges(): Edge[] {
-    const edges: Edge[] = [];
-    this.edgesById.forEach((e) => edges.push(e));
-    if (edges.length === 0) {
-      this.document.querySelectorAll('g-edge').forEach((edge: any) => {
-        edges.push(edge);
-      });
-    }
-    return edges;
+    return this.document.getElementsByClassName<Edge>(CLASS.edge);
   }
 
-  // ============================================
-  // Cleanup
-  // ============================================
+  // ---- 导出 ----
+  /** 导出为 data URL：canvas 渲染→PNG，svg 渲染→SVG data URL */
+  toDataURL(type: string = 'image/png', quality?: number): string {
+    const container = this.getConfig().container as HTMLElement;
+    const canvas = container.querySelector('canvas');
+    if (canvas) return (canvas as HTMLCanvasElement).toDataURL(type, quality);
+    const svg = container.querySelector('svg');
+    if (svg) {
+      const xml = new XMLSerializer().serializeToString(svg);
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    }
+    throw new Error('[GE] no canvas/svg element found for export');
+  }
 
-  destroy(cleanUp?: boolean, skipTriggerEvent?: boolean): void {
-    // Dispose all plugins first
-    this.disposeAllPlugins();
+  // ---- 序列化 ----
+  toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
+    // 直接返回 Cell 的 props model（用户设的所有字段都保留，不漏 data/stateStyles 等）
+    const nodes = this.getNodes().map((n: any) => ({ ...n.props }));
+    const edges = this.getEdges().map((e: any) => ({ ...e.props }));
+    return { nodes, edges };
+  }
 
-    // Call parent destroy
-    super.destroy(cleanUp, skipTriggerEvent);
+  fromJSON(data: { nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[] }): void {
+    for (const n of this.getNodes()) n.remove();
+    for (const e of this.getEdges()) e.remove();
+    for (const node of data.nodes ?? []) this.addNode(node as NodeProps & { id?: string });
+    for (const edge of data.edges ?? []) this.addEdge(edge as EdgeProps & { id?: string });
+  }
+
+  // ---- 布局 ----
+  /** 应用布局结果（节点 id → 世界坐标）到图中 */
+  applyLayout(positions: Map<string, { x: number; y: number }>): void {
+    positions.forEach((p, id) => {
+      this.getNode(id)?.moveTo(p.x, p.y);
+    });
+    // g-lite 多节点连续 setLocalPosition 后 body local 可能错位，强制重置
+    for (const n of this.getNodes() as any[]) {
+      if (n.body) n.body.setLocalPosition(0, 0);
+    }
+  }
+
+  // ---- 插件 ----
+  use<T extends Plugin>(plugin: T): T {
+    plugin.init(this);
+    this.plugins.push(plugin);
+    return plugin;
+  }
+
+  getPlugin(name: string): Plugin | undefined {
+    return this.plugins.find((p) => p.name === name);
   }
 }

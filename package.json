@@ -1,59 +1,41 @@
 {
   "name": "@antv/ge",
-  "version": "1.0.0-alpha.0",
-  "description": "A modern graph editor based on AntV/G",
-  "keywords": [
-    "antv",
-    "graph",
-    "editor",
-    "visualization"
-  ],
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "GE - A modern graph editor built on AntV/G DOM model (graph-editing DOM spec on top of g-lite)",
+  "license": "MIT",
+  "author": "AntV <antv@alibaba-inc.com>",
   "homepage": "https://g.antv.antgroup.com/",
-  "bugs": {
-    "url": "https://github.com/antvis/GE/issues"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/antvis/GE"
   },
-  "license": "MIT",
-  "author": "AntV <antv@alibaba-inc.com>",
-  "main": "packages/ge-core/lib/index.js",
-  "module": "packages/ge-core/esm/index.js",
-  "types": "packages/ge-core/lib/index.d.ts",
-  "files": [
-    "packages"
-  ],
   "scripts": {
-    "bootstrap": "pnpm install",
-    "build": "pnpm run -r build",
-    "clean": "pnpm run -r clean",
-    "test": "jest",
-    "dev": "pnpm run -r dev",
-    "serve": "http-server -c-1 -o ./examples/"
+    "dev": "vite",
+    "build": "pnpm --filter @antv/ge-core build && pnpm --filter @antv/ge-react build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "clean": "pnpm run -r clean"
   },
   "dependencies": {
     "@antv/g-canvas": "^2.0.0",
     "@antv/g-lite": "^2.0.0",
-    "@antv/g-plugin-annotation": "^1.0.0",
     "@antv/g-plugin-dragndrop": "^2.0.0",
     "@antv/g-svg": "^2.0.0"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^22.0.2",
-    "@rollup/plugin-node-resolve": "^13.3.0",
-    "@rollup/plugin-typescript": "^8.5.0",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^14.18.52",
-    "http-server": "^14.1.1",
-    "jest": "^30.0.5",
-    "rimraf": "^3.0.2",
-    "rollup": "^2.79.1",
-    "rollup-plugin-terser": "^7.0.2",
-    "ts-jest": "^29.4.1",
-    "typescript": "^4.9.5"
-  },
-  "publishConfig": {
-    "access": "public"
+    "@antv/ge-core": "workspace:*",
+    "@antv/ge-react": "workspace:*",
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0",
+    "vitest": "^1.6.0"
   }
 }

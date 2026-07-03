@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 08 编辑</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    .panel { position: fixed; top: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); font-size: 13px; max-width: 320px; pointer-events: none; z-index: 10; }
+    .panel h1 { font-size: 15px; margin: 0 0 6px; }
+    .panel code { background: #f5f5f5; padding: 1px 5px; border-radius: 4px; }
+    .panel li { margin: 3px 0; }
+    .toolbar { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; pointer-events: none; }
+    .toolbar button { padding: 8px 12px; border: 1px solid #d9d9d9; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; pointer-events: auto; }
+    .toolbar button:hover { border-color: #1890ff; color: #1890ff; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="panel">
+    <h1>GE · 08 编辑动作</h1>
+    <ul>
+      <li><b>Alt + 拖拽节点</b> → 拖出创建连线</li>
+      <li><b>单击</b>选中 / <b>Shift</b> 多选 / 多选拖拽整体移动</li>
+      <li><b>Delete</b> 删除选中（含其连线）</li>
+      <li>右上：复制 / 粘贴 / 克隆</li>
+    </ul>
+  </div>
+  <div class="toolbar">
+    <button id="b-copy">复制</button>
+    <button id="b-paste">粘贴</button>
+    <button id="b-dup">克隆</button>
+  </div>
+  <script type="module">
+    import {
+      Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin,
+      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin, ResizePlugin, VertexPlugin,
+    } from '@ge';
+
+    const graph = new Graph({ container: '#app', background: '#fafafa' });
+    await graph.ready;
+    graph.use(new DragPlugin());
+    const selection = graph.use(new SelectionPlugin());
+    graph.use(new HistoryPlugin());
+    graph.use(new MinimapPlugin());
+    graph.use(new CreateEdgePlugin({ trigger: 'alt' }));
+    graph.use(new KeyboardPlugin());
+    const clipboard = graph.use(new ClipboardPlugin());
+    graph.use(new TransformPlugin());
+    graph.use(new ResizePlugin());
+    graph.use(new VertexPlugin());
+
+    graph.addNode({ id: 'a', x: 200, y: 240, width: 130, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'A' });
+    graph.addNode({ id: 'b', x: 540, y: 180, width: 130, height: 50, label: 'B' });
+    graph.addNode({ id: 'c', x: 540, y: 340, width: 130, height: 50, fill: '#f6ffed', stroke: '#52c41a', label: 'C' });
+    graph.addEdge({ source: 'a', target: 'b', router: 'orthogonal', connector: 'rounded' });
+
+    document.getElementById('b-copy').onclick = () => { clipboard.copy(); console.log('copied', clipboard.hasData()); };
+    document.getElementById('b-paste').onclick = () => clipboard.paste();
+    document.getElementById('b-dup').onclick = () => clipboard.duplicate();
+
+    window.ge = graph;
+    window.sel = selection;
+    window.clip = clipboard;
+  </script>
+</body>
+</html>

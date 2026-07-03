@@ -1,466 +1,161 @@
-# GE - Graph Editor for G
+# GE — 基于 AntV/G DOM 模型的图编辑器
 
-基于 [AntV/G](https://g.antv.antgroup.com/)，采用类 DOM 的 API 设计的现代化图编辑器库。
+> GE = g-lite DOM 模型 + 图编辑领域语义。把 [AntV/G](https://g.antv.antgroup.com/) 当作「浏览器引擎」，GE 是跑在它之上的「图编辑 DOM 规范」——就像 HTML 之于浏览器。
 
-GE 以开放、可扩展的架构为核心，面向多样化场景和未来需求，强调灵活性、可组合性与技术融合。关注开发者体验，致力于推动图编辑技术的边界。
+本仓库的 `rewrite` 分支为**从零重写**版本：以 g-lite 的 CustomElement / Document 为唯一基座，不再重建任何平行系统。
 
-## 特性
+---
 
-- 面向未来的架构设计，开放且可扩展
-- 类 DOM 风格 API，与 Web 标准一致，易用性强
-- 灵活的技术融合与生态适配
-- 强调可组合性与开发者体验
-- 支持多样化场景与持续演进
+## 核心特性
 
-## 安装
+- **真正的类 DOM API**：`appendChild / getElementById / getElementsByClassName / addEventListener / connectedCallback` 全部直接来自 g-lite。
+- **Web Components 心智**：领域元素 = 领域特化的 `CustomElement`，`attributeChangedCallback` 做响应式，`className` 做类型识别。
+- **X6 式抽象层**：`ShapeRegistry`（shape 可注册：rect/circle/ellipse/diamond/自定义）+ `Markup/Selector`（声明式子元素 + `getSubElement(selector)` 寻址）+ `Attrs`（selector 粒度 `stateStyles`）+ `Model`（完整 props 序列化，不漏字段）。
+- **统一锚点模块**：Node/Port/Edge 共用唯一的 Anchor 类型源与注册表。
+- **边原地更新**：Router/Connector 计算路径后 `setAttribute('d', ...)` 原地写回 Path，不销毁重建。
+- **边视觉**：终点方向箭头（marker，尖端贴 target 边缘）+ 边标签（自动定位路径中点）+ 边路径控制点编辑（双击添加 waypoint，拖拽调整）。
+- **事件驱动联动**：节点移动派发 `node:boundschange`，相连边监听后自动重算路径。
+- **渲染引擎可插拔**：默认 `g-svg`（每图形即真实 DOM 元素，便于 querySelector 检视/自动化验证），大图可切 `renderer: 'canvas'`。
+- **交互编辑**：`Drag` / `Resize`（选中节点拖角改尺寸）/ `Selection` / `Hover` / `CreateEdge` / `Vertex`（边路径控制点）/ `Keyboard` / `Clipboard` / `Transform`（多选变换）/ `History` / `Scroller`（缩放·平移）/ `Snapline` / `Group embedding`。
+- **坐标变换（pan/zoom）**：GE 自有 2D 坐标层（panOffset + 中心缩放公式），pan 用 `root.translate`、zoom 用 `camera.setZoom`，坐标转换与渲染完全一致。自定义 `pickNode` 命中（不依赖 g-lite 3D 投影）。
+- **状态样式可配置**：交互状态通过 `className` 触发，样式由 `stateStyles` 按 selector 粒度配置。
+- **数据能力**：`toJSON/fromJSON`（完整序列化）/ `toDataURL`（PNG 导出）/ `MinimapPlugin`（拖框导航 + 实时预览）。
+- **自动布局**：`gridLayout` / `circularLayout` / `forceLayout`（力导向 FR）/ `hierarchicalLayout`（DAG 分层），`graph.applyLayout()`。
+- **拖拽创建**：`DndPlugin` + Stencil 面板，放置后 DOM 校准确保 pan/zoom 后精确对齐鼠标位置。
+- **框架封装**：`@antv/ge-react` 声明式 `<GraphView>`（props 变化自动 diff 同步：增/删/改）。
 
-```bash
-npm install @antv/ge
+## 架构分层
+
+```
+Layer 4  框架适配  @antv/ge-react（声明式 GraphView + diff）
+Layer 3  插件工具  Drag/Resize/Selection/Hover/CreateEdge/Vertex/Keyboard/Clipboard/Transform/History/Scroller/Snapline/Dnd/Minimap
+Layer 2  核心包    @antv/ge-core
+         ├─ 领域元素  Cell → Node/Edge/Port/Group（extends CustomElement）
+         ├─ X6 抽象   ShapeRegistry / Markup+Selector / Attrs / Model
+         ├─ 原语      Anchor / Router / Connector（纯函数 + 注册表）
+         └─ 图容器    Graph extends Canvas（panOffset + 2D 坐标层）
+Layer 1  渲染引擎  @antv/g-lite（不改）
 ```
 
 ## 快速开始
 
-```typescript
-import { Graph, Node, Edge } from '@antv/ge';
-import { Rect, Circle } from '@antv/g-lite';
-
-// 创建图编辑器实例（类似创建 canvas 元素）
-const graph = new Graph({
-  container: 'container',
-  width: 800,
-  height: 600,
-});
-
-// 等待图准备就绪（类似 window.onload）
-graph.addEventListener('ready', () => {
-  // 创建节点（类似 createElement）
-  const node1 = new Node({
-    id: 'node1',
-    x: 100,
-    y: 100,
-    shape: Rect,
-    style: {
-      width: 100,
-      height: 40,
-      fill: '#fff',
-      stroke: '#000',
-      label: 'Node 1'
-    }
-  });
-  
-  // 添加节点到图中（类似 appendChild）
-  graph.appendChild(node1);
-  
-  // 创建另一个节点
-  const node2 = new Node({
-    id: 'node2',
-    x: 300,
-    y: 100,
-    shape: Circle,
-    style: {
-      r: 40,
-      fill: '#fff',
-      stroke: '#000',
-      label: 'Node 2'
-    }
-  });
-  
-  graph.appendChild(node2);
-  
-  // 创建边（类似创建其他元素）
-  const edge = new Edge({
-    id: 'edge1',
-    source: 'node1',
-    target: 'node2',
-    style: {
-      stroke: '#000',
-      lineWidth: 1
-    }
-  });
-  
-  // 添加边到图中
-  graph.appendChild(edge);
-});
-
-// 监听节点点击事件（类似 addEventListener）
-graph.addEventListener('click', (event) => {
-  if (event.target instanceof Node) {
-    console.log('Clicked node:', event.target.id);
-  }
-});
+```bash
+pnpm install          # 安装依赖
+pnpm dev              # 启动 Vite，打开 examples
+pnpm test             # 运行单元测试（Vitest）
+pnpm build            # 构建包（tsup）
 ```
 
-<!-- 示例渲染截图 -->
-<p>
-  <img width="800" height="600" alt="Image" src="https://github.com/user-attachments/assets/55aacbb7-6d9d-4905-aa17-a960d28ce2fd" />
-</p>
+### 最小示例
 
-## DOM 风格 API 设计
+```ts
+import { Graph } from '@ge';
 
-### 1. 元素创建和操作
+const graph = new Graph({ container: '#app', background: '#fafafa' });
+await graph.ready;
 
-```typescript
-// 创建节点 - 类似 document.createElement('div')
-const node = new Node({
-  id: 'my-node',
-  x: 100,
-  y: 100,
-  style: {
-    width: 100,
-    height: 40,
-    fill: '#fff'
-  }
-});
+graph.addNode({ id: 'a', x: 80, y: 140, width: 130, height: 50, label: 'Start' });
+graph.addNode({ id: 'b', x: 360, y: 80, width: 130, height: 50, label: 'Process' });
 
-// 添加到图中 - 类似 parent.appendChild(child)
-graph.appendChild(node);
+// 边自动用 perimeter 锚点从节点「边缘」连接，并经 router/connector 路由
+graph.addEdge({ source: 'a', target: 'b', router: 'orthogonal', connector: 'rounded' });
 
-// 移除节点 - 类似 parent.removeChild(child)
-graph.removeChild(node);
-
-// 获取节点 - 类似 document.getElementById
-const foundNode = graph.document.getElementById('my-node');
-// 或者使用更快的注册表查找
-const foundNode2 = graph.getNodeById('my-node');
-
-// 查询节点 - 类似 document.querySelectorAll
-const nodes = graph.document.querySelectorAll('g-node');
+// 查询走 g-lite document API，无平行 Map
+graph.getNode('a');     // getElementById
+graph.getNodes();       // getElementsByClassName('ge-node')
 ```
 
-### 2. 属性操作
+### 声明式自定义节点（X6 式 Markup）
 
-```typescript
-// 设置样式 - 类似 element.style.setProperty
-node.style.width = 120;
-node.style.height = 50;
-node.style.fill = '#e6f7ff';
+```ts
+graph.shapes.register({
+  name: 'card',
+  markup: [
+    { tagName: 'rect', selector: 'body', attrs: { width: 140, height: 70, fill: '#fff', stroke: '#1890ff' } },
+    { tagName: 'rect', selector: 'header', attrs: { x: 0, y: 0, width: 140, height: 22, fill: '#1890ff' } },
+  ],
+});
+graph.addNode({ shape: 'card', stateStyles: { hover: { body: { stroke: '#f00' }, header: { fill: '#fa8c16' } } } });
 
-// 获取样式 - 类似 element.style.getPropertyValue
-const width = node.style.width;
-
-// 设置属性 - 类似 element.setAttribute
-node.setAttribute('data-type', 'custom-node');
-
-// 获取属性 - 类似 element.getAttribute
-const type = node.getAttribute('data-type');
+// DOM 风格操作
+node.getSubElement('header');       // 按 selector 寻址
+node.classList.add('selected');     // className 触发状态
+graph.toJSON();                      // 完整 model 序列化
 ```
 
-### 3. 事件处理
+## 示例（嵌入式 HTML）
 
-```typescript
-// 添加事件监听器 - 类似 element.addEventListener
-node.addEventListener('mouseenter', (event) => {
-  node.style.fill = '#e6f7ff';
-});
+| 文件 | 演示 |
+|------|------|
+| `01-basic.html` | Node × 3 + Edge × 3，perimeter 锚点 + 不同 connector |
+| `02-ports.html` | Port 挂载 + ratio 锚点精确定位 |
+| `03-router.html` | normal / orthogonal / manhattan × rounded / smooth 对比 |
+| `04-interaction.html` | 拖拽 + 选中 + 撤销 + 对齐线 + 小地图 |
+| `05-advanced.html` | 滚轮缩放/平移 + 分组 + 对齐线 + 导出 PNG + diamond shape |
+| `06-stencil.html` | Stencil 拖拽创建 + 一键布局 + 小地图拖框导航 |
+| `07-react.html` | `@antv/ge-react` 声明式 `<GraphView>`（props diff） |
+| `08-edit.html` | 拖出连线 + 键盘 + 复制粘贴 + 多选变换 + Resize + Vertex |
 
-node.addEventListener('mouseleave', (event) => {
-  node.style.fill = '#fff';
-});
+## 核心原语
 
-// 移除事件监听器 - 类似 element.removeEventListener
-node.removeEventListener('mouseenter', handler);
+| 模块 | 能力 | 内置 |
+|------|------|------|
+| **Anchor** | 节点 / 线性锚点 | center/top/bottom/left/right/四角/ratio/coordinate/perimeter；edge: ratio/length/mid/segment |
+| **Router** | 控制点 → 路由折线 | normal / orthogonal / manhattan |
+| **Connector** | 折线 → SVG path `d`（含原地 `update`） | normal / polyline / rounded / smooth |
+
+均为纯函数 + 注册表，核心逻辑无 DOM 依赖，单测密集覆盖。
+
+## 测试
+
+```bash
+pnpm test
 ```
 
-### 4. 子元素操作
-
-```typescript
-// 节点可以包含子元素
-const label = new Text({
-  style: {
-    text: 'My Node',
-    fill: '#000'
-  }
-});
-
-node.appendChild(label);
-
-// 获取子元素
-const children = node.children;
-
-// 移除子元素
-node.removeChild(label);
+```
+✓ utils.test.ts       17 tests   几何 / 向量
+✓ anchor.test.ts      16 tests   节点 / 线性锚点 / 注册表
+✓ edge.test.ts        14 tests   Router / Connector / 原地 update
+✓ compute.test.ts      4 tests   computeEdgePoints
+✓ layout.test.ts       7 tests   grid/circular/force/hierarchical
+✓ plugins.test.ts     11 tests   History / closestCell / addClass/removeClass
+✓ shape.test.ts        5 tests   ShapeRegistry 注册/resolve/覆盖
+✓ smoke.test.ts        1 test
+                         75 tests passed
 ```
 
-## 高级用法
+领域元素的渲染行为 + 交互（pan/zoom/Drag/Resize/Dnd 坐标变换）通过 8 个 example 的 Playwright 自动化校验。
 
-### 1. 自定义节点类型
-
-```typescript
-// 方式1: 使用 shape 注册自定义元素
-import { Rect } from '@antv/g-lite';
-
-graph.customElements.define('custom-rect', Rect);
-
-const node = new Node({
-  id: 'n1',
-  shape: 'custom-rect',
-  x: 100,
-  y: 100,
-  style: {
-    width: 100,
-    height: 60,
-    fill: '#fff'
-  }
-});
-
-graph.appendChild(node);
-
-// 方式2: 继承 Node 类
-class CustomNode extends Node {
-  constructor(config) {
-    super(config);
-    // 添加自定义逻辑
-  }
-}
-
-const customNode = new CustomNode({
-  id: 'n2',
-  x: 200,
-  y: 100
-});
-
-graph.appendChild(customNode);
-```
-
-### 2. 使用 DOM 风格 API 添加端口和工具
-
-GE 推荐使用类 DOM 的 API 来操作端口和工具：
-
-```typescript
-import { Node, Port } from '@antv/ge';
-
-const node = new Node({
-  id: 'node1',
-  x: 100,
-  y: 100,
-  style: {
-    width: 100,
-    height: 60,
-    fill: '#fff'
-  }
-});
-
-// 创建端口并添加到节点 (DOM 风格)
-const port1 = new Port({
-  id: 'port-in',
-  layout: 'left',
-  style: {
-    r: 4,
-    fill: '#fff',
-    stroke: '#000'
-  }
-});
-
-const port2 = new Port({
-  id: 'port-out',
-  layout: 'right',
-  style: {
-    r: 4,
-    fill: '#fff',
-    stroke: '#000'
-  }
-});
-
-// 使用 appendChild 添加端口 (自动追踪)
-node.appendChild(port1);
-node.appendChild(port2);
-
-graph.appendChild(node);
-
-// 获取端口
-const port = node.getPort('port-in');
-const allPorts = node.getPorts();
-```
-
-### 3. 边的多标签支持
-
-```typescript
-import { Edge } from '@antv/ge';
-
-const edge = new Edge({
-  id: 'edge1',
-  source: 'node1',
-  target: 'node2',
-  style: {
-    // 主标签 (向后兼容)
-    label: 'Edge Label',
-
-    // 多标签配置
-    labels: [
-      {
-        id: 'label1',
-        text: 'Start',
-        position: {
-          distance: 0.2,  // 位置: 边的 20% 处
-          offset: {
-            normal: 10    // 法向偏移
-          }
-        },
-        style: {
-          fill: '#333',
-          fontSize: 12
-        }
-      },
-      {
-        id: 'label2',
-        text: 'End',
-        position: {
-          distance: 0.8,  // 位置: 边的 80% 处
-          offset: {
-            normal: -10
-          }
-        }
-      }
-    ]
-  }
-});
-
-graph.appendChild(edge);
-
-// 动态添加标签
-edge.addLabel('dynamic-label', {
-  text: 'Dynamic',
-  position: { distance: 0.5 },
-  style: { fill: 'red' }
-});
-
-// 移除标签
-edge.removeLabel('label1');
-
-// 获取标签
-const label = edge.getLabel('label2');
-```
-
-### 4. 自定义路由器
-
-```typescript
-import type { EdgeRouter } from '@antv/ge';
-import type { Vec2 } from '@antv/ge';
-
-class MyRouter implements EdgeRouter {
-  route(points: Vec2[], vertices?: Vec2[]): Vec2[] {
-    // 自定义路由逻辑
-    return points;
-  }
-}
-
-const edge = new Edge({
-  id: 'e1',
-  source: 'n1',
-  target: 'n2',
-  style: {
-    router: new MyRouter()
-  }
-});
-```
-
-### 5. 自定义连接器
-
-```typescript
-import type { EdgeConnector } from '@antv/ge';
-import { DisplayObject } from '@antv/g-lite';
-import type { BaseEdgeStyleProps } from '@antv/ge';
-
-class MyConnector implements EdgeConnector {
-  connect(points: Vec2[], style: BaseEdgeStyleProps): DisplayObject {
-    // 自定义图形生成
-    return new Line({
-      style: {
-        x1: points[0][0],
-        y1: points[0][1],
-        x2: points[1][0],
-        y2: points[1][1],
-        ...style
-      }
-    });
-  }
-}
-
-const edge = new Edge({
-  id: 'e1',
-  source: 'n1',
-  target: 'n2',
-  style: {
-    connector: new MyConnector()
-  }
-});
-```
-
-## 架构设计
-
-GE 基于 **@antv/g-lite** 构建，采用**类 DOM 的 API 设计**：
-
-- **Graph** → 类似 HTML 的 `document`，是图编辑器的容器
-- **Node/Edge/Port** → 类似 DOM 元素，可用 `appendChild`、`addEventListener` 等方法操作
-- **事件驱动** → 所有交互通过事件系统处理，插件可监听事件实现功能
+## 目录结构
 
 ```
-继承关系:
-Canvas (@antv/g-lite)
-└── Graph
-
-CustomElement (@antv/g-lite)
-└── GEInteractiveElement (交互基类)
-    ├── ItemElement (集合管理基类)
-    │   ├── Node (节点)
-    │   └── Edge (边)
-    └── ItemToolElement (单项定位基类)
-        ├── Port (端口)
-        └── EdgeMarker (箭头)
+ge/
+├─ packages/
+│  ├─ ge-core/           核心包
+│  │  ├─ src/
+│  │  │  ├─ core/        Cell/Node/Edge/Port/Group/Graph + types/compute
+│  │  │  ├─ shape/       ShapeRegistry + Markup/Selector + builtIn（rect/circle/ellipse/diamond）
+│  │  │  ├─ anchor/      统一锚点（node-anchor / edge-anchor / registry）
+│  │  │  ├─ edge/        router / connector（含 updatePath 原地更新）
+│  │  │  ├─ plugins/     Drag/Resize/Selection/Hover/CreateEdge/Vertex/Keyboard/Clipboard/Transform/History/Scroller/Snapline/Dnd/Minimap
+│  │  │  ├─ layout/      grid/circular/force/hierarchical
+│  │  │  └─ utils/       几何 / 向量
+│  │  └─ __tests__/      Vitest 单测（75 tests）
+│  └─ ge-react/          React 封装（<GraphView> 声明式 diff）
+├─ examples/             嵌入式 HTML（01–08）
+├─ vite.config.ts        examples dev server
+└─ tsconfig.base.json    TS5 strict
 ```
 
-> 💡 **详细架构说明、事件系统、插件开发请参考 [CLAUDE.md](./CLAUDE.md)**
+## 路线图
 
-## 开发路线图
-
-详细的开发计划请参考 [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
-
-**近期重点 (1-2 周):**
-- [ ] 配置 Jest 测试环境和测试脚本
-- [ ] 完善类型系统，移除临时 any/ts-ignore
-- [ ] 为核心工具函数编写单元测试
-
-**短期目标 (2-4 周):**
-- [ ] 实现 SelectionPlugin 和 DragPlugin
-- [ ] ConnectionPlugin 功能增强
-- [ ] 插件开发文档
-
-**中期目标 (1-2 月):**
-- [ ] 性能优化与大图渲染支持
-- [ ] 布局算法集成
-
-**长期目标 (3+ 月):**
-- [ ] React/Vue 框架集成
-- [ ] 完整示例库和教程
-- [ ] 生态建设
-
-## 与 DOM API 的对应关系
-
-| GE API | DOM API | 说明 |
-|--------|---------|------|
-| `graph.appendChild(node)` | `parent.appendChild(child)` | 添加子元素 |
-| `graph.removeChild(node)` | `parent.removeChild(child)` | 秼除子元素 |
-| `graph.getElementById(id)` | `document.getElementById(id)` | 通过 ID 获取元素 |
-| `graph.querySelectorAll(selector)` | `document.querySelectorAll(selector)` | 查询元素 |
-| `node.addEventListener(type, handler)` | `element.addEventListener(type, handler)` | 添加事件监听器 |
-| `node.style.width = 100` | `element.style.width = '100px'` | 设置样式 |
-| `node.setAttribute(name, value)` | `element.setAttribute(name, value)` | 设置属性 |
-
-## 贡献
-
-我们欢迎任何形式的贡献，包括但不限于：
-
-- 提交 Issue
-- 提交 Pull Request
-- 改进文档
-- 提供使用案例
+- [x] **L0** 工程地基（pnpm / TS5 / tsup / Vite / Vitest）
+- [x] **L1** 核心原语 + 单测（Anchor / Router / Connector / utils）
+- [x] **L2** 领域元素 + Graph + X6 抽象（ShapeRegistry / Markup / Selector / Attrs / Model）
+- [x] **L3** 交互与编辑：Drag / Resize / Selection / Hover / CreateEdge / Vertex / Keyboard / Clipboard / Transform / History / Scroller / Snapline / Group
+- [x] **L4** 生态：序列化 / Minimap（拖框导航）/ Export / Layout / Dnd（坐标校准）/ `@antv/ge-react`（声明式 diff）
+- [ ] 后续：完整 dagre / 更多内置 shape / 性能优化 / API 文档站点
 
 ## License
 
 MIT
-
-## 相关链接
-
-- [AntV 官网](https://antv.vision/)
-- [AntV/G](https://g.antv.antgroup.com/)
-- [GitHub](https://github.com/antvis/GE)

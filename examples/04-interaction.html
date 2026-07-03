@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 04 交互</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; }
+    #app { width: 100vw; height: 100vh; }
+    .panel { position: fixed; top: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); font-size: 13px; max-width: 300px; }
+    .panel h1 { font-size: 15px; margin: 0 0 6px; }
+    .panel code { background: #f5f5f5; padding: 1px 5px; border-radius: 4px; }
+    .panel li { margin: 3px 0; }
+    .toolbar { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
+    .toolbar button { padding: 8px 14px; border: 1px solid #d9d9d9; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .toolbar button:hover { border-color: #1890ff; color: #1890ff; }
+    .status { position: fixed; bottom: 16px; left: 16px; background: rgba(255,255,255,.92); padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); font-size: 12px; color: #555; }
+    /* 信息面板不拦截指针，确保覆盖区域的节点仍可交互 */
+    .panel, .status, .toolbar { pointer-events: none; }
+    .toolbar button { pointer-events: auto; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="panel">
+    <h1>GE · 04 交互编辑</h1>
+    <ul>
+      <li><b>拖拽</b>节点，边自动跟随</li>
+      <li><b>单击</b>选中（橙色）/ <b>Shift</b> 多选</li>
+      <li><b>Cmd/Ctrl+Z</b> 撤销，<b>Shift+Cmd/Ctrl+Z</b> 重做</li>
+      <li><b>导出</b>序列化为 JSON</li>
+    </ul>
+  </div>
+  <div class="toolbar">
+    <button id="undo">撤销</button>
+    <button id="redo">重做</button>
+    <button id="export">导出 JSON</button>
+  </div>
+  <div class="status" id="status">selected: 无</div>
+  <script type="module">
+    import { Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin, HoverPlugin } from '@ge';
+
+    const graph = new Graph({ container: '#app', background: '#fafafa' });
+    await graph.ready;
+
+    const drag = graph.use(new DragPlugin());
+    const selection = graph.use(new SelectionPlugin());
+    const history = graph.use(new HistoryPlugin());
+    graph.use(new MinimapPlugin());
+    graph.use(new HoverPlugin());
+
+    graph.addNode({ id: 'a', x: 120, y: 160, width: 140, height: 54, fill: '#e6f7ff', stroke: '#1890ff', label: '拖我' });
+    graph.addNode({ id: 'b', x: 480, y: 110, width: 140, height: 54, label: '连到这里' });
+    graph.addNode({ id: 'c', x: 480, y: 300, width: 140, height: 54, fill: '#f6ffed', stroke: '#52c41a', label: '多选拖' });
+    graph.addEdge({ source: 'a', target: 'b', router: 'orthogonal', connector: 'rounded', stroke: '#1890ff' });
+    graph.addEdge({ source: 'a', target: 'c', connector: 'smooth', stroke: '#52c41a' });
+
+    document.getElementById('undo').onclick = () => history.undo();
+    document.getElementById('redo').onclick = () => history.redo();
+    document.getElementById('export').onclick = () => {
+      const json = graph.toJSON();
+      window.__lastJSON = json;
+      console.log('GE JSON:', JSON.stringify(json));
+    };
+
+    // 键盘快捷键
+    window.addEventListener('keydown', (e) => {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) history.redo(); else history.undo();
+      }
+    });
+
+    const statusEl = document.getElementById('status');
+    const updateStatus = () => {
+      const s = selection.getSelected();
+      statusEl.textContent = 'selected: ' + (s.join(', ') || '无') + ' | undo:' + history.undoStack.length + ' redo:' + history.redoStack.length;
+    };
+    graph.addEventListener('pointerdown', () => setTimeout(updateStatus, 0));
+    graph.addEventListener('node:dragend', () => setTimeout(updateStatus, 0));
+
+    window.ge = graph;
+    window.sel = selection;
+    window.hist = history;
+  </script>
+</body>
+</html>
