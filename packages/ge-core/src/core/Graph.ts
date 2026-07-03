@@ -219,6 +219,26 @@ export class Graph extends Canvas {
     for (const n of this.getNodes()) n.remove();
   }
 
+  /** 缩放并平移使所有内容适配视口 */
+  zoomToFit(padding = 20): void {
+    const nodes = this.getNodes();
+    if (nodes.length === 0) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes as any[]) {
+      const bb = n.getWorldBBox();
+      minX = Math.min(minX, bb.x); minY = Math.min(minY, bb.y);
+      maxX = Math.max(maxX, bb.x + bb.width); maxY = Math.max(maxY, bb.y + bb.height);
+    }
+    const cfg = this.getConfig();
+    const vw = (cfg.width ?? 800) - padding * 2;
+    const vh = (cfg.height ?? 600) - padding * 2;
+    const cw = maxX - minX, ch = maxY - minY;
+    if (cw <= 0 || ch <= 0) return;
+    const zoom = Math.min(vw / cw, vh / ch, 2);
+    this.getCamera().setZoom(zoom);
+    this.panTo((minX + maxX) / 2, (minY + maxY) / 2);
+  }
+
   // ---- 虚拟渲染（viewport culling） ----
   private _culling = false;
   /** 启用/禁用视口裁剪（大图性能优化，只渲染可见节点） */
