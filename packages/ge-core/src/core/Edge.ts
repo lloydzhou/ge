@@ -50,6 +50,8 @@ export class Edge extends Cell {
   protected endMarker?: Path;
   protected startMarker?: Path;
   protected labelText?: Text;
+  protected _labelTexts: Text[] = [];
+  private dashRafId: number | null = null;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
@@ -106,6 +108,7 @@ export class Edge extends Cell {
         this.startMarker?.setAttribute('fill', newV);
         break;
       case 'label':
+      case 'labels':
         this.syncLabel();
         this.update();
         break;
@@ -117,6 +120,15 @@ export class Edge extends Cell {
         break;
       case 'opacity':
         this.body?.setAttribute('opacity', newV);
+        break;
+      case 'lineDashFlow':
+        if (newV) this.startDashFlow(); else this.stopDashFlow();
+        break;
+      case 'visible':
+        this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
+        break;
+      case 'stateStyles':
+        this.applyStates();
         break;
       default:
         break;
@@ -144,11 +156,14 @@ export class Edge extends Cell {
     const srcShape = srcNode.getAttribute('shape');
     const tgtShape = tgtNode.getAttribute('shape');
 
+    const graph = (this as any).ownerDocument?.defaultView;
+    const obstacles = graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
     const points = computeEdgePoints(
       { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
       routerFn,
       s.waypoints as Point[] | undefined,
+      { obstacles },
     );
 
     const opts: ConnectorOptions = {};
@@ -179,6 +194,38 @@ export class Edge extends Cell {
     node.addEventListener('node:boundschange', () => this.update());
   }
 
+  /** 根据 className 应用 stateStyles（hover/selected 等） */
+  protected applyStates(): void {
+    if (!this.body) return;
+    const cls = (this.className || '').split(/\s+/);
+    const s = this.styleProps();
+    const states = (s.stateStyles as Record<string, any>) || {};
+    const cur: Record<string, any> = { stroke: s.stroke, lineWidth: s.strokeWidth };
+    for (const c of cls) {
+      if (c && states[c]) {
+        if (states[c].stroke) cur.stroke = states[c].stroke;
+        if (states[c].strokeWidth) cur.lineWidth = states[c].strokeWidth;
+      }
+    }
+    this.body.setAttribute('stroke', cur.stroke);
+    this.body.setAttribute('lineWidth', cur.lineWidth);
+  }
+
+  /** 流动虚线动画 */
+  protected startDashFlow(): void {
+    if (this.dashRafId != null) return;
+    let offset = 0;
+    const animate = (): void => {
+      offset -= 0.5;
+      this.body?.setAttribute('lineDashOffset', offset);
+      this.dashRafId = requestAnimationFrame(animate);
+    };
+    this.dashRafId = requestAnimationFrame(animate);
+  }
+  protected stopDashFlow(): void {
+    if (this.dashRafId != null) { cancelAnimationFrame(this.dashRafId); this.dashRafId = null; }
+  }
+
   /** 创建终点箭头 marker（颜色跟随 stroke） */
   protected createMarker(color: string): Path {
     // 尖端在 (0,0)（= 路径终点/target 边缘），底朝 +x（g-lite orient 使 +x 朝 source，即边外）
@@ -189,6 +236,17 @@ export class Edge extends Cell {
   /** 同步边标签 */
   protected syncLabel(): void {
     const s = this.styleProps();
+    const labels = s.labels as { text: string }[] | undefined;
+    if (labels && labels.length > 0) {
+      for (const lt of this._labelTexts) lt.destroy();
+      this._labelTexts = [];
+      for (const item of labels) {
+        const lt = new Text({ style: { text: item.text, fontSize: 12, fill: '#333333', textAlign: 'center', textBaseline: 'middle' } });
+        this.appendChild(lt);
+        this._labelTexts.push(lt);
+      }
+      return;
+    }
     const text = s.label as string | undefined;
     if (!text) {
       this.labelText?.destroy();
@@ -208,6 +266,15 @@ export class Edge extends Cell {
   /** 把标签定位到路径中点 */
   protected positionLabel(points: Point[]): void {
     if (!this.labelText || points.length === 0) return;
+    if (this._labelTexts.length > 0) {
+      const labels = (this.styleProps().labels as { distance?: number }[]) ?? [];
+      this._labelTexts.forEach((lt, i) => {
+        const t = labels[i]?.distance ?? 0.5;
+        const pt = edgeAnchorRatio(points, { t });
+        lt.setLocalPosition(pt.x, pt.y);
+      });
+      return;
+    }
     const mid = edgeAnchorRatio(points, { t: ((this.styleProps().labelDistance as number) ?? 0.5) });
     this.labelText.setLocalPosition(mid.x, mid.y);
   }

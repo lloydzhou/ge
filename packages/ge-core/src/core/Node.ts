@@ -141,6 +141,21 @@ export class Node extends Cell {
       case 'angle':
         this.applyRotation();
         break;
+      case 'shadowColor':
+        this.body?.setAttribute('shadowColor', newV);
+        break;
+      case 'shadowBlur':
+        this.body?.setAttribute('shadowBlur', newV);
+        break;
+      case 'fillOpacity':
+        this.body?.setAttribute('fillOpacity', newV);
+        break;
+      case 'strokeOpacity':
+        this.body?.setAttribute('strokeOpacity', newV);
+        break;
+      case 'visible':
+        this.setAttribute('visibility', newV ? 'visible' : 'hidden');
+        break;
       case 'shape':
       case 'width':
       case 'height':

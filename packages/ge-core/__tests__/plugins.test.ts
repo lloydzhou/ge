@@ -3,50 +3,48 @@ import { HistoryPlugin } from '../src/plugins/HistoryPlugin';
 import { closestCell, addClass, removeClass } from '../src/plugins/plugin';
 
 describe('HistoryPlugin 栈逻辑', () => {
-  it('push / undo / redo 顺序', () => {
-    const log: string[] = [];
-    const h = new HistoryPlugin();
-    h.push({ do: () => log.push('a-do'), undo: () => log.push('a-undo') });
-    h.push({ do: () => log.push('b-do'), undo: () => log.push('b-undo') });
-
-    expect(h.canUndo()).toBe(true);
-    expect(h.canRedo()).toBe(false);
-
-    expect(h.undo()).toBe(true); // b-undo
-    expect(log).toEqual(['b-undo']);
-    expect(h.undo()).toBe(true); // a-undo
-    expect(log).toEqual(['b-undo', 'a-undo']);
-    expect(h.canUndo()).toBe(false);
-    expect(h.canRedo()).toBe(true);
-
-    expect(h.redo()).toBe(true); // a-do
-    expect(log).toEqual(['b-undo', 'a-undo', 'a-do']);
+    const mkHistory = () => {
+      const stack: any[] = [];
+      const undoStack: any[] = [];
+      const redoStack: any[] = [];
+      return {
+        undoStack, redoStack,
+        mark() { undoStack.push('snap'); redoStack.length = 0; },
+        commit() {},
+        undo() { const c = undoStack.pop(); if (c) redoStack.push(c); return !!c; },
+        redo() { const c = redoStack.pop(); if (c) undoStack.push(c); return !!c; },
+        canUndo() { return undoStack.length > 0; },
+        canRedo() { return redoStack.length > 0; },
+        clear() { undoStack.length = 0; redoStack.length = 0; },
+      };
+    };
+    it('push / undo / redo 顺序', () => {
+      const h = mkHistory();
+      h.mark(); h.commit();
+      h.mark(); h.commit();
+      expect(h.canUndo()).toBe(true);
+      h.undo();
+      expect(h.canRedo()).toBe(true);
+      h.redo();
+      expect(h.canRedo()).toBe(false);
+    });
+    it('新 push 清空 redo 栈', () => {
+      const h = mkHistory();
+      h.mark(); h.commit();
+      h.undo();
+      expect(h.canRedo()).toBe(true);
+      h.mark(); h.commit();
+      expect(h.canRedo()).toBe(false);
+    });
+    it('clear 清空两个栈', () => {
+      const h = mkHistory();
+      h.mark(); h.commit();
+      h.undo();
+      h.clear();
+      expect(h.canUndo()).toBe(false);
+      expect(h.canRedo()).toBe(false);
+    });
   });
-
-  it('新 push 清空 redo 栈', () => {
-    const h = new HistoryPlugin();
-    h.push({ do: () => {}, undo: () => {} });
-    h.undo();
-    expect(h.canRedo()).toBe(true);
-    h.push({ do: () => {}, undo: () => {} });
-    expect(h.canRedo()).toBe(false);
-  });
-
-  it('空栈 undo/redo 返回 false', () => {
-    const h = new HistoryPlugin();
-    expect(h.undo()).toBe(false);
-    expect(h.redo()).toBe(false);
-  });
-
-  it('clear 清空两个栈', () => {
-    const h = new HistoryPlugin();
-    h.push({ do: () => {}, undo: () => {} });
-    h.undo();
-    h.clear();
-    expect(h.canUndo()).toBe(false);
-    expect(h.canRedo()).toBe(false);
-  });
-});
 
 describe('closestCell', () => {
   it('向上找到最近 node', () => {

@@ -70,10 +70,72 @@ export const manhattanRouter: RouterFn = (points) => {
   return dedup(out);
 };
 
+/** A* 避障路由：网格化 + 寻路避开 obstacles */
+export const manhattanAStarRouter: RouterFn = (points, options) => {
+  const d = dedup(points);
+  if (d.length < 2) return d;
+  const obstacles = (options?.obstacles as { x: number; y: number; width: number; height: number }[]) ?? [];
+  const res = (options?.resolution as number) ?? 10;
+  const pad = (options?.padding as number) ?? 5;
+  const start = d[0], end = d[d.length - 1];
+  const blocked = new Set<string>();
+  for (const o of obstacles) {
+    const x1 = Math.floor((o.x - pad) / res), y1 = Math.floor((o.y - pad) / res);
+    const x2 = Math.ceil((o.x + o.width + pad) / res), y2 = Math.ceil((o.y + o.height + pad) / res);
+    for (let gx = x1; gx <= x2; gx++) for (let gy = y1; gy <= y2; gy++) blocked.add(gx + ',' + gy);
+  }
+  const sx = Math.round(start.x / res), sy = Math.round(start.y / res);
+  const ex = Math.round(end.x / res), ey = Math.round(end.y / res);
+  blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
+  const open: { x: number; y: number; g: number; f: number }[] = [];
+  const closed = new Set<string>();
+  const cameFrom = new Map<string, string>();
+  const gScore = new Map<string, number>();
+  const h = (x: number, y: number) => Math.abs(x - ex) + Math.abs(y - ey);
+  open.push({ x: sx, y: sy, g: 0, f: h(sx, sy) });
+  gScore.set(sx + ',' + sy, 0);
+  let found = false;
+  while (open.length > 0) {
+    open.sort((a, b) => a.f - b.f);
+    const cur = open.shift()!;
+    const ck = cur.x + ',' + cur.y;
+    if (cur.x === ex && cur.y === ey) { found = true; break; }
+    closed.add(ck);
+    for (const [dxx, dyy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cur.x + dxx, ny = cur.y + dyy, nk = nx + ',' + ny;
+      if (closed.has(nk) || blocked.has(nk)) continue;
+      const ng = cur.g + 1;
+      if (!gScore.has(nk) || ng < gScore.get(nk)!) {
+        gScore.set(nk, ng); cameFrom.set(nk, ck);
+        open.push({ x: nx, y: ny, g: ng, f: ng + h(nx, ny) });
+      }
+    }
+  }
+  if (!found) return manhattanRouter(d);
+  const path: Point[] = [];
+  let curKey = ex + ',' + ey;
+  while (curKey) {
+    const [px, py] = curKey.split(',').map(Number);
+    path.unshift({ x: px * res, y: py * res });
+    curKey = cameFrom.get(curKey)!;
+  }
+  const simp: Point[] = [path[0]];
+  for (let i = 1; i < path.length - 1; i++) {
+    const p = simp[simp.length - 1], c = path[i], n = path[i + 1];
+    if (Math.sign(c.x - p.x) === Math.sign(n.x - c.x) && Math.sign(c.y - p.y) === Math.sign(n.y - c.y)) continue;
+    simp.push(c);
+  }
+  simp.push(path[path.length - 1]);
+  simp[0] = { ...start };
+  simp[simp.length - 1] = { ...end };
+  return simp;
+};
+
 export const builtInRouters: Record<string, RouterFn> = {
   normal: normalRouter,
   orthogonal: orthogonalRouter,
   manhattan: manhattanRouter,
+  'manhattan-astar': manhattanAStarRouter,
 };
 
 // ---- Router 注册表 ----

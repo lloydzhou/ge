@@ -17,7 +17,8 @@ export class HoverPlugin extends Plugin {
       if (target === this.hovered) return;
       if (this.hovered) removeClass(this.hovered, 'hover');
       this.hovered = target;
-      if (target) addClass(target, 'hover');
+      if (target) { addClass(target, 'hover'); (this.graph.getConfig().container as HTMLElement).style.cursor = 'move'; }
+      else { (this.graph.getConfig().container as HTMLElement).style.cursor = ''; }
     });
   }
 

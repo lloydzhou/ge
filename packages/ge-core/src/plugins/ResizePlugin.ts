@@ -6,7 +6,7 @@
  * - 手柄随节点移动 / 旋转 / 画布 pan/zoom 实时更新。
  * - 依赖 SelectionPlugin。
  */
-import { Plugin } from './plugin';
+import { OverlayPlugin } from './plugin';
 
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
 type Dir = (typeof HANDLES)[number];
@@ -17,7 +17,7 @@ const CURSORS: Record<Dir, string> = {
   sw: 'nesw-resize', s: 'ns-resize', se: 'nwse-resize',
 };
 
-export class ResizePlugin extends Plugin {
+export class ResizePlugin extends OverlayPlugin {
   readonly name = 'resize';
   private handles: Record<string, HTMLDivElement> = {};
   private target?: any;
@@ -51,7 +51,7 @@ export class ResizePlugin extends Plugin {
       });
     }
 
-    const update = (): void => this.updateHandles();
+    const update = (): void => this.update();
     graph.addEventListener('pointerdown', () => setTimeout(update, 0));
     graph.addEventListener('node:dragend', update);
     graph.addEventListener('afterrender', () => {
@@ -76,12 +76,12 @@ export class ResizePlugin extends Plugin {
       this.target.setAttribute('y', y);
       this.target.setAttribute('width', w);
       this.target.setAttribute('height', h);
-      this.updateHandles();
+      this.update();
     });
     window.addEventListener('pointerup', () => { this.resizing = null; });
   }
 
-  private updateHandles(): void {
+  protected update(): void {
     const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
     const node = sel.length === 1 ? this.graph.getNode(sel[0]) : null;
     const show = !!(node && node.getAttribute('resizable'));
@@ -107,6 +107,8 @@ export class ResizePlugin extends Plugin {
       h.style.display = 'block';
     }
   }
+
+  protected isActive(): boolean { return !!(this.target && this.handles['se'] && this.handles['se'].style.display !== 'none'); }
 
   destroy(): void {
     for (const dir of HANDLES) this.handles[dir]?.remove();

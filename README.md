@@ -7,39 +7,143 @@
 - **数据结构**：借鉴 X6（Markup/Selector/Attrs/shape 声明式模型）
 - **交互 API**：靠拢 DOM（`setAttribute` / `appendChild` / `addEventListener` / `classList` / `querySelector`）
 
+不用 X6 的命令式 API（`addNode/addTools/graph.on`），用 DOM 标准 API：
+
+| 操作 | ❌ 命令式 | ✅ GE DOM 化 |
+|------|---------|-------------|
+| 创建节点 | `graph.addNode({...})` | `graph.appendChild(new Node({...}))` |
+| 删除 | `graph.removeNode(id)` | `graph.removeChild(node)` |
+| 变换 | `node.resize(w,h)` | `node.setAttribute('width', w)` |
+| 工具 | `node.addTools(['resize'])` | `node.setAttribute('resizable', true)` |
+| 事件 | `graph.on('node:click', fn)` | `graph.addEventListener('node:click', fn)` |
+| 端口 | `node.addPort({id})` | `node.appendChild(new Port({id}))` |
+
 ```ts
 // 创建（DOM 风格）
 graph.appendChild(new Node({ shape: 'rect', x: 100, y: 100, label: 'A' }));
 
-// 变换（attribute 驱动）
+// 变换（attribute 驱动，响应式）
 node.setAttribute('angle', 45);        // 旋转
 node.setAttribute('width', 200);       // 缩放
-node.setAttribute('resizable', true);  // 声明式工具配置
+node.setAttribute('visible', false);   // 隐藏
+node.setAttribute('shadowBlur', 10);   // 阴影
+
+// 声明式工具配置（不用 addTools）
+node.setAttribute('resizable', true);  // → 选中显示 8 向手柄
+node.setAttribute('rotatable', true);  // → 选中显示旋转手柄
+
+// 端口（appendChild）
+node.appendChild(new Port({ id: 'p1', layout: 'top' }));
 
 // 查询（document API）
 graph.getElementById('n1');
-graph.querySelector('.selected');
+graph.getCells();   // 所有节点 + 边
 
 // 事件（DOM 冒泡）
 node.addEventListener('click', fn);
 graph.addEventListener('node:dragend', fn);
+graph.addEventListener('cell:added', fn);
 ```
 
 ## 核心特性
 
-- **类 DOM API**：`appendChild / getElementById / addEventListener / connectedCallback` 直接来自 g-lite。
-- **X6 式抽象**：ShapeRegistry + Markup/Selector + Attrs(selector 粒度) + Model(props 序列化)。
-- **8 个内置 shape**：rect / circle / ellipse / diamond / triangle / hexagon / parallelogram / cylinder。
-- **19 个插件**：Drag / Resize(8向) / Rotate / Selection(框选) / Hover / CreateEdge / Vertex(增删) / Keyboard / Clipboard / Transform / History(snapshot) / Scroller / Snapline / Group(嵌套) / Dnd(坐标校准) / Minimap(拖框导航) / Grid(背景网格) / ContextMenu / Tooltip。
-- **边视觉**：双向箭头(startArrow) / 标签(distance 沿路径定位) / Router(normal/orthogonal/manhattan) / Connector(normal/rounded/smooth)。
-- **坐标变换**：GE 自有 2D 坐标层（panOffset + 中心缩放），pan/zoom 后坐标转换与渲染完全一致。
-- **React 封装**：`@antv/ge-react` 声明式 `<GraphView>`（props diff 自动同步）。
+### 12 个内置 Shape
+
+`rect` / `circle` / `ellipse` / `diamond` / `triangle` / `hexagon` / `parallelogram` / `cylinder` / `star` / `text` / `cross` / `arrow`
+
+### 20 个插件
+
+| 插件 | 能力 |
+|------|------|
+| **Drag** | 节点拖拽移动 |
+| **Resize** | 8 向尺寸手柄（4 角 + 4 边，`resizable` 声明式） |
+| **Rotate** | 旋转手柄（`rotatable` 声明式，`angle` attribute） |
+| **Selection** | 点击选中（节点 + 边）+ 空白左键框选（Shift 多选） |
+| **Hover** | 节点/边悬停高亮 + move cursor |
+| **CreateEdge** | Port 直接拖出连线 + Alt 拖节点连线 |
+| **Vertex** | waypoint 增删 + 端点重连（source/target-arrow）+ segments 整段拖拽 |
+| **Keyboard** | Delete + Ctrl+Z/Y（undo/redo）+ Ctrl+A（全选）+ Ctrl+C/V/D |
+| **Clipboard** | 复制 / 粘贴 / 克隆 |
+| **Transform** | 多选整体平移 |
+| **History** | snapshot undo/redo（覆盖全操作 + mark/commit） |
+| **Scroller** | 滚轮缩放 + 中/右键平移 |
+| **Snapline** | 对齐辅助线 |
+| **Group** | 分组嵌套（embed + getWorldBBox 含 parent offset） |
+| **Dnd** | Stencil 拖拽创建（pan/zoom 后精确） |
+| **Minimap** | 缩略导航（拖框平移） |
+| **Grid** | 背景网格（点阵/网格线） |
+| **ContextMenu** | 右键自定义菜单 |
+| **Tooltip** | 悬停提示 |
+| **Boundary** | 选中节点虚线包围框 |
+
+### 边能力（12 种）
+
+- **4 个 Router**：normal / orthogonal / manhattan / **manhattan-astar**（A* 避障路由）
+- **3 个 Connector**：normal / rounded / smooth
+- **双向箭头**：`startArrow: true`
+- **多标签**：`labels: [{ text, distance }]`（distance 0-1 沿路径定位）
+- **流动动画**：`lineDashFlow: true`（数据流效果）
+- **虚线/透明/可见**：`lineDash` / `opacity` / `visible`
+- **路径控制**：`vertices`（waypoint）
+- **端点重连**：拖拽 source/target 手柄改变连线端点
+- **整段拖拽**：拖拽边线 → 所有 waypoints 平移
+- **自环**：source == target → 自动 U 形路径
+
+### 节点能力（10 种）
+
+- **变换**：旋转（`angle`）/ resize（`width`/`height` 8 向）
+- **层级**：`toFront()` / `toBack()`
+- **视觉**：`visible` / `shadowColor` + `shadowBlur`
+- **端口**：`Port` + `layout: 'top'/'bottom'/'left'/'right'`（同方向自动均匀排列）
+- **声明式工具**：`resizable` / `rotatable`
+
+### 坐标变换
+
+GE 自有 2D 坐标层（绕过 g-lite SVG camera 3D 投影不一致）：
+- `panBy` / `panTo` / `zoomToFit`
+- `canvas2Viewport` / `viewport2Canvas`（中心缩放公式）
+- `pickNode`（自定义命中检测）
+- `culling`（视口虚拟渲染，大图性能）
+
+### 数据 & 布局
+
+```ts
+// 序列化往返
+graph.toJSON();
+graph.fromJSON(data);
+
+// 导出
+graph.toDataURL('image/png');
+graph.toSVGString();
+
+// 批量操作（History 合并为一次 undo）
+graph.batch(() => {
+  graph.addNode({ id: 'x', x: 100, y: 100 });
+  graph.addNode({ id: 'y', x: 300, y: 100 });
+  graph.addEdge({ source: 'x', target: 'y' });
+});
+
+// 布局：grid / circular / force / hierarchical
+graph.applyLayout('hierarchical', { layerGap: 110, nodeGap: 140 });
+```
+
+### 抽象层（X6 对齐）
+
+- **ShapeRegistry**：shape 可注册（12 内置 + 自定义）
+- **Markup + Selector**：声明式子元素（`getSubElement('body')`）
+- **Attrs**：selector 粒度 stateStyles
+- **Model**：Cell `props` 自动同步（toJSON 完整）
+- **OverlayPlugin**：DOM overlay 插件 DRY 基类
+
+### React 封装
+
+`@antv/ge-react` 声明式 `<GraphView>`（props 变化 → 按 id diff 自动同步：增/删/改）。
 
 ## 快速开始
 
 ```bash
 pnpm install && pnpm dev    # 启动 examples
-pnpm test                    # 75 单测
+pnpm test                    # 77 单测
 pnpm build                   # 构建
 ```
 

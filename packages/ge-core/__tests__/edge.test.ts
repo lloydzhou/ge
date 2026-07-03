@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  normalRouter, orthogonalRouter, manhattanRouter,
+  normalRouter, orthogonalRouter, manhattanRouter, manhattanAStarRouter,
   RouterRegistry, createDefaultRouterRegistry,
 } from '../src/edge/router';
 import {
@@ -98,5 +98,32 @@ describe('connector', () => {
     updatePath(fakePath, seg3, normalConnector, {});
     expect(fakePath.setAttribute).toHaveBeenCalledTimes(2);
     expect(fakePath.setAttribute).toHaveBeenLastCalledWith('d', 'M 0 0 L 10 0 L 10 10');
+  });
+});
+
+describe('manhattanAStarRouter', () => {
+  it('无障碍 → 正交路径', () => {
+    const result = manhattanAStarRouter(
+      [{ x: 0, y: 0 }, { x: 100, y: 100 }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    expect(result[0]).toEqual({ x: 0, y: 0 });
+    expect(result[result.length - 1]).toEqual({ x: 100, y: 100 });
+  });
+
+  it('有障碍 → 绕路（y 偏离 0）', () => {
+    const result = manhattanAStarRouter(
+      [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      { obstacles: [{ x: 30, y: -10, width: 40, height: 20 }], resolution: 10 }
+    );
+    // 应避开 y=0 附近的障碍
+    const hasDetour = result.some((p) => Math.abs(p.y) > 15);
+    expect(hasDetour).toBe(true);
+  });
+
+  it('注册表中可解析', () => {
+    const reg = createDefaultRouterRegistry();
+    expect(reg.resolve('manhattan-astar')).toBe(manhattanAStarRouter);
   });
 });

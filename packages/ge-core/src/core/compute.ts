@@ -25,10 +25,26 @@ export const computeEdgePoints = (
   target: EdgeEndpoint,
   routerFn: RouterFn,
   waypoints: Point[] = [],
+  routerOptions?: Record<string, any>,
 ): Point[] => {
+  // 自环检测（source == target）
+  const sameNode = source.bbox.x === target.bbox.x && source.bbox.y === target.bbox.y &&
+    source.bbox.width === target.bbox.width && source.bbox.height === target.bbox.height;
+  if (sameNode) {
+    const bb = source.bbox;
+    const off = 35;
+    const sp: Point = { x: bb.x + bb.width * 0.35, y: bb.y };
+    const tp: Point = { x: bb.x + bb.width * 0.65, y: bb.y };
+    const loop: Point[] = [
+      { x: bb.x + bb.width * 0.35, y: bb.y - off },
+      { x: bb.x + bb.width * 0.65, y: bb.y - off },
+    ];
+    return routerFn([sp, ...loop, tp]);
+  }
+
   const sCenter = bboxCenter(source.bbox);
   const tCenter = bboxCenter(target.bbox);
   const sPoint = source.anchorFn(source.bbox, { direction: tCenter, ...source.anchorArgs });
   const tPoint = target.anchorFn(target.bbox, { direction: sCenter, ...target.anchorArgs });
-  return routerFn([sPoint, ...waypoints, tPoint]);
+  return routerFn([sPoint, ...waypoints, tPoint], routerOptions);
 };

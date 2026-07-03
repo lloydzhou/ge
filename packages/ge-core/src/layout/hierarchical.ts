@@ -65,8 +65,9 @@ export const hierarchicalLayout = (
 
   const pos: Positions = new Map();
   layers.forEach((ids, d) => {
+    const totalW = (ids.length - 1) * nodeGap;
     ids.forEach((id, i) => {
-      pos.set(id, { x: sx + i * nodeGap, y: sy + d * layerGap });
+      pos.set(id, { x: sx + i * nodeGap - totalW / 2, y: sy + d * layerGap });
     });
   });
   return pos;

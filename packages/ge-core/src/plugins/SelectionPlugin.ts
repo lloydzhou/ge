@@ -5,7 +5,7 @@
  * - 空白左键拖拽：框选（橡皮筋），释放选中框内节点
  * - 选中通过 className 'selected' 触发（DOM 风格）
  */
-import { Plugin, addClass, removeClass } from './plugin';
+import { Plugin, addClass, removeClass, closestEdge } from './plugin';
 
 export class SelectionPlugin extends Plugin {
   readonly name = 'selection';
@@ -27,7 +27,12 @@ export class SelectionPlugin extends Plugin {
       const cell = graph.pickNode(e.viewportX, e.viewportY);
       const additive = !!(e.shiftKey || e.metaKey || e.ctrlKey);
       if (!cell) {
-        // 空白：开始框选
+        const edge = closestEdge(e.target);
+        if (edge) {
+          if (additive) { if (this.selected.has(edge.id)) this.deselect(edge.id); else this.select(edge.id); }
+          else { this.clear(); this.select(edge.id); }
+          return;
+        }
         this.rubber = { startX: e.viewportX, startY: e.viewportY };
         if (!additive) this.clear();
         return;

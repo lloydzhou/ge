@@ -43,8 +43,11 @@ export class CreateEdgePlugin extends Plugin {
     };
 
     graph.addEventListener('pointerdown', (e: any) => {
-      if (!matchTrigger(e)) return;
-      const node = graph.pickNode(e.viewportX, e.viewportY);
+      // Port 连线：从端口直接拖出（无需 trigger key）
+      const tgt = e.target;
+      const isPort = tgt && typeof tgt.className === 'string' && tgt.className.includes('ge-port');
+      if (!isPort && !matchTrigger(e)) return;
+      const node = isPort ? tgt?.parentNode : graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
       const c = bboxCenter(node.getWorldBBox());
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
