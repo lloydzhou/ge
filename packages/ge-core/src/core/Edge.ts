@@ -127,6 +127,9 @@ export class Edge extends Cell {
       case 'visible':
         this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
         break;
+      case 'stateStyles':
+        this.applyStates();
+        break;
       default:
         break;
     }
@@ -189,6 +192,23 @@ export class Edge extends Cell {
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
     node.addEventListener('node:boundschange', () => this.update());
+  }
+
+  /** 根据 className 应用 stateStyles（hover/selected 等） */
+  protected applyStates(): void {
+    if (!this.body) return;
+    const cls = (this.className || '').split(/\s+/);
+    const s = this.styleProps();
+    const states = (s.stateStyles as Record<string, any>) || {};
+    const cur: Record<string, any> = { stroke: s.stroke, lineWidth: s.strokeWidth };
+    for (const c of cls) {
+      if (c && states[c]) {
+        if (states[c].stroke) cur.stroke = states[c].stroke;
+        if (states[c].strokeWidth) cur.lineWidth = states[c].strokeWidth;
+      }
+    }
+    this.body.setAttribute('stroke', cur.stroke);
+    this.body.setAttribute('lineWidth', cur.lineWidth);
   }
 
   /** 流动虚线动画 */
