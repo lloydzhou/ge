@@ -9,7 +9,7 @@ describe('ShapeRegistry', () => {
     expect(r.has('circle')).toBe(true);
     expect(r.has('ellipse')).toBe(true);
     expect(r.has('diamond')).toBe(true);
-    expect(r.list().length).toBe(4);
+    expect(r.list().length).toBe(8);
   });
 
   it('resolve 精确匹配，找不到回退 rect', () => {
