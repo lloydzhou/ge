@@ -213,6 +213,16 @@ export class Graph extends Canvas {
     throw new Error('[GE] no canvas/svg element found for export');
   }
 
+  /** 导出为 SVG 字符串（含 xmlns，可直接保存 .svg 文件） */
+  toSVGString(): string {
+    const container = this.getConfig().container as HTMLElement;
+    const svg = container.querySelector('svg');
+    if (!svg) return '';
+    const clone = svg.cloneNode(true) as SVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    return new XMLSerializer().serializeToString(clone);
+  }
+
   // ---- 序列化 ----
   toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
     // 直接返回 Cell 的 props model（用户设的所有字段都保留，不漏 data/stateStyles 等）
