@@ -76,16 +76,28 @@ export class Graph extends Canvas {
     (this as any).document.documentElement.translate(dwx, dwy);
   }
 
-  /** 世界 → 视口（2D：(world+panOffset)*zoom，与 root.translate 渲染一致） */
+  /** 世界 → 视口（2D 中心缩放：与 root.translate + setZoom 渲染一致） */
   canvas2Viewport(canvasP: { x: number; y: number }): { x: number; y: number } {
     const zoom = this.getCamera().getZoom() || 1;
-    return { x: (canvasP.x + this.panOffset.x) * zoom, y: (canvasP.y + this.panOffset.y) * zoom };
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    return {
+      x: (canvasP.x + this.panOffset.x - cx) * zoom + cx,
+      y: (canvasP.y + this.panOffset.y - cy) * zoom + cy,
+    };
   }
 
   /** 视口 → 世界 */
   viewport2Canvas(vp: { x: number; y: number }): { x: number; y: number } {
     const zoom = this.getCamera().getZoom() || 1;
-    return { x: vp.x / zoom - this.panOffset.x, y: vp.y / zoom - this.panOffset.y };
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    return {
+      x: (vp.x - cx) / zoom - this.panOffset.x + cx,
+      y: (vp.y - cy) / zoom - this.panOffset.y + cy,
+    };
   }
 
   /**
