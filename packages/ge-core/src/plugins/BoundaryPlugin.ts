@@ -2,9 +2,9 @@
  * BoundaryPlugin —— 选中节点的外包围框（虚线 outline）。
  * 选中单个节点时显示虚线框（比节点略大），随移动/resize/pan/zoom 实时跟随。
  */
-import { Plugin } from './plugin';
+import { OverlayPlugin } from './plugin';
 
-export class BoundaryPlugin extends Plugin {
+export class BoundaryPlugin extends OverlayPlugin {
   readonly name = 'boundary';
   private box?: HTMLDivElement;
 
@@ -20,16 +20,9 @@ export class BoundaryPlugin extends Plugin {
       'position:absolute;border:1.5px dashed #1890ff;border-radius:2px;' +
       'pointer-events:none;z-index:8;display:none;';
     container.appendChild(this.box);
-
-    const update = (): void => this.update();
-    graph.addEventListener('pointerdown', () => setTimeout(update, 0));
-    graph.addEventListener('node:dragend', update);
-    graph.addEventListener('afterrender', () => {
-      if (this.box && this.box.style.display !== 'none') update();
-    });
   }
 
-  private update(): void {
+  protected update(): void {
     if (!this.box) return;
     const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
     if (sel.length !== 1) { this.box.style.display = 'none'; return; }
@@ -45,6 +38,8 @@ export class BoundaryPlugin extends Plugin {
     this.box.style.height = (br.y - tl.y) + 'px';
     this.box.style.display = 'block';
   }
+
+  protected isActive(): boolean { return !!(this.handle || this.box)?.style && (this.handle || this.box).style.display !== 'none'; }
 
   destroy(): void { this.box?.remove(); }
 }

@@ -6,9 +6,9 @@
  * - 手柄位置随节点移动 / 旋转 / 画布 pan/zoom 实时更新（afterrender）。
  * - 依赖 SelectionPlugin。
  */
-import { Plugin } from './plugin';
+import { OverlayPlugin } from './plugin';
 
-export class RotatePlugin extends Plugin {
+export class RotatePlugin extends OverlayPlugin {
   readonly name = 'rotate';
   private handle?: HTMLDivElement;
   private target?: any;
@@ -25,13 +25,6 @@ export class RotatePlugin extends Plugin {
       'position:absolute;width:12px;height:12px;background:#722ed1;border:2px solid #fff;' +
       'border-radius:50%;cursor:grab;z-index:11;display:none;pointer-events:auto;';
     container.appendChild(this.handle);
-
-    const update = (): void => this.updateHandle();
-    graph.addEventListener('pointerdown', () => setTimeout(update, 0));
-    graph.addEventListener('node:dragend', update);
-    graph.addEventListener('afterrender', () => {
-      if (this.handle && this.handle.style.display !== 'none') update();
-    });
 
     this.handle.addEventListener('pointerdown', (e: PointerEvent) => {
       if (!this.target) return;
@@ -51,14 +44,14 @@ export class RotatePlugin extends Plugin {
       const dy = my - centerVp.y;
       const angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
       this.target.setAttribute('angle', Math.round(angle));
-      this.updateHandle();
+      this.update();
     });
     window.addEventListener('pointerup', () => {
       this.rotating = false;
     });
   }
 
-  private updateHandle(): void {
+  protected update(): void {
     if (!this.handle) return;
     const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
     if (sel.length !== 1) {
@@ -85,6 +78,8 @@ export class RotatePlugin extends Plugin {
     this.handle.style.top = hy - 6 + 'px';
     this.handle.style.display = 'block';
   }
+
+  protected isActive(): boolean { return !!(this.handle || this.box)?.style && (this.handle || this.box).style.display !== 'none'; }
 
   destroy(): void {
     this.handle?.remove();
