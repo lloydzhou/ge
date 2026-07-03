@@ -52,7 +52,7 @@
     graph.use(new RotatePlugin());
     graph.use(new VertexPlugin());
 
-    graph.addNode({ id: 'a', x: 200, y: 240, width: 130, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'A', rotatable: true });
+    graph.addNode({ id: 'a', x: 200, y: 240, width: 130, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'A', rotatable: true, resizable: true });
     graph.addNode({ id: 'b', x: 540, y: 180, width: 130, height: 50, label: 'B' });
     graph.addNode({ id: 'c', x: 540, y: 340, width: 130, height: 50, fill: '#f6ffed', stroke: '#52c41a', label: 'C' });
     graph.addEdge({ source: 'a', target: 'b', router: 'orthogonal', connector: 'rounded' });
