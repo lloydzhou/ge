@@ -118,7 +118,35 @@ export const textShape: ShapeDefinition = {
   create: (s) => new Text({ style: { text: (s.label as string) ?? '', x: (s.width as number) / 2, y: (s.height as number) / 2, fontSize: 14, fill: s.fill ?? '#333', textAlign: 'center', textBaseline: 'middle' } }),
 };
 
-export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape, parallelogramShape, cylinderShape, starShape, textShape];
+export const crossShape: ShapeDefinition = {
+  name: 'cross',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const t = Math.min(w, h) / 3; // 臂宽
+    const cx = w / 2, cy = h / 2;
+    const x1 = cx - t / 2, x2 = cx + t / 2;
+    const y1 = cy - t / 2, y2 = cy + t / 2;
+    const d = `M ${x1} 0 H ${x2} V ${y1} H ${w} V ${y2} H ${x2} V ${h} H ${x1} V ${y2} H 0 V ${y1} H ${x1} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const arrowShape: ShapeDefinition = {
+  name: 'arrow',
+  create: (s) => {
+    const w = s.width as number;
+    const h = s.height as number;
+    const headW = w * 0.4; // 箭头宽
+    const stemH = h * 0.4; // 杆高
+    const cy = h / 2;
+    const sy1 = cy - stemH / 2, sy2 = cy + stemH / 2;
+    const d = `M 0 ${sy1} L ${w - headW} ${sy1} L ${w - headW} 0 L ${w} ${cy} L ${w - headW} ${h} L ${w - headW} ${sy2} L 0 ${sy2} Z`;
+    return new Path({ style: { d, fill: s.fill, stroke: s.stroke, lineWidth: s.strokeWidth } });
+  },
+};
+
+export const builtInShapes: ShapeDefinition[] = [rectShape, circleShape, ellipseShape, diamondShape, triangleShape, hexagonShape, parallelogramShape, cylinderShape, starShape, textShape, crossShape, arrowShape];
 
 import { ShapeRegistry } from './registry';
 
