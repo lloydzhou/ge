@@ -117,6 +117,14 @@ export class Node extends Cell {
     this.fire('node:boundschange');
   }
 
+  /** 应用旋转（angle attribute → setLocalEulerAngles） */
+  protected applyRotation(): void {
+    const s = this.styleProps();
+    const angle = (s.angle as number) ?? 0;
+    this.setLocalEulerAngles(angle);
+    this.fire('node:boundschange');
+  }
+
   attributeChangedCallback(
     name: string | number | symbol,
     oldV: any,
@@ -129,6 +137,9 @@ export class Node extends Cell {
       case 'x':
       case 'y':
         this.applyPosition();
+        break;
+      case 'angle':
+        this.applyRotation();
         break;
       case 'shape':
       case 'width':
