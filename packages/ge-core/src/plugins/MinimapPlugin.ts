@@ -66,26 +66,40 @@ export class MinimapPlugin extends Plugin {
     // 实时：跟随主画布每帧渲染（rAF 合帧）
     graph.addEventListener('afterrender', () => this.scheduleDraw());
 
-    // 拖拽导航：minimap 坐标 → 反映射到世界 → camera pan 使其居中
-    let dragging = false;
+    // 拖框导航：框内拖拽→框跟随鼠标平移（保持抓取偏移）；框外点击→框中心跳到鼠标
+    let dragOffset: { x: number; y: number } | null = null;
     const navigate = (e: PointerEvent): void => {
-      if (!this.canvasEl) return;
+      if (!this.canvasEl || !this.view) return;
       const rect = this.canvasEl.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const worldX = this.view.minX + (mx - this.view.pad) / this.view.scale;
-      const worldY = this.view.minY + (my - this.view.pad) / this.view.scale;
+      const fcx = mx - (dragOffset?.x ?? 0);
+      const fcy = my - (dragOffset?.y ?? 0);
+      const worldX = this.view.minX + (fcx - this.view.pad) / this.view.scale;
+      const worldY = this.view.minY + (fcy - this.view.pad) / this.view.scale;
       this.graph.panTo(worldX, worldY);
     };
     this.canvasEl.addEventListener('pointerdown', (e: PointerEvent) => {
-      dragging = true;
+      if (!this.canvasEl || !this.view) return;
+      const rect = this.canvasEl.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      // 当前视口框中心（minimap 坐标）
+      const vp = this.viewportWorldBBox();
+      const fcx = this.view.pad + (vp.x + vp.width / 2 - this.view.minX) * this.view.scale;
+      const fcy = this.view.pad + (vp.y + vp.height / 2 - this.view.minY) * this.view.scale;
+      const fw = vp.width * this.view.scale;
+      const fh = vp.height * this.view.scale;
+      const inside = Math.abs(mx - fcx) <= fw / 2 && Math.abs(my - fcy) <= fh / 2;
+      // 框内：保持抓取偏移（框跟随鼠标平移）；框外：偏移 0（框中心跳到鼠标）
+      dragOffset = inside ? { x: mx - fcx, y: my - fcy } : { x: 0, y: 0 };
       navigate(e);
     });
     window.addEventListener('pointermove', (e: PointerEvent) => {
-      if (dragging) navigate(e);
+      if (dragOffset) navigate(e);
     });
     window.addEventListener('pointerup', () => {
-      dragging = false;
+      dragOffset = null;
     });
   }
 
