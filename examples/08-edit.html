@@ -35,7 +35,7 @@
   <script type="module">
     import {
       Graph, DragPlugin, SelectionPlugin, HistoryPlugin, MinimapPlugin,
-      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin, ResizePlugin, RotatePlugin, VertexPlugin,
+      CreateEdgePlugin, KeyboardPlugin, ClipboardPlugin, TransformPlugin, ResizePlugin, RotatePlugin, GridPlugin, VertexPlugin,
     } from '@ge';
 
     const graph = new Graph({ container: '#app', background: '#fafafa' });
@@ -50,6 +50,7 @@
     graph.use(new TransformPlugin());
     graph.use(new ResizePlugin());
     graph.use(new RotatePlugin());
+    graph.use(new GridPlugin({ type: 'dot' }));
     graph.use(new VertexPlugin());
 
     graph.addNode({ id: 'a', x: 200, y: 240, width: 130, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'A', rotatable: true, resizable: true });

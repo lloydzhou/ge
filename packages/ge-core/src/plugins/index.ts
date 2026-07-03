@@ -13,4 +13,5 @@ export { TransformPlugin } from './TransformPlugin';
 export { HoverPlugin } from './HoverPlugin';
 export { ResizePlugin } from './ResizePlugin';
 export { RotatePlugin } from './RotatePlugin';
+export { GridPlugin, type GridOptions } from './GridPlugin';
 export { VertexPlugin } from './VertexPlugin';
