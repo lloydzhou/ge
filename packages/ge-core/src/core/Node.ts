@@ -141,6 +141,9 @@ export class Node extends Cell {
       case 'angle':
         this.applyRotation();
         break;
+      case 'visible':
+        this.setAttribute('visibility', newV ? 'visible' : 'hidden');
+        break;
       case 'shape':
       case 'width':
       case 'height':

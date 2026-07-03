@@ -118,6 +118,9 @@ export class Edge extends Cell {
       case 'opacity':
         this.body?.setAttribute('opacity', newV);
         break;
+      case 'visible':
+        this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
+        break;
       default:
         break;
     }
