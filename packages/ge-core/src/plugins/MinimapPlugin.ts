@@ -75,9 +75,7 @@ export class MinimapPlugin extends Plugin {
       const my = e.clientY - rect.top;
       const worldX = this.view.minX + (mx - this.view.pad) / this.view.scale;
       const worldY = this.view.minY + (my - this.view.pad) / this.view.scale;
-      const cam = this.graph.getCamera();
-      const pos = cam.getPosition();
-      cam.setPosition(worldX, worldY, pos[2]);
+      this.graph.panTo(worldX, worldY);
     };
     this.canvasEl.addEventListener('pointerdown', (e: PointerEvent) => {
       dragging = true;

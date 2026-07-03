@@ -76,6 +76,19 @@ export class Graph extends Canvas {
     (this as any).document.documentElement.translate(dwx, dwy);
   }
 
+  /** 平移使世界点 (worldX, worldY) 位于视口中心（minimap 导航用，保持 panOffset 一致） */
+  panTo(worldX: number, worldY: number): void {
+    const zoom = this.getCamera().getZoom() || 1;
+    const cfg = this.getConfig();
+    const w = cfg.width ?? 800;
+    const h = cfg.height ?? 600;
+    const targetOffX = w / 2 / zoom - worldX;
+    const targetOffY = h / 2 / zoom - worldY;
+    const dvx = (targetOffX - this.panOffset.x) * zoom;
+    const dvy = (targetOffY - this.panOffset.y) * zoom;
+    this.panBy(dvx, dvy);
+  }
+
   /** 世界 → 视口（2D：(world+panOffset)*zoom，与 root.translate 渲染一致） */
   canvas2Viewport(canvasP: { x: number; y: number }): { x: number; y: number } {
     const zoom = this.getCamera().getZoom() || 1;
