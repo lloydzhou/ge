@@ -74,6 +74,7 @@ export class Edge extends Cell {
         lineWidth: s.strokeWidth,
         fill: 'none',
         lineDash: s.lineDash as number[] | undefined,
+        opacity: s.opacity as number | undefined,
       },
     });
     this.appendChild(this.body);
@@ -113,6 +114,9 @@ export class Edge extends Cell {
         break;
       case 'lineDash':
         this.body?.setAttribute('lineDash', newV);
+        break;
+      case 'opacity':
+        this.body?.setAttribute('opacity', newV);
         break;
       default:
         break;
