@@ -290,12 +290,14 @@ export class Node extends Cell {
   }
 
   /** 置顶（DOM 最后 = 最上层渲染） */
-  toFront(): void {
+  toFront(): this {
     this.parentNode?.appendChild(this);
+    return this;
   }
 
   /** 置底（DOM 最前 = 最下层渲染） */
-  toBack(): void {
+  toBack(): this {
     this.parentNode?.insertBefore(this, this.parentNode.firstChild);
+    return this;
   }
 }
