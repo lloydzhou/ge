@@ -124,6 +124,10 @@ export class Edge extends Cell {
       case 'lineDashFlow':
         if (newV) this.startDashFlow(); else this.stopDashFlow();
         break;
+      case 'labelFill':
+      case 'labelFontSize':
+        this.syncLabel();
+        break;
       case 'markerSize':
         this.endMarker?.destroy(); this.endMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333');
         if (this.styleProps().startArrow) { this.startMarker?.destroy(); this.startMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333'); }
@@ -249,7 +253,7 @@ export class Edge extends Cell {
       for (const lt of this._labelTexts) lt.destroy();
       this._labelTexts = [];
       for (const item of labels) {
-        const lt = new Text({ style: { text: item.text, fontSize: 12, fill: '#333333', textAlign: 'center', textBaseline: 'middle' } });
+        const lt = new Text({ style: { text: item.text, fontSize: (item.fontSize as number) ?? (this.styleProps().labelFontSize as number) ?? 12, fill: (item.fill as string) ?? (this.styleProps().labelFill as string) ?? '#333333', textAlign: 'center', textBaseline: 'middle' } });
         this.appendChild(lt);
         this._labelTexts.push(lt);
       }
