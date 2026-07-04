@@ -3,12 +3,25 @@
   "version": "2.0.0-alpha.0",
   "private": true,
   "description": "GE - A modern graph editor built on AntV/G DOM model (graph-editing DOM spec on top of g-lite)",
+  "keywords": [
+    "antv",
+    "graph",
+    "graph-editor",
+    "diagram",
+    "flowchart",
+    "dag",
+    "visualization",
+    "node-based-editor"
+  ],
   "license": "MIT",
   "author": "AntV <antv@alibaba-inc.com>",
   "homepage": "https://g.antv.antgroup.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/antvis/GE"
+  },
+  "bugs": {
+    "url": "https://github.com/antvis/GE/issues"
   },
   "scripts": {
     "dev": "vite",

@@ -2,6 +2,17 @@
   "name": "@antv/ge-core",
   "version": "2.0.0-alpha.0",
   "description": "Core module of GE - A graph editor built on AntV/G DOM model",
+  "keywords": [
+    "antv",
+    "g",
+    "graph",
+    "graph-editor",
+    "diagram",
+    "flowchart",
+    "visualization",
+    "node",
+    "edge"
+  ],
   "license": "MIT",
   "author": "AntV <antv@alibaba-inc.com>",
   "homepage": "https://g.antv.antgroup.com/",
@@ -9,6 +20,10 @@
     "type": "git",
     "url": "https://github.com/antvis/GE"
   },
+  "bugs": {
+    "url": "https://github.com/antvis/GE/issues"
+  },
+  "sideEffects": false,
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

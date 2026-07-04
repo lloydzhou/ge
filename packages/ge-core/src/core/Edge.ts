@@ -124,6 +124,13 @@ export class Edge extends Cell {
       case 'lineDashFlow':
         if (newV) this.startDashFlow(); else this.stopDashFlow();
         break;
+      case 'markerSize':
+        this.endMarker?.destroy(); this.endMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333');
+        if (this.styleProps().startArrow) { this.startMarker?.destroy(); this.startMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333'); }
+        this.body?.removeAttribute('markerEnd');
+        this.body?.removeAttribute('markerStart');
+        this.update();
+        break;
       case 'visible':
         this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
         break;
@@ -230,7 +237,8 @@ export class Edge extends Cell {
   protected createMarker(color: string): Path {
     // 尖端在 (0,0)（= 路径终点/target 边缘），底朝 +x（g-lite orient 使 +x 朝 source，即边外）
     // 这样箭头完整落在边外、尖端刚好贴 target 边缘，不会伸入节点被遮挡
-    return new Path({ style: { d: 'M 0 0 L 10 -5 L 10 5 Z', fill: color } });
+    const sz = (this.styleProps().markerSize as number) ?? 10;
+    return new Path({ style: { d: `M 0 0 L ${sz} ${-sz / 2} L ${sz} ${sz / 2} Z`, fill: color } });
   }
 
   /** 同步边标签 */
