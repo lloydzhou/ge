@@ -124,6 +124,10 @@ export class Edge extends Cell {
       case 'lineDashFlow':
         if (newV) this.startDashFlow(); else this.stopDashFlow();
         break;
+      case 'router':
+      case 'connector':
+        this.update();
+        break;
       case 'labelFill':
       case 'labelFontSize':
         this.syncLabel();
