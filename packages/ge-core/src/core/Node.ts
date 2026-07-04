@@ -153,6 +153,9 @@ export class Node extends Cell {
       case 'strokeOpacity':
         this.body?.setAttribute('strokeOpacity', newV);
         break;
+      case 'radius':
+        this.body?.setAttribute('radius', newV);
+        break;
       case 'visible':
         this.setAttribute('visibility', newV ? 'visible' : 'hidden');
         break;
