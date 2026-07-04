@@ -157,6 +157,12 @@ export class Node extends Cell {
       case 'labelFontSize':
         if (this.labelText) { this.labelText.setAttribute('fontSize', (this.styleProps().labelFontSize as number) ?? 12); this.labelText.setAttribute('fill', (this.styleProps().labelFill as string) ?? '#333333'); }
         break;
+      case 'fillOpacity':
+        this.body?.setAttribute('fillOpacity', newV);
+        break;
+      case 'strokeOpacity':
+        this.body?.setAttribute('strokeOpacity', newV);
+        break;
       case 'opacity':
         this.body?.setAttribute('opacity', newV);
         if (this.labelText) this.labelText.setAttribute('opacity', newV);
@@ -173,6 +179,12 @@ export class Node extends Cell {
       case 'labelFill':
       case 'labelFontSize':
         if (this.labelText) { this.labelText.setAttribute('fontSize', (this.styleProps().labelFontSize as number) ?? 12); this.labelText.setAttribute('fill', (this.styleProps().labelFill as string) ?? '#333333'); }
+        break;
+      case 'fillOpacity':
+        this.body?.setAttribute('fillOpacity', newV);
+        break;
+      case 'strokeOpacity':
+        this.body?.setAttribute('strokeOpacity', newV);
         break;
       case 'opacity':
         this.body?.setAttribute('opacity', newV);
