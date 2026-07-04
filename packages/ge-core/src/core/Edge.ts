@@ -241,7 +241,7 @@ export class Edge extends Cell {
     if (this.dashRafId != null) return;
     let offset = 0;
     const animate = (): void => {
-      offset -= 0.5;
+      offset -= ((this.styleProps().dashFlowSpeed as number) ?? 0.5);
       this.body?.setAttribute('lineDashOffset', offset);
       this.dashRafId = requestAnimationFrame(animate);
     };
