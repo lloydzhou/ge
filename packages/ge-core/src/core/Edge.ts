@@ -248,7 +248,7 @@ export class Edge extends Cell {
   /** 同步边标签 */
   protected syncLabel(): void {
     const s = this.styleProps();
-    const labels = s.labels as { text: string }[] | undefined;
+    const labels = s.labels as any[] | undefined;
     if (labels && labels.length > 0) {
       for (const lt of this._labelTexts) lt.destroy();
       this._labelTexts = [];
