@@ -228,7 +228,12 @@ export class Edge extends Cell {
     if (!this.body) return;
     const cls = (this.className || '').split(/\s+/);
     const s = this.styleProps();
-    const states = (s.stateStyles as Record<string, any>) || {};
+    const baseWidth = (s.strokeWidth as number) ?? 1;
+    const defaults: Record<string, any> = {
+      hover: { lineWidth: baseWidth + 1 },
+      selected: { stroke: '#722ed1', lineWidth: baseWidth + 1 },
+    };
+    const states = { ...defaults, ...((s.stateStyles as Record<string, any>) || {}) };
     const cur: Record<string, any> = { stroke: s.stroke, lineWidth: s.strokeWidth };
     for (const c of cls) {
       if (c && states[c]) {
