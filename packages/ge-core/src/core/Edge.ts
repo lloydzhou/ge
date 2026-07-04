@@ -146,6 +146,20 @@ export class Edge extends Cell {
     }
   }
 
+  /** 端点 bbox：有 port → port 世界坐标（1x1）；无 port → node worldBBox */
+  protected endpointBBox(node: Node, cfg: EndpointConfig): { x: number; y: number; width: number; height: number } {
+    if (cfg.port) {
+      const port = (node.children as any[])?.find((c: any) => c.id === cfg.port);
+      if (port) {
+        const local = (port as any).getLocalPosition?.() ?? { x: 0, y: 0 };
+        const nx = (node.getAttribute('x') as number) ?? 0;
+        const ny = (node.getAttribute('y') as number) ?? 0;
+        return { x: nx + local.x - 0.5, y: ny + local.y - 0.5, width: 1, height: 1 };
+      }
+    }
+    return node.getWorldBBox();
+  }
+
   /** 重算并原地更新路径 */
   update(): void {
     if (!this.body) return;
@@ -170,8 +184,8 @@ export class Edge extends Cell {
     const graph = (this as any).ownerDocument?.defaultView;
     const obstacles = graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
     const points = computeEdgePoints(
-      { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
-      { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
+      { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
+      { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
       routerFn,
       s.waypoints as Point[] | undefined,
       { obstacles },
