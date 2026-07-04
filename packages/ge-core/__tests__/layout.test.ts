@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { gridLayout } from '../src/layout/grid';
 import { circularLayout } from '../src/layout/circular';
 import { forceLayout } from '../src/layout/force';
-import { treeLayout, hierarchicalLayout } from '../src/layout/hierarchical';
+import { hierarchicalLayout } from '../src/layout/hierarchical';
+import { treeLayout } from '../src/layout/tree';
 import type { LayoutNode, LayoutEdge } from '../src/layout/types';
 
 const nodes = (ids: string[]): LayoutNode[] => ids.map((id) => ({ id }));
