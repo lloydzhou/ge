@@ -246,6 +246,34 @@ export class Graph extends Canvas {
     cfg.height = height;
   }
 
+  /** 聚焦到指定节点（平移使其居中，easeOutCubic 动画） */
+  focusNode(id: string, animate = true): void {
+    const node = this.getNode(id);
+    if (!node) return;
+    const bb = node.getWorldBBox();
+    const tx = bb.x + bb.width / 2;
+    const ty = bb.y + bb.height / 2;
+    if (!animate) { this.panTo(tx, ty); return; }
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    const dxWorld = (cx - tx) - this.panOffset.x;
+    const dyWorld = (cy - ty) - this.panOffset.y;
+    const zoom = this.getCamera().getZoom() || 1;
+    const dur = 300;
+    const t0 = performance.now();
+    let lastE = 0;
+    const step = (now: number): void => {
+      const t = Math.min((now - t0) / dur, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      const deltaE = e - lastE;
+      lastE = e;
+      this.panBy(dxWorld * deltaE * zoom, dyWorld * deltaE * zoom);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   // ---- 虚拟渲染（viewport culling） ----
   private _culling = false;
   /** 启用/禁用视口裁剪（大图性能优化，只渲染可见节点） */
