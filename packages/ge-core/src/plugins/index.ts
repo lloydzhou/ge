@@ -18,5 +18,4 @@ export { ContextMenuPlugin, type ContextMenuItem } from './ContextMenuPlugin';
 export { TooltipPlugin, type TooltipOptions } from './TooltipPlugin';
 export { BoundaryPlugin } from './BoundaryPlugin';
 export { EditLabelPlugin } from './EditLabelPlugin';
-export { FPSPlugin } from './FPSPlugin';
 export { VertexPlugin } from './VertexPlugin';
