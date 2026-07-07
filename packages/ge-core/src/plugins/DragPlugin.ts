@@ -36,6 +36,9 @@ export class DragPlugin extends Plugin {
 
     graph.addEventListener('pointerdown', (e: any) => {
       if (e.altKey) return;
+      // port 拖出连线交给 CreateEdgePlugin，不拖动节点
+      const tgt = e.target;
+      if (tgt && typeof tgt.className === 'string' && tgt.className.includes('ge-port')) return;
       const node = graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
