@@ -100,7 +100,7 @@
     graph.addNode({ id: 'shadow', shape: 'rect', x: 80, y: 430, width: 120, height: 60, fill: '#fffbe6', stroke: '#fadb14', shadowColor: 'rgba(0,0,0,.35)', shadowBlur: 12, label: '阴影' });
 
     // ---- 6. 4 个 Port 的节点 ----
-    graph.addNode({ id: 'port-node', shape: 'rect', x: 320, y: 420, width: 140, height: 90, fill: '#f9f0ff', stroke: '#722ed1', label: 'Ports', resizable: true });
+    graph.addNode({ id: 'port-node', shape: 'rect', x: 320, y: 420, width: 140, height: 90, fill: '#f9f0ff', stroke: '#722ed1', label: 'Ports', resizable: true, rotatable: true });
     const portNode = graph.getNode('port-node');
     if (portNode) {
       portNode.appendChild(new Port({ id: 'pt', layout: 'top' }));

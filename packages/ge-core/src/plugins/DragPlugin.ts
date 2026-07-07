@@ -64,7 +64,7 @@ export class DragPlugin extends Plugin {
     const end = (): void => {
       const node = this.dragging?.node;
       this.dragging = null;
-      if (node) node.dispatchEvent(new CustomEvent('node:dragend'));
+      if (node) node.dispatchEvent(new CustomEvent('node:dragend', { bubbles: true }));
     };
     graph.addEventListener('pointerup', end);
     graph.addEventListener('pointerupoutside', end);
