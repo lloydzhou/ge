@@ -26,7 +26,7 @@ export class Port extends Cell {
   protected body?: Circle;
 
   constructor(config: Record<string, any> = {}) {
-    const style = { ...DEFAULTS, ...config?.style };
+    const style = { ...DEFAULTS, ...config?.style, layout: config?.layout, x: config?.x, y: config?.y };
     super({ className: CLASS.port, ...config, style });
     this.initProps({ id: config?.id, style });
   }
