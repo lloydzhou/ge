@@ -1,10 +1,9 @@
 /**
- * RotatePlugin —— 节点旋转手柄。
+ * RotatePlugin —— 节点旋转手柄（中心用实际几何中心，非 AABB）。
  *
  * - 选中单个节点 + `rotatable: true` 时，在节点上方显示旋转手柄（紫色圆柄）。
  * - 拖拽手柄 → 计算角度 → setAttribute('angle', x)（DOM 化声明式）。
- * - 手柄位置随节点移动 / 旋转 / 画布 pan/zoom 实时更新（afterrender）。
- * - 依赖 SelectionPlugin。
+ * - 旋转中心用 x+w/2, y+h/2（不用 AABB，旋转后准确）。
  */
 import { OverlayPlugin } from './plugin';
 
@@ -34,54 +33,45 @@ export class RotatePlugin extends OverlayPlugin {
     const containerRect = () => container.getBoundingClientRect();
     window.addEventListener('pointermove', (e: PointerEvent) => {
       if (!this.rotating || !this.target) return;
-      const bb = this.target.getWorldBBox();
-      const centerVp = this.graph.canvas2Viewport({ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 });
+      const centerVp = this.centerViewport(this.target);
       const rect = containerRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      // 手柄在上方（-y），0° 朝上，顺时针正：angle = atan2(dx, -dy)
       const dx = mx - centerVp.x;
       const dy = my - centerVp.y;
       const angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
       this.target.setAttribute('angle', Math.round(angle));
       this.update();
     });
-    window.addEventListener('pointerup', () => {
-      this.rotating = false;
-    });
+    window.addEventListener('pointerup', () => { this.rotating = false; });
+  }
+
+  /** 节点实际几何中心 → 视口坐标（不用 AABB，旋转后准确） */
+  private centerViewport(node: any): { x: number; y: number } {
+    const x = node.getAttribute('x') as number;
+    const y = node.getAttribute('y') as number;
+    const w = node.getAttribute('width') as number;
+    const h = node.getAttribute('height') as number;
+    return this.graph.canvas2Viewport({ x: x + w / 2, y: y + h / 2 });
   }
 
   protected update(): void {
     if (!this.handle) return;
     const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
-    if (sel.length !== 1) {
-      this.handle.style.display = 'none';
-      this.target = undefined;
-      return;
-    }
+    if (sel.length !== 1) { this.handle.style.display = 'none'; this.target = undefined; return; }
     const node = this.graph.getNode(sel[0]);
-    if (!node || !node.getAttribute('rotatable')) {
-      this.handle.style.display = 'none';
-      this.target = undefined;
-      return;
-    }
+    if (!node || !node.getAttribute('rotatable')) { this.handle.style.display = 'none'; this.target = undefined; return; }
     this.target = node;
-    // 手柄在节点上方，绕中心旋转 angle（视口空间）
-    const bb = node.getWorldBBox();
-    const centerVp = this.graph.canvas2Viewport({ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 });
+    const centerVp = this.centerViewport(node);
     const angle = (node.getAttribute('angle') as number) ?? 0;
     const rad = (angle * Math.PI) / 180;
-    const dist = 30; // 视口 px，手柄距中心
-    const hx = centerVp.x + Math.sin(rad) * dist;
-    const hy = centerVp.y - Math.cos(rad) * dist;
-    this.handle.style.left = hx - 6 + 'px';
-    this.handle.style.top = hy - 6 + 'px';
+    const dist = 30;
+    this.handle.style.left = centerVp.x + Math.sin(rad) * dist - 6 + 'px';
+    this.handle.style.top = centerVp.y - Math.cos(rad) * dist - 6 + 'px';
     this.handle.style.display = 'block';
   }
 
   protected isActive(): boolean { return !!this.handle && this.handle.style.display !== 'none'; }
 
-  destroy(): void {
-    this.handle?.remove();
-  }
+  destroy(): void { this.handle?.remove(); }
 }
