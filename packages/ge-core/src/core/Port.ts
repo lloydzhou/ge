@@ -56,10 +56,10 @@ export class Port extends Cell {
       const margin = 0.15; // 两侧留 15%
       const span = 1 - 2 * margin;
       const pos = margin + ratio * span;
-      if (layout === 'top') { x = pw * pos; y = 0; }
-      else if (layout === 'bottom') { x = pw * pos; y = ph; }
-      else if (layout === 'left') { x = 0; y = ph * pos; }
-      else if (layout === 'right') { x = pw; y = ph * pos; }
+      if (layout === 'top') { x = (pos - 0.5) * pw; y = -ph / 2; }
+      else if (layout === 'bottom') { x = (pos - 0.5) * pw; y = ph / 2; }
+      else if (layout === 'left') { x = -pw / 2; y = (pos - 0.5) * ph; }
+      else if (layout === 'right') { x = pw / 2; y = (pos - 0.5) * ph; }
     }
     this.setLocalPosition(x, y);
   }
