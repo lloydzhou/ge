@@ -126,4 +126,22 @@ describe('manhattanAStarRouter', () => {
     const reg = createDefaultRouterRegistry();
     expect(reg.resolve('manhattan-astar')).toBe(manhattanAStarRouter);
   });
+
+  it('端点不在 grid 上 → 严格正交路径（无斜线/无小拐角）', () => {
+    // 模拟真实渲染端点坐标（非 grid 对齐），含中间障碍
+    const result = manhattanAStarRouter(
+      [{ x: 952.188, y: 104 }, { x: 783.331, y: 202.246 }],
+      { obstacles: [{ x: 840, y: 110, width: 120, height: 70 }], resolution: 10 }
+    );
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    // 逐段验证严格正交：dx==0 或 dy==0（容差 0.001）
+    for (let i = 1; i < result.length; i++) {
+      const dx = Math.abs(result[i].x - result[i - 1].x);
+      const dy = Math.abs(result[i].y - result[i - 1].y);
+      if (dx > 0.001 && dy > 0.001) {
+        throw new Error(`段 ${i - 1}->${i} 非正交: dx=${dx} dy=${dy} (${JSON.stringify(result[i - 1])})->(${JSON.stringify(result[i])})`);
+      }
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
+  });
 });
