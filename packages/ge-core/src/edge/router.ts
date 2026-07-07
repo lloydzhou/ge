@@ -89,7 +89,8 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   // 搜索空间上限：节点拖远时 grid 距离爆炸（如 37000 格），A* 单次几十 ms → 卡死。
   // 超阈值降级 manhattan（不避障但正交、O(N)），近距离仍走 A* 避障。
   const gridArea = (Math.abs(ex - sx) + 1) * (Math.abs(ey - sy) + 1);
-  if (gridArea > 4000) return manhattanRouter(d);
+  // NaN/Infinity（端点未初始化）或超阈值 → 降级 manhattan，防 A* 无限扩展冻结
+  if (!isFinite(gridArea) || gridArea > 4000) return manhattanRouter(d);
   blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
   const open: { x: number; y: number; g: number; f: number }[] = [];
   const closed = new Set<string>();
@@ -100,6 +101,8 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   gScore.set(sx + ',' + sy, 0);
   let found = false;
   while (open.length > 0) {
+    // open 列表上限：防御性保护，防止任何情况下 A* 无限扩展冻结主线程
+    if (open.length > 6000) break;
     open.sort((a, b) => a.f - b.f);
     const cur = open.shift()!;
     const ck = cur.x + ',' + cur.y;

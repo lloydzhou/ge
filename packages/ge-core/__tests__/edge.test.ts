@@ -127,6 +127,21 @@ describe('manhattanAStarRouter', () => {
     expect(reg.resolve('manhattan-astar')).toBe(manhattanAStarRouter);
   });
 
+  it('端点含 NaN/Infinity → 立即降级不冻结（NaN > 4000 === false 修复）', () => {
+    // NaN 端点曾导致 gridArea=NaN 绕过上限检查，A* 无限扩展冻结主线程
+    const result = manhattanAStarRouter(
+      [{ x: NaN, y: 82 }, { x: 990, y: 242 }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    // Infinity 同理
+    const result2 = manhattanAStarRouter(
+      [{ x: 0, y: 0 }, { x: Infinity, y: Infinity }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(result2.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('端点不在 grid 上 → 严格正交路径（无斜线/无小拐角）', () => {
     // 模拟真实渲染端点坐标（非 grid 对齐），含中间障碍
     const result = manhattanAStarRouter(
