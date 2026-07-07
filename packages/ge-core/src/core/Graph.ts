@@ -250,9 +250,9 @@ export class Graph extends Canvas {
   focusNode(id: string, animate = true): void {
     const node = this.getNode(id);
     if (!node) return;
-    const bb = node.getWorldBBox();
-    const tx = bb.x + bb.width / 2;
-    const ty = bb.y + bb.height / 2;
+    const c = node.getWorldCenter();
+    const tx = c.x;
+    const ty = c.y;
     if (!animate) { this.panTo(tx, ty); return; }
     const cfg = this.getConfig();
     const cx = (cfg.width ?? 800) / 2;

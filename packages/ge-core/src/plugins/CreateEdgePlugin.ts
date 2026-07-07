@@ -49,7 +49,7 @@ export class CreateEdgePlugin extends Plugin {
       if (!isPort && !matchTrigger(e)) return;
       const node = isPort ? tgt?.parentNode : graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
-      const c = bboxCenter(node.getWorldBBox());
+      const c = node.getWorldCenter();
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
       const ghost = new Path({
         style: {
@@ -67,7 +67,7 @@ export class CreateEdgePlugin extends Plugin {
 
     graph.addEventListener('pointermove', (e: any) => {
       if (!this.connecting) return;
-      const c = bboxCenter(this.connecting.source.getWorldBBox());
+      const c = this.connecting.source.getWorldCenter();
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
       this.connecting.ghost.setAttribute('d', `M ${c.x} ${c.y} L ${w.x} ${w.y}`);
     });
