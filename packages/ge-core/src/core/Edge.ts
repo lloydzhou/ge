@@ -52,6 +52,7 @@ export class Edge extends Cell {
   protected labelText?: Text;
   protected _labelTexts: Text[] = [];
   private dashRafId: number | null = null;
+  private boundsRafId: number | null = null;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
@@ -186,7 +187,9 @@ export class Edge extends Cell {
     const tgtShape = tgtNode.getAttribute('shape');
 
     const graph = (this as any).ownerDocument?.defaultView;
-    const obstacles = graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
+    // 仅 astar 路由器需要避障，避免普通路由每次遍历所有节点算 getWorldBBox
+    const needObstacles = typeof s.router === 'string' && s.router.includes('astar');
+    const obstacles = needObstacles ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? []) : [];
     const points = computeEdgePoints(
       { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
@@ -220,7 +223,17 @@ export class Edge extends Cell {
     const id = (node as any).id;
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
-    node.addEventListener('node:boundschange', () => this.update());
+    // boundschange 高频触发（拖拽），用 rAF 合并 update，每帧最多重算一次
+    node.addEventListener('node:boundschange', () => this.scheduleUpdate());
+  }
+
+  /** rAF 合并 boundschange 触发的重算（拖拽时每帧最多 1 次 update） */
+  protected scheduleUpdate(): void {
+    if (this.boundsRafId != null) return;
+    this.boundsRafId = requestAnimationFrame(() => {
+      this.boundsRafId = null;
+      this.update();
+    });
   }
 
   /** 根据 className 应用 stateStyles（hover/selected 等） */
