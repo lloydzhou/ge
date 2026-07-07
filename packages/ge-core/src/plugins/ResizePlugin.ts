@@ -16,6 +16,13 @@ const CURSORS: Record<Dir, string> = {
   sw: 'nesw-resize', s: 'ns-resize', se: 'nwse-resize',
 };
 
+const BASE_CURSOR_ANGLE: Record<Dir, number> = { e:0, se:45, s:90, sw:135, w:180, nw:225, n:270, ne:315 };
+const CURSOR_TYPES = ['ew-resize','nwse-resize','ns-resize','nesw-resize','ew-resize','nwse-resize','ns-resize','nesw-resize'];
+const cursorFor = (dir: Dir, angle: number): string => {
+  const a = ((BASE_CURSOR_ANGLE[dir] + angle) % 360 + 360) % 360;
+  return CURSOR_TYPES[Math.floor((a + 22.5) / 45) % 8];
+};
+
 export class ResizePlugin extends OverlayPlugin {
   readonly name = 'resize';
   private handles: Record<string, HTMLDivElement> = {};
@@ -121,6 +128,7 @@ export class ResizePlugin extends OverlayPlugin {
       const p = pos[dir];
       h.style.left = p.x - 4 + 'px';
       h.style.top = p.y - 4 + 'px';
+      h.style.cursor = cursorFor(dir, ((node.getAttribute('angle') as number) ?? 0));
       h.style.display = 'block';
     }
   }
