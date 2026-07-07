@@ -326,13 +326,6 @@ export class Node extends Cell {
         const ps = p.styleProps?.();
         if (ps) { x += (ps.x as number) ?? 0; y += (ps.y as number) ?? 0; }
 
-  /** 几何中心（旋转感知，x+w/2, y+h/2，不用 AABB） */
-  getWorldCenter(): { x: number; y: number } {
-    const x = this.getAttribute('x') as number;
-    const y = this.getAttribute('y') as number;
-    return { x: x + (this.getAttribute('width') as number) / 2, y: y + (this.getAttribute('height') as number) / 2 };
-  }
-
       }
       p = p.parentNode;
     }
@@ -353,5 +346,12 @@ export class Node extends Cell {
   toBack(): this {
     this.parentNode?.insertBefore(this, this.parentNode.firstChild);
     return this;
+  }
+
+  /** 几何中心（旋转感知，x+w/2, y+h/2，不用 AABB） */
+  getWorldCenter(): { x: number; y: number } {
+    const x = this.getAttribute('x') as number;
+    const y = this.getAttribute('y') as number;
+    return { x: x + (this.getAttribute('width') as number) / 2, y: y + (this.getAttribute('height') as number) / 2 };
   }
 }
