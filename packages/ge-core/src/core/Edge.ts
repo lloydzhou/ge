@@ -7,7 +7,7 @@
  * - Anchor/Router/Connector 解析器由 Graph 注入（registry 统一管理）。
  */
 import { Path, Text, type DisplayObject } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Cell, ROUTE, STYLE, LABEL } from './Cell';
 import { CLASS, type EndpointConfig } from './types';
 import { computeEdgePoints } from './compute';
 import { edgeAnchorRatio } from '../anchor/edge-anchor';
@@ -52,7 +52,6 @@ export class Edge extends Cell {
   protected labelText?: Text;
   protected _labelTexts: Text[] = [];
   private dashRafId: number | null = null;
-  private boundsRafId: number | null = null;
   /** 由 Graph 注入的解析器 */
   resolveAnchor?: (name?: string) => NodeAnchorFn;
   resolveRouter?: (name?: string) => RouterFn;
@@ -101,44 +100,35 @@ export class Edge extends Cell {
       case 'waypoints':
       case 'connectorRadius':
       case 'connectorTension':
-        this.update();
+        this.markDirty(ROUTE);
+        break;
+      case 'label':
+      case 'labels':
+      case 'labelFill':
+      case 'labelFontSize':
+        this.markDirty(LABEL);
         break;
       case 'stroke':
         this.body?.setAttribute('stroke', newV);
         this.endMarker?.setAttribute('fill', newV);
         this.startMarker?.setAttribute('fill', newV);
         break;
-      case 'label':
-      case 'labels':
-        this.syncLabel();
-        this.update();
-        break;
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
         break;
       case 'lineDash':
-        this.body?.setAttribute('lineDash', newV);
-        break;
       case 'opacity':
-        this.body?.setAttribute('opacity', newV);
+        this.body?.setAttribute(name, newV);
         break;
       case 'lineDashFlow':
         if (newV) this.startDashFlow(); else this.stopDashFlow();
-        break;
-      case 'router':
-      case 'connector':
-        this.update();
-        break;
-      case 'labelFill':
-      case 'labelFontSize':
-        this.syncLabel();
         break;
       case 'markerSize':
         this.endMarker?.destroy(); this.endMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333');
         if (this.styleProps().startArrow) { this.startMarker?.destroy(); this.startMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333'); }
         this.body?.removeAttribute('markerEnd');
         this.body?.removeAttribute('markerStart');
-        this.update();
+        this.markDirty(ROUTE);
         break;
       case 'visible':
         this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
@@ -149,6 +139,15 @@ export class Edge extends Cell {
       default:
         break;
     }
+  }
+
+  /** Scheduler 帧边界统一调用 */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (!this.body) return;
+    if (d & LABEL) this.syncLabel();
+    if (d & (ROUTE | LABEL)) this.update();
   }
 
   /** 端点 bbox：有 port → port 世界坐标（1x1）；无 port → node worldBBox */
@@ -223,17 +222,8 @@ export class Edge extends Cell {
     const id = (node as any).id;
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
-    // boundschange 高频触发（拖拽），用 rAF 合并 update，每帧最多重算一次
-    node.addEventListener('node:boundschange', () => this.scheduleUpdate());
-  }
-
-  /** rAF 合并 boundschange 触发的重算（拖拽时每帧最多 1 次 update） */
-  protected scheduleUpdate(): void {
-    if (this.boundsRafId != null) return;
-    this.boundsRafId = requestAnimationFrame(() => {
-      this.boundsRafId = null;
-      this.update();
-    });
+    // boundschange 高频触发（拖拽），走 Scheduler 合并（每帧最多 1 次 update）
+    node.addEventListener('node:boundschange', () => this.markDirty(ROUTE));
   }
 
   /** 根据 className 应用 stateStyles（hover/selected 等） */

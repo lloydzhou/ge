@@ -34,6 +34,7 @@ import {
 } from '../edge/connector';
 import { createDefaultShapeRegistry, type ShapeRegistry } from '../shape';
 import type { Plugin } from '../plugins/plugin';
+import { Scheduler } from './Scheduler';
 
 const resolveContainer = (c: HTMLElement | string): HTMLElement =>
   typeof c === 'string' ? document.querySelector<HTMLElement>(c)! : c;
@@ -43,6 +44,8 @@ export class Graph extends Canvas {
   readonly shapes: ShapeRegistry;
   readonly routers: RouterRegistry;
   readonly connectors: ConnectorRegistry;
+  /** 全局渲染调度器（rAF 合并 dirty cell，仿浏览器渲染队列） */
+  readonly scheduler: Scheduler;
   private plugins: Plugin[] = [];
   /** pan 偏移（世界坐标），由 panBy 累积；坐标转换用 2D 公式保证与 SVG 渲染一致 */
   panOffset = { x: 0, y: 0 };
@@ -63,6 +66,7 @@ export class Graph extends Canvas {
     this.shapes = createDefaultShapeRegistry();
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
+    this.scheduler = new Scheduler();
     this.registerElements();
     this.addEventListener('afterrender', () => { if (this._culling) this.cullViewport(); });
   }

@@ -6,7 +6,7 @@
  * - 位置/尺寸变化时派发 `node:boundschange`，供相连 Edge 监听重算（事件驱动联动）。
  */
 import { Rect, Circle, Ellipse, Text, type DisplayObject } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Cell, GEOMETRY, STYLE, LABEL, REBUILD } from './Cell';
 import { CLASS, type ShapeName } from './types';
 import type { BBox } from '../utils/types';
 import type { Markup } from '../shape/registry';
@@ -157,87 +157,75 @@ export class Node extends Cell {
     switch (name) {
       case 'x':
       case 'y':
-        this.applyPosition();
-        break;
       case 'width':
       case 'height':
       case 'radius':
+        this.markDirty(GEOMETRY); // 原地更新几何 + 重定位
+        break;
       case 'shape':
-        this.rebuildBody();
+        this.markDirty(REBUILD); // shape 类型变化，需销毁重建
+        break;
+      case 'fill':
+      case 'stroke':
+      case 'strokeWidth':
+        this.markDirty(STYLE);
+        break;
+      case 'label':
+      case 'labels':
+      case 'labelFill':
+      case 'labelFontSize':
+        this.markDirty(LABEL);
         break;
       case 'angle':
         this.applyRotation();
         break;
       case 'shadowColor':
-        this.body?.setAttribute('shadowColor', newV);
-        break;
       case 'shadowBlur':
-        this.body?.setAttribute('shadowBlur', newV);
-        break;
       case 'fillOpacity':
-        this.body?.setAttribute('fillOpacity', newV);
-        break;
       case 'strokeOpacity':
-        this.body?.setAttribute('strokeOpacity', newV);
-        break;
-      case 'labelFill':
-      case 'labelFontSize':
-        if (this.labelText) { this.labelText.setAttribute('fontSize', (this.styleProps().labelFontSize as number) ?? 12); this.labelText.setAttribute('fill', (this.styleProps().labelFill as string) ?? '#333333'); }
-        break;
-      case 'fillOpacity':
-        this.body?.setAttribute('fillOpacity', newV);
-        break;
-      case 'strokeOpacity':
-        this.body?.setAttribute('strokeOpacity', newV);
-        break;
       case 'opacity':
-        this.body?.setAttribute('opacity', newV);
-        if (this.labelText) this.labelText.setAttribute('opacity', newV);
-        break;
-      case 'radius':
-        this.body?.setAttribute('radius', newV);
+      case 'lineDash':
+        // 轻量样式直接同步到 body（g-lite 已 batch 渲染）
+        this.body?.setAttribute(name, newV);
+        if (name === 'opacity' && this.labelText) this.labelText.setAttribute('opacity', newV);
         break;
       case 'visible':
         this.setAttribute('visibility', newV ? 'visible' : 'hidden');
-        break;
-      case 'shape':
-      case 'width':
-      case 'height':
-      case 'labelFill':
-      case 'labelFontSize':
-        if (this.labelText) { this.labelText.setAttribute('fontSize', (this.styleProps().labelFontSize as number) ?? 12); this.labelText.setAttribute('fill', (this.styleProps().labelFill as string) ?? '#333333'); }
-        break;
-      case 'fillOpacity':
-        this.body?.setAttribute('fillOpacity', newV);
-        break;
-      case 'strokeOpacity':
-        this.body?.setAttribute('strokeOpacity', newV);
-        break;
-      case 'opacity':
-        this.body?.setAttribute('opacity', newV);
-        if (this.labelText) this.labelText.setAttribute('opacity', newV);
-        break;
-      case 'radius':
-        this.buildBody();
-        this.applyPosition();
-        this.syncLabel();
-        break;
-      case 'fill':
-      case 'stroke':
-        this.body?.setAttribute(name, newV);
-        break;
-      case 'strokeWidth':
-        this.body?.setAttribute('lineWidth', newV);
         break;
       case 'class':
       case 'stateStyles':
         this.applyStates();
         break;
-      case 'label':
-        this.syncLabel();
-        break;
       default:
         break;
+    }
+  }
+
+  /** Scheduler 帧边界统一调用：按 dirty flag 决定重算范围（原地更新优先，避免销毁重建） */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (!this.body) return;
+    if (d & REBUILD) {
+      // shape 类型变化（rect→circle），必须销毁重建
+      this.rebuildBody();
+      return; // rebuildBody 内部已 applyPosition + fire boundschange
+    }
+    const s = this.styleProps();
+    if (d & GEOMETRY) {
+      // 原地更新几何（不销毁 body），仿 DOM element.style.width = ...
+      this.body.setAttribute('width', s.width as number);
+      this.body.setAttribute('height', s.height as number);
+      if (s.radius != null) this.body.setAttribute('radius', s.radius);
+      this.applyPosition(); // 重定位（中心依赖 w/h）+ fire boundschange → Edge/Port 联动
+    }
+    if (d & STYLE) {
+      this.body.setAttribute('fill', s.fill as string);
+      this.body.setAttribute('stroke', s.stroke as string);
+      this.body.setAttribute('lineWidth', s.strokeWidth as number);
+    }
+    if (d & LABEL) {
+      this.syncLabel();
     }
   }
 

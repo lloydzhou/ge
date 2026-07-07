@@ -9,6 +9,14 @@
  */
 import { CustomElement, CustomEvent } from '@antv/g-lite';
 
+/** dirty flag 位（仿浏览器 layout/style invalidation） */
+export const GEOMETRY = 1; // 几何（width/height/x/y/radius）
+export const STYLE = 2; // 样式（fill/stroke/strokeWidth）
+export const LABEL = 4; // 标签
+export const ROUTE = 8; // 边路径重算
+export const LAYOUT = 16; // port 定位
+export const REBUILD = 32; // shape 类型变化，需销毁重建
+
 export abstract class Cell extends CustomElement<any> {
   /** 是否已完成首次渲染 */
   protected rendered = false;
@@ -18,6 +26,9 @@ export abstract class Cell extends CustomElement<any> {
 
   /** 完整属性 model（序列化用，含用户设的所有字段，随 setAttribute 同步） */
   props: Record<string, any> = {};
+
+  /** dirty 标记（位运算，一帧内多次标记去重） */
+  protected _dirty = 0;
 
   /** 初始化 props（子类 constructor 在 super 后调用，避免干扰 g-lite CustomElement 初始化） */
   protected initProps(config: any): void {
@@ -51,6 +62,22 @@ export abstract class Cell extends CustomElement<any> {
     // super() 执行中 g-lite 可能触发 attributeChangedCallback，此时类字段尚未初始化，需惰性兜底
     if (!this.props) this.props = {};
     this.props[name] = value;
+  }
+
+  /**
+   * 标记 dirty 并加入全局调度器（仿浏览器 layout invalidation）。
+   * 无 scheduler（测试 / 未挂载）时同步 flush，保证行为一致。
+   */
+  protected markDirty(flag: number): void {
+    this._dirty |= flag;
+    const graph = (this.ownerDocument as any)?.defaultView;
+    if (graph?.scheduler) graph.scheduler.add(this);
+    else this.flushDirty();
+  }
+
+  /** 由 Scheduler 在帧边界统一调用，子类按 dirty flag 决定重算范围 */
+  flushDirty(): void {
+    this._dirty = 0;
   }
 
   getData(): Record<string, unknown> {

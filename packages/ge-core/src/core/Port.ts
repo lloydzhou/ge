@@ -5,7 +5,7 @@
  * - 默认 absolute（x/y 局部坐标手动定位）
  */
 import { Circle } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Cell, LAYOUT } from './Cell';
 import { CLASS } from './types';
 
 export interface PortStyleProps {
@@ -71,14 +71,20 @@ export class Port extends Cell {
     const owner = this.parentNode as any;
     if (!owner || this.ownerBound) return;
     this.ownerBound = true;
-    owner.addEventListener('node:boundschange', () => this.applyLayout());
+    owner.addEventListener('node:boundschange', () => this.markDirty(LAYOUT));
+  }
+
+  /** Scheduler 帧边界统一调用 */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (d & LAYOUT) this.applyLayout();
   }
 
   attributeChangedCallback(name: any, oldV: any, newV: any): void {
     if (oldV === newV || !this.rendered) return;
-    const s = this.styleProps();
     if (name === 'x' || name === 'y' || name === 'layout') {
-      this.applyLayout();
+      this.markDirty(LAYOUT);
     } else if (this.body) {
       if (name === 'r') this.body.setAttribute('r', newV);
       else if (name === 'fill' || name === 'stroke') this.body.setAttribute(name, newV);
