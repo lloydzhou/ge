@@ -144,4 +144,25 @@ describe('manhattanAStarRouter', () => {
       expect(dx < 0.001 || dy < 0.001).toBe(true);
     }
   });
+
+  it('端点拖远（grid 搜索空间爆炸）→ 降级 manhattan 不卡死', () => {
+    // 模拟 astar-t 被拖到远处：grid 距离 > 4000 格，A* 必须降级
+    const far = manhattanAStarRouter(
+      [{ x: 990, y: 82 }, { x: -2000, y: 3000 }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(far.length).toBeGreaterThanOrEqual(2);
+    // 降级后仍为正交路径
+    for (let i = 1; i < far.length; i++) {
+      const dx = Math.abs(far[i].x - far[i - 1].x);
+      const dy = Math.abs(far[i].y - far[i - 1].y);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
+    // 近距离（grid 小）仍走 A*，返回值合理
+    const near = manhattanAStarRouter(
+      [{ x: 990, y: 82 }, { x: 990, y: 242 }],
+      { obstacles: [{ x: 940, y: 140, width: 100, height: 44 }], resolution: 10 }
+    );
+    expect(near.length).toBeGreaterThanOrEqual(2);
+  });
 });

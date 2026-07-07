@@ -86,6 +86,10 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   }
   const sx = Math.round(start.x / res), sy = Math.round(start.y / res);
   const ex = Math.round(end.x / res), ey = Math.round(end.y / res);
+  // 搜索空间上限：节点拖远时 grid 距离爆炸（如 37000 格），A* 单次几十 ms → 卡死。
+  // 超阈值降级 manhattan（不避障但正交、O(N)），近距离仍走 A* 避障。
+  const gridArea = (Math.abs(ex - sx) + 1) * (Math.abs(ey - sy) + 1);
+  if (gridArea > 4000) return manhattanRouter(d);
   blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
   const open: { x: number; y: number; g: number; f: number }[] = [];
   const closed = new Set<string>();
