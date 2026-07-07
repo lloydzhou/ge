@@ -65,7 +65,9 @@ export class RotatePlugin extends OverlayPlugin {
     const centerVp = this.centerViewport(node);
     const angle = (node.getAttribute('angle') as number) ?? 0;
     const rad = (angle * Math.PI) / 180;
-    const dist = 30;
+    const h = node.getAttribute('height') as number;
+    const zoom = this.graph.getCamera().getZoom() || 1;
+    const dist = (h / 2) * zoom + 22;
     this.handle.style.left = centerVp.x + Math.sin(rad) * dist - 6 + 'px';
     this.handle.style.top = centerVp.y - Math.cos(rad) * dist - 6 + 'px';
     this.handle.style.display = 'block';
