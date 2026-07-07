@@ -47,6 +47,7 @@ export const roundedConnector: ConnectorFn = (points, options = {}) => {
       continue;
     }
     const r = Math.max(0, Math.min(radius, inLen / 2, outLen / 2));
+      if (r < 2) { d += ` ${lineTo(cur)}`; continue; }
     const A = {
       x: cur.x + ((prev.x - cur.x) * r) / inLen,
       y: cur.y + ((prev.y - cur.y) * r) / inLen,
