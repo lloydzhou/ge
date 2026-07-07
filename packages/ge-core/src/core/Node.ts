@@ -117,8 +117,10 @@ export class Node extends Cell {
     this.body.destroy();
     const ns = this.styleProps();
     this.body = this.createBody(ns);
-    this.appendChild(this.body);
-    if (this.labelText) this.appendChild(this.labelText);
+    // body 置于最底层（port/label 之下），避免 resize 重建后遮住 port
+    const first = this.firstChild;
+    if (first) this.insertBefore(this.body, first);
+    else this.appendChild(this.body);
     this.applyPosition();
     this.applyRotation();
     this.syncLabel();
