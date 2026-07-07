@@ -110,6 +110,20 @@ export class Node extends Cell {
     });
   }
 
+
+  /** 重建 body（width/height/radius/shape 变更时） */
+  protected rebuildBody(): void {
+    if (!this.body) return;
+    this.body.destroy();
+    const ns = this.styleProps();
+    this.body = this.createBody(ns);
+    this.appendChild(this.body);
+    this.applyPosition();
+    this.applyRotation();
+    this.syncLabel();
+    this.fire('node:boundschange');
+  }
+
   protected applyPosition(): void {
     const s = this.styleProps();
     this.setLocalPosition(s.x as number, s.y as number);
@@ -137,6 +151,12 @@ export class Node extends Cell {
       case 'x':
       case 'y':
         this.applyPosition();
+        break;
+      case 'width':
+      case 'height':
+      case 'radius':
+      case 'shape':
+        this.rebuildBody();
         break;
       case 'angle':
         this.applyRotation();
