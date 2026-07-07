@@ -126,7 +126,20 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
     simp.push(c);
   }
   simp.push(path[path.length - 1]);
+  // 起终点精确 + 强制第一/最后一段正交（避免斜线）
+  if (simp.length > 1) {
+    const f = simp[1];
+    if (Math.abs(start.x - f.x) > EPS && Math.abs(start.y - f.y) > EPS) {
+      simp.splice(1, 0, { x: f.x, y: start.y });
+    }
+  }
   simp[0] = { ...start };
+  if (simp.length > 2) {
+    const l = simp[simp.length - 2];
+    if (Math.abs(end.x - l.x) > EPS && Math.abs(end.y - l.y) > EPS) {
+      simp.splice(simp.length - 1, 0, { x: end.x, y: l.y });
+    }
+  }
   simp[simp.length - 1] = { ...end };
   return simp;
 };

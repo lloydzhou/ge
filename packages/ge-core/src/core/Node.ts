@@ -118,6 +118,7 @@ export class Node extends Cell {
     const ns = this.styleProps();
     this.body = this.createBody(ns);
     this.appendChild(this.body);
+    if (this.labelText) this.appendChild(this.labelText);
     this.applyPosition();
     this.applyRotation();
     this.syncLabel();
@@ -126,8 +127,12 @@ export class Node extends Cell {
 
   protected applyPosition(): void {
     const s = this.styleProps();
-    this.setLocalPosition(s.x as number, s.y as number);
-    if (this.body) this.body.setLocalPosition(0, 0);
+    const x = s.x as number, y = s.y as number;
+    const w = s.width as number, h = s.height as number;
+    // Node origin = 节点中心（旋转绕中心，非左上角）
+    this.setLocalPosition(x + w / 2, y + h / 2);
+    if (this.body) this.body.setLocalPosition(-w / 2, -h / 2);
+    if (this.labelText) this.labelText.setLocalPosition(0, 0);
     this.fire('node:boundschange');
   }
 
@@ -251,11 +256,11 @@ export class Node extends Cell {
         style: { text, fontSize: 14, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
       });
       this.appendChild(this.labelText);
-      this.labelText.setLocalPosition(w / 2, h / 2);
+      this.labelText.setLocalPosition(0, 0);
       this.subElements.set('label', this.labelText);
     } else {
       this.labelText.setAttribute('text', text as any);
-      this.labelText.setLocalPosition(w / 2, h / 2);
+      this.labelText.setLocalPosition(0, 0);
     }
   }
 
