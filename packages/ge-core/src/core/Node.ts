@@ -111,18 +111,18 @@ export class Node extends Cell {
   }
 
 
-  /** 重建 body（width/height/radius/shape 变更时） */
+  /** 重建 body（shape 类型变化 / 自定义 shape 几何变化时） */
   protected rebuildBody(): void {
     if (!this.body) return;
-    this.body.destroy();
+    const oldBody = this.body;
     const ns = this.styleProps();
+    // 创建新 body 并定位（加入场景图前设好位置，避免 (0,0) 闪烁）
     this.body = this.createBody(ns);
-    // 先定位 body 再插入场景图，避免在 (0,0) 闪一下
     this.body.setLocalPosition(-(ns.width as number) / 2, -(ns.height as number) / 2);
-    // body 置于最底层（port/label 之下），避免 resize 重建后遮住 port
-    const first = this.firstChild;
-    if (first) this.insertBefore(this.body, first);
-    else this.appendChild(this.body);
+    // 先插入新 body 再移除旧 body（避免"没有 body"的中间态）
+    this.insertBefore(this.body, oldBody);
+    this.removeChild(oldBody);
+    oldBody.destroy();
     this.applyPosition();
     this.applyRotation();
     this.syncLabel();
@@ -217,11 +217,16 @@ export class Node extends Cell {
     }
     const s = this.styleProps();
     if (d & GEOMETRY) {
-      // width/height/radius 变化 → 原地更新 body（不销毁重建，避免闪烁 + GC 压力）
-      this.body.setAttribute('width', s.width as number);
-      this.body.setAttribute('height', s.height as number);
-      if (s.radius != null) this.body.setAttribute('radius', s.radius);
-      this.applyPosition();
+      if (this.body instanceof Rect || this.body instanceof Circle || this.body instanceof Ellipse) {
+        // g-lite 原生 shape → 原地 setAttribute（不 rebuild，不闪）
+        this.body.setAttribute('width', s.width as number);
+        this.body.setAttribute('height', s.height as number);
+        if (s.radius != null) this.body.setAttribute('radius', s.radius);
+        this.applyPosition();
+      } else {
+        // 自定义 shape（triangle/star 等，body 是 Path）→ 重新生成 path
+        this.rebuildBody();
+      }
     } else if (d & POSITION) {
       // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
       this.applyPosition();
