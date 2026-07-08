@@ -5,7 +5,7 @@
  * - connectedCallback 构建主体 shape（rect/circle），修复 P0-3。
  * - 位置/尺寸变化时派发 `node:boundschange`，供相连 Edge 监听重算（事件驱动联动）。
  */
-import { Rect, Circle, Ellipse, Text, type DisplayObject } from '@antv/g-lite';
+import { Rect, Circle, Ellipse, Path, Text, type DisplayObject } from '@antv/g-lite';
 import { Cell, POSITION, GEOMETRY, STYLE, LABEL, REBUILD } from './Cell';
 import { CLASS, type ShapeName } from './types';
 import type { BBox } from '../utils/types';
@@ -224,8 +224,15 @@ export class Node extends Cell {
         if (s.radius != null) this.body.setAttribute('radius', s.radius);
         this.applyPosition();
       } else {
-        // 自定义 shape（triangle/star 等，body 是 Path）→ 重新生成 path
-        this.rebuildBody();
+        // 自定义 shape（triangle/star 等，body 是 Path）→ 重新生成 d 原地更新（不 destroy/create，不闪）
+        const graph = (this.ownerDocument as any)?.defaultView;
+        const def = graph?.shapes?.resolve(s.shape as string);
+        if (def) {
+          const tmp = def.create(s) as any;
+          this.body.setAttribute('d', tmp.getAttribute('d'));
+          tmp.destroy();
+        }
+        this.applyPosition();
       }
     } else if (d & POSITION) {
       // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
