@@ -217,23 +217,33 @@ export class Node extends Cell {
     }
     const s = this.styleProps();
     if (d & GEOMETRY) {
-      if (this.body instanceof Rect || this.body instanceof Circle || this.body instanceof Ellipse) {
-        // g-lite 原生 shape → 原地 setAttribute（不 rebuild，不闪）
+      if (this.body instanceof Rect) {
+        // Rect → width/height/radius 原地 setAttribute
         this.body.setAttribute('width', s.width as number);
         this.body.setAttribute('height', s.height as number);
         if (s.radius != null) this.body.setAttribute('radius', s.radius);
-        this.applyPosition();
       } else {
-        // 自定义 shape（triangle/star 等，body 是 Path）→ 重新生成 d 原地更新（不 destroy/create，不闪）
+        // Circle/Ellipse/Path/自定义 shape → 重新生成几何属性（不 destroy/create，不闪）
         const graph = (this.ownerDocument as any)?.defaultView;
         const def = graph?.shapes?.resolve(s.shape as string);
         if (def) {
           const tmp = def.create(s) as any;
-          this.body.setAttribute('d', tmp.getAttribute('d'));
+          if (this.body instanceof Circle) {
+            this.body.setAttribute('cx', tmp.getAttribute('cx'));
+            this.body.setAttribute('cy', tmp.getAttribute('cy'));
+            this.body.setAttribute('r', tmp.getAttribute('r'));
+          } else if (this.body instanceof Ellipse) {
+            this.body.setAttribute('cx', tmp.getAttribute('cx'));
+            this.body.setAttribute('cy', tmp.getAttribute('cy'));
+            this.body.setAttribute('rx', tmp.getAttribute('rx'));
+            this.body.setAttribute('ry', tmp.getAttribute('ry'));
+          } else {
+            this.body.setAttribute('d', tmp.getAttribute('d'));
+          }
           tmp.destroy();
         }
-        this.applyPosition();
       }
+      this.applyPosition();
     } else if (d & POSITION) {
       // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
       this.applyPosition();
