@@ -237,6 +237,9 @@ export class Node extends Cell {
             this.body.setAttribute('cy', tmp.getAttribute('cy'));
             this.body.setAttribute('rx', tmp.getAttribute('rx'));
             this.body.setAttribute('ry', tmp.getAttribute('ry'));
+          } else if (this.body instanceof Text) {
+            this.body.setAttribute('x', tmp.getAttribute('x'));
+            this.body.setAttribute('y', tmp.getAttribute('y'));
           } else {
             this.body.setAttribute('d', tmp.getAttribute('d'));
           }
