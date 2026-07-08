@@ -76,10 +76,6 @@ export abstract class Cell extends CustomElement<any> {
     const sched = doc?.scheduler ?? doc?.defaultView?.scheduler;
     if (sched) { sched.add(this); return; }
     // scheduler 未找到（测试/未挂载），同步执行
-    if (typeof console !== 'undefined' && !(Cell as any)._noSchedWarned) {
-      (Cell as any)._noSchedWarned = true;
-      console.warn('[GE] scheduler 未找到，markDirty 同步执行（高频拖动会卡）');
-    }
     this.flushDirty();
   }
 

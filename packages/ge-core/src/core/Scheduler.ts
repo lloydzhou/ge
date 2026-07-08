@@ -24,24 +24,17 @@ export class Scheduler {
   flush(): void {
     this.cancelScheduled();
     this.isFlushing = true;
-    const t0 = performance.now();
-    const deadline = t0 + 50; // 50ms 上限，防极重计算冻结主线程
+    const deadline = performance.now() + 50; // 50ms 上限，防极重计算冻结主线程
     let guard = 0;
     // while 循环处理联动：Node flush → fire boundschange → Edge/Port 入队 → 继续 flush
     while (this.queue.size > 0 && guard++ < 16 && performance.now() < deadline) {
       const cells = Array.from(this.queue);
       this.queue.clear();
       for (const cell of cells) {
-        const ct = performance.now();
         if (cell.flushDirty) cell.flushDirty();
-        const ce = performance.now() - ct;
-        if (ce > 1) console.log(`[GE] ${(cell.constructor as any)?.name || 'cell'}.flushDirty ${ce.toFixed(1)}ms`);
       }
     }
     this.isFlushing = false;
-    // 诊断：flush 超过 4ms → 某个 flushDirty 过重
-    const elapsed = performance.now() - t0;
-    if (elapsed > 4) console.warn(`[GE Scheduler] flush ${elapsed.toFixed(1)}ms (${guard} 轮)`);
     // 环依赖或极重计算导致超限 → 清空残余（防下一帧继续无限循环）
     if (this.queue.size > 0) this.queue.clear();
   }
