@@ -32,7 +32,10 @@ export class Scheduler {
       const cells = Array.from(this.queue);
       this.queue.clear();
       for (const cell of cells) {
+        const ct = performance.now();
         if (cell.flushDirty) cell.flushDirty();
+        const ce = performance.now() - ct;
+        if (ce > 1) console.log(`[GE] ${(cell.constructor as any)?.name || 'cell'}.flushDirty ${ce.toFixed(1)}ms`);
       }
     }
     this.isFlushing = false;

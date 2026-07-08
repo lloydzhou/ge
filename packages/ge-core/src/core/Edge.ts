@@ -161,7 +161,13 @@ export class Edge extends Cell {
         return { x: nx + local.x - 0.5, y: ny + local.y - 0.5, width: 1, height: 1 };
       }
     }
-    return node.getWorldBBox();
+    // 用 attribute 直接构造 bbox（O(1)），不用 getWorldBBox（矩阵计算，拖动时 3ms/次）
+    return {
+      x: (node.getAttribute('x') as number) ?? 0,
+      y: (node.getAttribute('y') as number) ?? 0,
+      width: (node.getAttribute('width') as number) ?? 0,
+      height: (node.getAttribute('height') as number) ?? 0,
+    };
   }
 
   /** 重算并原地更新路径 */
@@ -185,6 +191,7 @@ export class Edge extends Cell {
     const srcShape = srcNode.getAttribute('shape');
     const tgtShape = tgtNode.getAttribute('shape');
 
+    const _t1 = performance.now();
     const graph = (this as any).ownerDocument?.defaultView;
     // 仅 astar 路由器需要避障，避免普通路由每次遍历所有节点算 getWorldBBox
     const needObstacles = typeof s.router === 'string' && s.router.includes('astar');
@@ -195,6 +202,7 @@ export class Edge extends Cell {
       width: (n.getAttribute('width') as number) ?? 0,
       height: (n.getAttribute('height') as number) ?? 0,
     })) ?? []) : [];
+    const _t2 = performance.now();
     const points = computeEdgePoints(
       { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
@@ -202,11 +210,13 @@ export class Edge extends Cell {
       s.waypoints as Point[] | undefined,
       { obstacles },
     );
+    const _t3 = performance.now();
 
     const opts: ConnectorOptions = {};
     if (s.connectorRadius != null) opts.radius = s.connectorRadius as number;
     if (s.connectorTension != null) opts.tension = s.connectorTension as number;
     updatePath(this.body, points, connectorFn, opts);
+    const _t4 = performance.now();
     if (this.endMarker && !this.body.getAttribute('markerEnd')) {
       this.body.setAttribute('markerEnd', this.endMarker);
     }
@@ -214,6 +224,8 @@ export class Edge extends Cell {
       this.body.setAttribute('markerStart', this.startMarker);
     }
     this.positionLabel(points);
+    const _t5 = performance.now();
+    if (_t5 - _t1 > 1) console.log(`[GE] Edge.update obs=${(_t2-_t1).toFixed(1)} route=${(_t3-_t2).toFixed(1)} path=${(_t4-_t3).toFixed(1)} label=${(_t5-_t4).toFixed(1)}ms`);
   }
 
   protected resolveNode(e?: EndpointConfig | string): Node | null {
