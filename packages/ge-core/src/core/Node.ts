@@ -117,6 +117,8 @@ export class Node extends Cell {
     this.body.destroy();
     const ns = this.styleProps();
     this.body = this.createBody(ns);
+    // 先定位 body 再插入场景图，避免在 (0,0) 闪一下
+    this.body.setLocalPosition(-(ns.width as number) / 2, -(ns.height as number) / 2);
     // body 置于最底层（port/label 之下），避免 resize 重建后遮住 port
     const first = this.firstChild;
     if (first) this.insertBefore(this.body, first);
