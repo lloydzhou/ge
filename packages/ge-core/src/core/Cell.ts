@@ -10,12 +10,13 @@
 import { CustomElement, CustomEvent } from '@antv/g-lite';
 
 /** dirty flag 位（仿浏览器 layout/style invalidation） */
-export const GEOMETRY = 1; // 几何（width/height/x/y/radius）
-export const STYLE = 2; // 样式（fill/stroke/strokeWidth）
-export const LABEL = 4; // 标签
-export const ROUTE = 8; // 边路径重算
-export const LAYOUT = 16; // port 定位
-export const REBUILD = 32; // shape 类型变化，需销毁重建
+export const POSITION = 1; // 位置（x/y）→ 只需 setLocalPosition，不碰 body 几何
+export const GEOMETRY = 2; // 几何（width/height/radius）→ body.setAttribute + 重定位
+export const STYLE = 4; // 样式（fill/stroke/strokeWidth）
+export const LABEL = 8; // 标签
+export const ROUTE = 16; // 边路径重算
+export const LAYOUT = 32; // port 定位
+export const REBUILD = 64; // shape 类型变化，需销毁重建
 
 export abstract class Cell extends CustomElement<any> {
   /** 是否已完成首次渲染 */

@@ -6,7 +6,7 @@
  * - 位置/尺寸变化时派发 `node:boundschange`，供相连 Edge 监听重算（事件驱动联动）。
  */
 import { Rect, Circle, Ellipse, Text, type DisplayObject } from '@antv/g-lite';
-import { Cell, GEOMETRY, STYLE, LABEL, REBUILD } from './Cell';
+import { Cell, POSITION, GEOMETRY, STYLE, LABEL, REBUILD } from './Cell';
 import { CLASS, type ShapeName } from './types';
 import type { BBox } from '../utils/types';
 import type { Markup } from '../shape/registry';
@@ -157,6 +157,8 @@ export class Node extends Cell {
     switch (name) {
       case 'x':
       case 'y':
+        this.markDirty(POSITION); // 只改位置，不碰 body 几何
+        break;
       case 'width':
       case 'height':
       case 'radius':
@@ -213,11 +215,14 @@ export class Node extends Cell {
     }
     const s = this.styleProps();
     if (d & GEOMETRY) {
-      // 原地更新几何（不销毁 body），仿 DOM element.style.width = ...
+      // width/height/radius 变化 → 原地更新 body 几何 + 重定位
       this.body.setAttribute('width', s.width as number);
       this.body.setAttribute('height', s.height as number);
       if (s.radius != null) this.body.setAttribute('radius', s.radius);
       this.applyPosition(); // 重定位（中心依赖 w/h）+ fire boundschange → Edge/Port 联动
+    } else if (d & POSITION) {
+      // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
+      this.applyPosition();
     }
     if (d & STYLE) {
       this.body.setAttribute('fill', s.fill as string);
