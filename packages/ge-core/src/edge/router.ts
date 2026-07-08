@@ -90,7 +90,7 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   // 超阈值降级 manhattan（不避障但正交、O(N)），近距离仍走 A* 避障。
   const gridArea = (Math.abs(ex - sx) + 1) * (Math.abs(ey - sy) + 1);
   // NaN/Infinity（端点未初始化）或超阈值 → 降级 manhattan，防 A* 无限扩展冻结
-  if (!isFinite(gridArea) || gridArea > 4000) return manhattanRouter(d);
+  if (!isFinite(gridArea) || gridArea > 2000) return manhattanRouter(d);
   blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
   const open: { x: number; y: number; g: number; f: number }[] = [];
   const closed = new Set<string>();
@@ -100,11 +100,14 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   open.push({ x: sx, y: sy, g: 0, f: h(sx, sy) });
   gScore.set(sx + ',' + sy, 0);
   let found = false;
+  const _dl = performance.now() + 50; // 50ms 时间上限，防 A* 冻结主线程
   while (open.length > 0) {
-    // open 列表上限：防御性保护，防止任何情况下 A* 无限扩展冻结主线程
-    if (open.length > 6000) break;
-    open.sort((a, b) => a.f - b.f);
-    const cur = open.shift()!;
+    if (open.length > 6000 || performance.now() > _dl) break;
+    // 线性查找最小 f（O(N)），替代 sort+shift（O(N log N)），swap+pop 删除 O(1)
+    let mi = 0;
+    for (let i = 1; i < open.length; i++) if (open[i].f < open[mi].f) mi = i;
+    const cur = open[mi];
+    open[mi] = open[open.length - 1]; open.pop();
     const ck = cur.x + ',' + cur.y;
     if (cur.x === ex && cur.y === ey) { found = true; break; }
     closed.add(ck);
