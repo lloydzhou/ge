@@ -20,6 +20,8 @@ export class BoundaryPlugin extends OverlayPlugin {
       'position:absolute;border:1.5px dashed #1890ff;border-radius:2px;' +
       'pointer-events:none;z-index:8;display:none;';
     container.appendChild(this.box);
+    // 节点移动/resize 时即时跟随（boundschange 在 Scheduler flush 内同步触发）
+    graph.addEventListener('node:boundschange', () => this.update());
   }
 
   protected update(): void {
