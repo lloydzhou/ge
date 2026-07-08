@@ -70,9 +70,12 @@ export abstract class Cell extends CustomElement<any> {
    */
   protected markDirty(flag: number): void {
     this._dirty |= flag;
-    const graph = (this.ownerDocument as any)?.defaultView;
-    if (graph?.scheduler) graph.scheduler.add(this);
-    else this.flushDirty();
+    // 多路径查找 scheduler：ownerDocument 可能是 Document（.scheduler 或 .defaultView.scheduler）
+    const doc = this.ownerDocument as any;
+    const sched = doc?.scheduler ?? doc?.defaultView?.scheduler;
+    if (sched) { sched.add(this); return; }
+    // scheduler 未找到（测试/未挂载），同步执行
+    this.flushDirty();
   }
 
   /** 由 Scheduler 在帧边界统一调用，子类按 dirty flag 决定重算范围 */

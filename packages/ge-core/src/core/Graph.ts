@@ -67,6 +67,8 @@ export class Graph extends Canvas {
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
     this.scheduler = new Scheduler();
+    // 挂到 document 上，Cell 通过 ownerDocument 可直接访问（兼容 g-lite ownerDocument 返回 Document 而非 Canvas）
+    (this.document as any).scheduler = this.scheduler;
     this.registerElements();
     this.addEventListener('afterrender', () => { if (this._culling) this.cullViewport(); });
   }
