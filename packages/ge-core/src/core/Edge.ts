@@ -188,7 +188,13 @@ export class Edge extends Cell {
     const graph = (this as any).ownerDocument?.defaultView;
     // 仅 astar 路由器需要避障，避免普通路由每次遍历所有节点算 getWorldBBox
     const needObstacles = typeof s.router === 'string' && s.router.includes('astar');
-    const obstacles = needObstacles ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? []) : [];
+    // 用 attribute 直接算 bbox（O(1)），不用 getWorldBBox（矩阵计算，O(N) 子元素遍历）
+    const obstacles = needObstacles ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => ({
+      x: (n.getAttribute('x') as number) ?? 0,
+      y: (n.getAttribute('y') as number) ?? 0,
+      width: (n.getAttribute('width') as number) ?? 0,
+      height: (n.getAttribute('height') as number) ?? 0,
+    })) ?? []) : [];
     const points = computeEdgePoints(
       { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },

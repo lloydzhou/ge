@@ -36,9 +36,9 @@ export class Scheduler {
       }
     }
     this.isFlushing = false;
-    // 诊断：flush 超过一帧时间 → 某个 flushDirty 过重
+    // 诊断：flush 超过 4ms → 某个 flushDirty 过重
     const elapsed = performance.now() - t0;
-    if (elapsed > 16) console.warn(`[GE Scheduler] flush ${elapsed.toFixed(0)}ms (${guard} 轮, ${this.queue.size} 残余)`);
+    if (elapsed > 4) console.warn(`[GE Scheduler] flush ${elapsed.toFixed(1)}ms (${guard} 轮)`);
     // 环依赖或极重计算导致超限 → 清空残余（防下一帧继续无限循环）
     if (this.queue.size > 0) this.queue.clear();
   }
