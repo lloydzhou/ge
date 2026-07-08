@@ -215,11 +215,9 @@ export class Node extends Cell {
     }
     const s = this.styleProps();
     if (d & GEOMETRY) {
-      // width/height/radius 变化 → 原地更新 body 几何 + 重定位
-      this.body.setAttribute('width', s.width as number);
-      this.body.setAttribute('height', s.height as number);
-      if (s.radius != null) this.body.setAttribute('radius', s.radius);
-      this.applyPosition(); // 重定位（中心依赖 w/h）+ fire boundschange → Edge/Port 联动
+      // width/height/radius 变化 → 重建 body（g-lite Rect setAttribute 不触发 geometry 重算）
+      this.rebuildBody();
+      return;
     } else if (d & POSITION) {
       // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
       this.applyPosition();
