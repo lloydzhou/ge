@@ -26,6 +26,8 @@ export interface ShapeDefinition {
   markup?: Markup;
   /** 创建主体渲染元素（与 markup 二选一） */
   create?: (style: NodeStyleProps) => DisplayObject;
+  /** 原地更新 body 几何（resize 时调用，不 destroy/create） */
+  update?: (body: DisplayObject, style: NodeStyleProps) => void;
 }
 
 export class ShapeRegistry {

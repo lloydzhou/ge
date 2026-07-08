@@ -217,35 +217,10 @@ export class Node extends Cell {
     }
     const s = this.styleProps();
     if (d & GEOMETRY) {
-      if (this.body instanceof Rect) {
-        // Rect → width/height/radius 原地 setAttribute
-        this.body.setAttribute('width', s.width as number);
-        this.body.setAttribute('height', s.height as number);
-        if (s.radius != null) this.body.setAttribute('radius', s.radius);
-      } else {
-        // Circle/Ellipse/Path/自定义 shape → 重新生成几何属性（不 destroy/create，不闪）
-        const graph = (this.ownerDocument as any)?.defaultView;
-        const def = graph?.shapes?.resolve(s.shape as string);
-        if (def) {
-          const tmp = def.create(s) as any;
-          if (this.body instanceof Circle) {
-            this.body.setAttribute('cx', tmp.getAttribute('cx'));
-            this.body.setAttribute('cy', tmp.getAttribute('cy'));
-            this.body.setAttribute('r', tmp.getAttribute('r'));
-          } else if (this.body instanceof Ellipse) {
-            this.body.setAttribute('cx', tmp.getAttribute('cx'));
-            this.body.setAttribute('cy', tmp.getAttribute('cy'));
-            this.body.setAttribute('rx', tmp.getAttribute('rx'));
-            this.body.setAttribute('ry', tmp.getAttribute('ry'));
-          } else if (this.body instanceof Text) {
-            this.body.setAttribute('x', tmp.getAttribute('x'));
-            this.body.setAttribute('y', tmp.getAttribute('y'));
-          } else {
-            this.body.setAttribute('d', tmp.getAttribute('d'));
-          }
-          tmp.destroy();
-        }
-      }
+      // 交给 shape 自己的 update 逻辑（原地更新，不 destroy/create）
+      const graph = (this.ownerDocument as any)?.defaultView;
+      const def = graph?.shapes?.resolve(s.shape as string);
+      def?.update?.(this.body, s);
       this.applyPosition();
     } else if (d & POSITION) {
       // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
