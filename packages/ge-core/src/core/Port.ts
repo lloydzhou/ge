@@ -5,7 +5,7 @@
  * - 默认 absolute（x/y 局部坐标手动定位）
  */
 import { Circle } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Cell, LAYOUT } from './Cell';
 import { CLASS } from './types';
 
 export interface PortStyleProps {
@@ -24,9 +24,13 @@ const DEFAULTS: PortStyleProps = { x: 0, y: 0, r: 4, fill: '#1890ff', stroke: '#
 export class Port extends Cell {
   static readonly tag = 'ge-port';
   protected body?: Circle;
+  private ownerBound = false;
 
   constructor(config: Record<string, any> = {}) {
     const style = { ...DEFAULTS, ...config?.style };
+    if (config?.layout !== undefined) style.layout = config.layout;
+    if (config?.x !== undefined) style.x = config.x;
+    if (config?.y !== undefined) style.y = config.y;
     super({ className: CLASS.port, ...config, style });
     this.initProps({ id: config?.id, style });
   }
@@ -38,6 +42,7 @@ export class Port extends Cell {
     });
     this.appendChild(this.body);
     this.applyLayout();
+    this.bindOwnerBounds();
   }
 
   protected applyLayout(): void {
@@ -56,19 +61,36 @@ export class Port extends Cell {
       const margin = 0.15; // 两侧留 15%
       const span = 1 - 2 * margin;
       const pos = margin + ratio * span;
-      if (layout === 'top') { x = pw * pos; y = 0; }
-      else if (layout === 'bottom') { x = pw * pos; y = ph; }
-      else if (layout === 'left') { x = 0; y = ph * pos; }
-      else if (layout === 'right') { x = pw; y = ph * pos; }
+      if (layout === 'top') { x = (pos - 0.5) * pw; y = -ph / 2; }
+      else if (layout === 'bottom') { x = (pos - 0.5) * pw; y = ph / 2; }
+      else if (layout === 'left') { x = -pw / 2; y = (pos - 0.5) * ph; }
+      else if (layout === 'right') { x = pw / 2; y = (pos - 0.5) * ph; }
     }
     this.setLocalPosition(x, y);
   }
 
+  /** 监听 owner（Node）尺寸变化，重算 port 位置（resize 后 port 贴随节点边缘） */
+  protected bindOwnerBounds(): void {
+    const owner = this.parentNode as any;
+    if (!owner || this.ownerBound) return;
+    this.ownerBound = true;
+    owner.addEventListener('node:boundschange', () => this.markDirty(LAYOUT));
+  }
+
+  /** Scheduler 帧边界统一调用 */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (d & LAYOUT) this.applyLayout();
+  }
+
   attributeChangedCallback(name: any, oldV: any, newV: any): void {
-    if (oldV === newV || !this.rendered) return;
-    const s = this.styleProps();
+    if (oldV === newV) return;
+    this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
+    if (!this.rendered) return;
     if (name === 'x' || name === 'y' || name === 'layout') {
-      this.applyLayout();
+      this.markDirty(LAYOUT);
     } else if (this.body) {
       if (name === 'r') this.body.setAttribute('r', newV);
       else if (name === 'fill' || name === 'stroke') this.body.setAttribute(name, newV);

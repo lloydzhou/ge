@@ -126,4 +126,58 @@ describe('manhattanAStarRouter', () => {
     const reg = createDefaultRouterRegistry();
     expect(reg.resolve('manhattan-astar')).toBe(manhattanAStarRouter);
   });
+
+  it('端点含 NaN/Infinity → 立即降级不冻结（NaN > 4000 === false 修复）', () => {
+    // NaN 端点曾导致 gridArea=NaN 绕过上限检查，A* 无限扩展冻结主线程
+    const result = manhattanAStarRouter(
+      [{ x: NaN, y: 82 }, { x: 990, y: 242 }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    // Infinity 同理
+    const result2 = manhattanAStarRouter(
+      [{ x: 0, y: 0 }, { x: Infinity, y: Infinity }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(result2.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('端点不在 grid 上 → 严格正交路径（无斜线/无小拐角）', () => {
+    // 模拟真实渲染端点坐标（非 grid 对齐），含中间障碍
+    const result = manhattanAStarRouter(
+      [{ x: 952.188, y: 104 }, { x: 783.331, y: 202.246 }],
+      { obstacles: [{ x: 840, y: 110, width: 120, height: 70 }], resolution: 10 }
+    );
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    // 逐段验证严格正交：dx==0 或 dy==0（容差 0.001）
+    for (let i = 1; i < result.length; i++) {
+      const dx = Math.abs(result[i].x - result[i - 1].x);
+      const dy = Math.abs(result[i].y - result[i - 1].y);
+      if (dx > 0.001 && dy > 0.001) {
+        throw new Error(`段 ${i - 1}->${i} 非正交: dx=${dx} dy=${dy} (${JSON.stringify(result[i - 1])})->(${JSON.stringify(result[i])})`);
+      }
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
+  });
+
+  it('端点拖远（grid 搜索空间爆炸）→ 降级 manhattan 不卡死', () => {
+    // 模拟 astar-t 被拖到远处：grid 距离 > 4000 格，A* 必须降级
+    const far = manhattanAStarRouter(
+      [{ x: 990, y: 82 }, { x: -2000, y: 3000 }],
+      { obstacles: [], resolution: 10 }
+    );
+    expect(far.length).toBeGreaterThanOrEqual(2);
+    // 降级后仍为正交路径
+    for (let i = 1; i < far.length; i++) {
+      const dx = Math.abs(far[i].x - far[i - 1].x);
+      const dy = Math.abs(far[i].y - far[i - 1].y);
+      expect(dx < 0.001 || dy < 0.001).toBe(true);
+    }
+    // 近距离（grid 小）仍走 A*，返回值合理
+    const near = manhattanAStarRouter(
+      [{ x: 990, y: 82 }, { x: 990, y: 242 }],
+      { obstacles: [{ x: 940, y: 140, width: 100, height: 44 }], resolution: 10 }
+    );
+    expect(near.length).toBeGreaterThanOrEqual(2);
+  });
 });

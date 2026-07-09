@@ -5,8 +5,8 @@
  * - connectedCallback 构建主体 shape（rect/circle），修复 P0-3。
  * - 位置/尺寸变化时派发 `node:boundschange`，供相连 Edge 监听重算（事件驱动联动）。
  */
-import { Rect, Circle, Ellipse, Text, type DisplayObject } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Rect, Circle, Ellipse, Path, Text, type DisplayObject } from '@antv/g-lite';
+import { Cell, POSITION, GEOMETRY, STYLE, LABEL, REBUILD } from './Cell';
 import { CLASS, type ShapeName } from './types';
 import type { BBox } from '../utils/types';
 import type { Markup } from '../shape/registry';
@@ -110,10 +110,33 @@ export class Node extends Cell {
     });
   }
 
+
+  /** 重建 body（shape 类型变化 / 自定义 shape 几何变化时） */
+  protected rebuildBody(): void {
+    if (!this.body) return;
+    const oldBody = this.body;
+    const ns = this.styleProps();
+    // 创建新 body 并定位（加入场景图前设好位置，避免 (0,0) 闪烁）
+    this.body = this.createBody(ns);
+    this.body.setLocalPosition(-(ns.width as number) / 2, -(ns.height as number) / 2);
+    // 先插入新 body 再移除旧 body（避免"没有 body"的中间态）
+    this.insertBefore(this.body, oldBody);
+    this.removeChild(oldBody);
+    oldBody.destroy();
+    this.applyPosition();
+    this.applyRotation();
+    this.syncLabel();
+    this.fire('node:boundschange');
+  }
+
   protected applyPosition(): void {
     const s = this.styleProps();
-    this.setLocalPosition(s.x as number, s.y as number);
-    if (this.body) this.body.setLocalPosition(0, 0);
+    const x = s.x as number, y = s.y as number;
+    const w = s.width as number, h = s.height as number;
+    // Node origin = 节点中心（旋转绕中心，非左上角）
+    this.setLocalPosition(x + w / 2, y + h / 2);
+    if (this.body) this.body.setLocalPosition(-w / 2, -h / 2);
+    if (this.labelText) this.labelText.setLocalPosition(0, 0);
     this.fire('node:boundschange');
   }
 
@@ -132,54 +155,85 @@ export class Node extends Cell {
   ): void {
     if (oldV === newV) return;
     this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
     if (!this.rendered) return; // 构造期间不处理，等 connectedCallback 统一渲染
     switch (name) {
       case 'x':
       case 'y':
-        this.applyPosition();
+        this.markDirty(POSITION); // 只改位置，不碰 body 几何
+        break;
+      case 'width':
+      case 'height':
+      case 'radius':
+        this.markDirty(GEOMETRY); // 原地更新几何 + 重定位
+        break;
+      case 'shape':
+        this.markDirty(REBUILD); // shape 类型变化，需销毁重建
+        break;
+      case 'fill':
+      case 'stroke':
+      case 'strokeWidth':
+        this.markDirty(STYLE);
+        break;
+      case 'label':
+      case 'labels':
+      case 'labelFill':
+      case 'labelFontSize':
+        this.markDirty(LABEL);
         break;
       case 'angle':
         this.applyRotation();
         break;
       case 'shadowColor':
-        this.body?.setAttribute('shadowColor', newV);
-        break;
       case 'shadowBlur':
-        this.body?.setAttribute('shadowBlur', newV);
-        break;
       case 'fillOpacity':
-        this.body?.setAttribute('fillOpacity', newV);
-        break;
       case 'strokeOpacity':
-        this.body?.setAttribute('strokeOpacity', newV);
+      case 'opacity':
+      case 'lineDash':
+        // 轻量样式直接同步到 body（g-lite 已 batch 渲染）
+        this.body?.setAttribute(name, newV);
+        if (name === 'opacity' && this.labelText) this.labelText.setAttribute('opacity', newV);
         break;
       case 'visible':
         this.setAttribute('visibility', newV ? 'visible' : 'hidden');
-        break;
-      case 'shape':
-      case 'width':
-      case 'height':
-      case 'radius':
-        this.buildBody();
-        this.applyPosition();
-        this.syncLabel();
-        break;
-      case 'fill':
-      case 'stroke':
-        this.body?.setAttribute(name, newV);
-        break;
-      case 'strokeWidth':
-        this.body?.setAttribute('lineWidth', newV);
         break;
       case 'class':
       case 'stateStyles':
         this.applyStates();
         break;
-      case 'label':
-        this.syncLabel();
-        break;
       default:
         break;
+    }
+  }
+
+  /** Scheduler 帧边界统一调用：按 dirty flag 决定重算范围（原地更新优先，避免销毁重建） */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (!this.body) return;
+    if (d & REBUILD) {
+      // shape 类型变化（rect→circle），必须销毁重建
+      this.rebuildBody();
+      return; // rebuildBody 内部已 applyPosition + fire boundschange
+    }
+    const s = this.styleProps();
+    if (d & GEOMETRY) {
+      // 交给 shape 自己的 update 逻辑（原地更新，不 destroy/create）
+      const graph = (this.ownerDocument as any)?.defaultView;
+      const def = graph?.shapes?.resolve(s.shape as string);
+      def?.update?.(this.body, s);
+      this.applyPosition();
+    } else if (d & POSITION) {
+      // 仅 x/y 变化（拖动）→ 只重定位，不碰 body 几何（避免 g-lite geometry 重算）
+      this.applyPosition();
+    }
+    if (d & STYLE) {
+      this.body.setAttribute('fill', s.fill as string);
+      this.body.setAttribute('stroke', s.stroke as string);
+      this.body.setAttribute('lineWidth', s.strokeWidth as number);
+    }
+    if (d & LABEL) {
+      this.syncLabel();
     }
   }
 
@@ -200,11 +254,11 @@ export class Node extends Cell {
         style: { text, fontSize: 14, fill: '#333333', textAlign: 'center', textBaseline: 'middle' },
       });
       this.appendChild(this.labelText);
-      this.labelText.setLocalPosition(w / 2, h / 2);
+      this.labelText.setLocalPosition(0, 0);
       this.subElements.set('label', this.labelText);
     } else {
       this.labelText.setAttribute('text', text as any);
-      this.labelText.setLocalPosition(w / 2, h / 2);
+      this.labelText.setLocalPosition(0, 0);
     }
   }
 
@@ -294,6 +348,7 @@ export class Node extends Cell {
       if (typeof p.className === 'string' && p.className.includes('ge-group')) {
         const ps = p.styleProps?.();
         if (ps) { x += (ps.x as number) ?? 0; y += (ps.y as number) ?? 0; }
+
       }
       p = p.parentNode;
     }
@@ -314,5 +369,12 @@ export class Node extends Cell {
   toBack(): this {
     this.parentNode?.insertBefore(this, this.parentNode.firstChild);
     return this;
+  }
+
+  /** 几何中心（旋转感知，x+w/2, y+h/2，不用 AABB） */
+  getWorldCenter(): { x: number; y: number } {
+    const x = this.getAttribute('x') as number;
+    const y = this.getAttribute('y') as number;
+    return { x: x + (this.getAttribute('width') as number) / 2, y: y + (this.getAttribute('height') as number) / 2 };
   }
 }

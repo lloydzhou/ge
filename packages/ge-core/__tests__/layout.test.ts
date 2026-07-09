@@ -3,6 +3,7 @@ import { gridLayout } from '../src/layout/grid';
 import { circularLayout } from '../src/layout/circular';
 import { forceLayout } from '../src/layout/force';
 import { hierarchicalLayout } from '../src/layout/hierarchical';
+import { treeLayout } from '../src/layout/tree';
 import type { LayoutNode, LayoutEdge } from '../src/layout/types';
 
 const nodes = (ids: string[]): LayoutNode[] => ids.map((id) => ({ id }));
@@ -84,5 +85,29 @@ describe('hierarchicalLayout 排序', () => {
     const edges = [{ source: 'a', target: 'c' }, { source: 'b', target: 'd' }];
     const pos = hierarchicalLayout(nodes, edges);
     expect(pos.get('c')!.x).toBeLessThan(pos.get('d')!.x);
+  });
+});
+
+describe('treeLayout', () => {
+  it('LR 方向：父在左子树在右', () => {
+    const nodes = [{ id: 'root' }, { id: 'a' }, { id: 'b' }];
+    const edges = [{ source: 'root', target: 'a' }, { source: 'root', target: 'b' }];
+    const pos = treeLayout(nodes, edges, { direction: 'LR', startX: 0, startY: 0 });
+    expect(pos.get('root')!.x).toBeLessThan(pos.get('a')!.x);
+    expect(pos.get('a')!.x).toBe(pos.get('b')!.x);
+  });
+
+  it('TB 方向：父在上子树在下', () => {
+    const nodes = [{ id: 'root' }, { id: 'a' }];
+    const edges = [{ source: 'root', target: 'a' }];
+    const pos = treeLayout(nodes, edges, { direction: 'TB', startX: 0, startY: 0 });
+    expect(pos.get('root')!.y).toBeLessThan(pos.get('a')!.y);
+  });
+
+  it('孤立节点兜底', () => {
+    const nodes = [{ id: 'x' }, { id: 'y' }];
+    const pos = treeLayout(nodes, [], { startX: 0, startY: 0 });
+    expect(pos.get('x')).toBeDefined();
+    expect(pos.get('y')).toBeDefined();
   });
 });

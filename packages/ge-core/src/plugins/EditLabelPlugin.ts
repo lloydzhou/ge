@@ -24,8 +24,8 @@ export class EditLabelPlugin extends Plugin {
 
   private showEditor(container: HTMLElement, node: any, label: string): void {
     this.destroy();
-    const bb = node.getWorldBBox();
-    const vp = this.graph.canvas2Viewport({ x: bb.x, y: bb.y - 28 });
+    const c = node.getWorldCenter();
+    const vp = this.graph.canvas2Viewport({ x: c.x - (node.getAttribute('width') as number) / 2, y: c.y - (node.getAttribute('height') as number) / 2 - 28 });
     const input = document.createElement('input');
     input.value = label;
     input.style.cssText = `position:absolute;left:${vp.x}px;top:${vp.y}px;min-width:60px;padding:2px 6px;border:2px solid #1890ff;border-radius:3px;font-size:12px;z-index:20;outline:none;`;

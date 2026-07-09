@@ -6,3 +6,4 @@ export { Edge, type EdgeStyleProps } from './Edge';
 export { Port, type PortStyleProps } from './Port';
 export { Group } from './Group';
 export { Graph } from './Graph';
+export { GraphSnapshot, type GraphSnapshotData, type SnapshotViewport } from './GraphSnapshot';

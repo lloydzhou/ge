@@ -1,9 +1,9 @@
 /**
- * DragPlugin —— 节点/分组拖拽移动。
+ * DragPlugin —— 节点/分组拖拽移动（可选 snap to grid）。
  *
  * - 监听 graph 的 pointerdown/move/up（事件冒泡到 Canvas）。
- * - 拖拽时调用 node.moveTo，触发 `node:boundschange`，
- *   相连 Edge 通过既有事件机制自动重算路径（验证事件驱动联动）。
+ * - snapGrid > 0 时拖拽吸附网格。
+ * - pointermove 直接 moveTo（setAttribute → markDirty），由 Scheduler 在帧边界合并 applyPosition。
  */
 import { CustomEvent } from '@antv/g-lite';
 import { Plugin, closestCell } from './plugin';
@@ -16,15 +16,29 @@ interface DragState {
   oy: number;
 }
 
+export interface DragOptions {
+  /** 网格吸附大小（0 = 不吸附） */
+  snapGrid?: number;
+}
+
 export class DragPlugin extends Plugin {
   readonly name = 'drag';
   private dragging: DragState | null = null;
+  private snapGrid: number;
+
+  constructor(options: DragOptions = {}) {
+    super();
+    this.snapGrid = options.snapGrid ?? 0;
+  }
 
   init(graph: any): void {
     super.init(graph);
 
     graph.addEventListener('pointerdown', (e: any) => {
-      if (e.altKey) return; // 触发键按下时交给 CreateEdge 接管连线创建
+      if (e.altKey) return;
+      // port 拖出连线交给 CreateEdgePlugin，不拖动节点
+      const tgt = e.target;
+      if (tgt && typeof tgt.className === 'string' && tgt.className.includes('ge-port')) return;
       const node = graph.pickNode(e.viewportX, e.viewportY);
       if (!node) return;
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
@@ -41,15 +55,23 @@ export class DragPlugin extends Plugin {
       if (!this.dragging) return;
       const d = this.dragging;
       const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-      d.node.moveTo(d.ox + (w.x - d.sx), d.oy + (w.y - d.sy));
+      let nx = d.ox + (w.x - d.sx);
+      let ny = d.oy + (w.y - d.sy);
+      if (this.snapGrid > 0) {
+        nx = Math.round(nx / this.snapGrid) * this.snapGrid;
+        ny = Math.round(ny / this.snapGrid) * this.snapGrid;
+      }
+      // moveTo → setAttribute → markDirty → Scheduler 帧边界合并 applyPosition
+      d.node.moveTo(nx, ny);
     });
 
     const end = (): void => {
       const node = this.dragging?.node;
       this.dragging = null;
       if (node) {
-        // 派发拖拽结束事件，供 History 等记录
-        node.dispatchEvent(new CustomEvent('node:dragend'));
+        // 确保拖拽结束位置立即生效（视觉 + 联动 Edge/Port）
+        graph.scheduler?.flush();
+        node.dispatchEvent(new CustomEvent('node:dragend', { bubbles: true }));
       }
     };
     graph.addEventListener('pointerup', end);

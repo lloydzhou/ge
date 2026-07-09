@@ -59,8 +59,8 @@
     // 组内节点连到组外节点（世界坐标正确）
     graph.addEdge({ source: 'a', target: 'c', router: 'orthogonal', connector: 'rounded', stroke: '#722ed1' });
 
-    document.getElementById('export').onclick = () => {
-      const url = graph.toDataURL();
+    document.getElementById('export').onclick = async () => {
+      const url = await graph.toDataURL();
       window.__lastPNG = url;
       console.log('PNG dataURL length:', url.length);
     };

@@ -7,7 +7,7 @@
  * - Anchor/Router/Connector 解析器由 Graph 注入（registry 统一管理）。
  */
 import { Path, Text, type DisplayObject } from '@antv/g-lite';
-import { Cell } from './Cell';
+import { Cell, ROUTE, STYLE, LABEL } from './Cell';
 import { CLASS, type EndpointConfig } from './types';
 import { computeEdgePoints } from './compute';
 import { edgeAnchorRatio } from '../anchor/edge-anchor';
@@ -91,6 +91,7 @@ export class Edge extends Cell {
   ): void {
     if (oldV === newV) return;
     this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
     if (!this.rendered) return;
     switch (name) {
       case 'source':
@@ -100,29 +101,35 @@ export class Edge extends Cell {
       case 'waypoints':
       case 'connectorRadius':
       case 'connectorTension':
-        this.update();
+        this.markDirty(ROUTE);
+        break;
+      case 'label':
+      case 'labels':
+      case 'labelFill':
+      case 'labelFontSize':
+        this.markDirty(LABEL);
         break;
       case 'stroke':
         this.body?.setAttribute('stroke', newV);
         this.endMarker?.setAttribute('fill', newV);
         this.startMarker?.setAttribute('fill', newV);
         break;
-      case 'label':
-      case 'labels':
-        this.syncLabel();
-        this.update();
-        break;
       case 'strokeWidth':
         this.body?.setAttribute('lineWidth', newV);
         break;
       case 'lineDash':
-        this.body?.setAttribute('lineDash', newV);
-        break;
       case 'opacity':
-        this.body?.setAttribute('opacity', newV);
+        this.body?.setAttribute(name, newV);
         break;
       case 'lineDashFlow':
         if (newV) this.startDashFlow(); else this.stopDashFlow();
+        break;
+      case 'markerSize':
+        this.endMarker?.destroy(); this.endMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333');
+        if (this.styleProps().startArrow) { this.startMarker?.destroy(); this.startMarker = this.createMarker((this.styleProps().stroke as string) ?? '#333'); }
+        this.body?.removeAttribute('markerEnd');
+        this.body?.removeAttribute('markerStart');
+        this.markDirty(ROUTE);
         break;
       case 'visible':
         this.body?.setAttribute('visibility', newV ? 'visible' : 'hidden');
@@ -133,6 +140,35 @@ export class Edge extends Cell {
       default:
         break;
     }
+  }
+
+  /** Scheduler 帧边界统一调用 */
+  flushDirty(): void {
+    const d = this._dirty;
+    this._dirty = 0;
+    if (!this.body) return;
+    if (d & LABEL) this.syncLabel();
+    if (d & (ROUTE | LABEL)) this.update();
+  }
+
+  /** 端点 bbox：有 port → port 世界坐标（1x1）；无 port → node worldBBox */
+  protected endpointBBox(node: Node, cfg: EndpointConfig): { x: number; y: number; width: number; height: number } {
+    if (cfg.port) {
+      const port = (node.children as any[])?.find((c: any) => c.id === cfg.port);
+      if (port) {
+        const local = (port as any).getLocalPosition?.() ?? { x: 0, y: 0 };
+        const nx = (node.getAttribute('x') as number) ?? 0;
+        const ny = (node.getAttribute('y') as number) ?? 0;
+        return { x: nx + local.x - 0.5, y: ny + local.y - 0.5, width: 1, height: 1 };
+      }
+    }
+    // 用 attribute 直接构造 bbox（O(1)），不用 getWorldBBox（矩阵计算，拖动时 3ms/次）
+    return {
+      x: (node.getAttribute('x') as number) ?? 0,
+      y: (node.getAttribute('y') as number) ?? 0,
+      width: (node.getAttribute('width') as number) ?? 0,
+      height: (node.getAttribute('height') as number) ?? 0,
+    };
   }
 
   /** 重算并原地更新路径 */
@@ -157,10 +193,18 @@ export class Edge extends Cell {
     const tgtShape = tgtNode.getAttribute('shape');
 
     const graph = (this as any).ownerDocument?.defaultView;
-    const obstacles = graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [];
+    // 仅 astar 路由器需要避障，避免普通路由每次遍历所有节点算 getWorldBBox
+    const needObstacles = typeof s.router === 'string' && s.router.includes('astar');
+    // 用 attribute 直接算 bbox（O(1)），不用 getWorldBBox（矩阵计算，O(N) 子元素遍历）
+    const obstacles = needObstacles ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => ({
+      x: (n.getAttribute('x') as number) ?? 0,
+      y: (n.getAttribute('y') as number) ?? 0,
+      width: (n.getAttribute('width') as number) ?? 0,
+      height: (n.getAttribute('height') as number) ?? 0,
+    })) ?? []) : [];
     const points = computeEdgePoints(
-      { bbox: srcNode.getWorldBBox(), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
-      { bbox: tgtNode.getWorldBBox(), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
+      { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
+      { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
       routerFn,
       s.waypoints as Point[] | undefined,
       { obstacles },
@@ -191,7 +235,8 @@ export class Edge extends Cell {
     const id = (node as any).id;
     if (!id || this.boundNodes.has(id)) return;
     this.boundNodes.add(id);
-    node.addEventListener('node:boundschange', () => this.update());
+    // boundschange 高频触发（拖拽），走 Scheduler 合并（每帧最多 1 次 update）
+    node.addEventListener('node:boundschange', () => this.markDirty(ROUTE));
   }
 
   /** 根据 className 应用 stateStyles（hover/selected 等） */
@@ -199,7 +244,12 @@ export class Edge extends Cell {
     if (!this.body) return;
     const cls = (this.className || '').split(/\s+/);
     const s = this.styleProps();
-    const states = (s.stateStyles as Record<string, any>) || {};
+    const baseWidth = (s.strokeWidth as number) ?? 1;
+    const defaults: Record<string, any> = {
+      hover: { lineWidth: baseWidth + 1 },
+      selected: { stroke: '#722ed1', lineWidth: baseWidth + 1 },
+    };
+    const states = { ...defaults, ...((s.stateStyles as Record<string, any>) || {}) };
     const cur: Record<string, any> = { stroke: s.stroke, lineWidth: s.strokeWidth };
     for (const c of cls) {
       if (c && states[c]) {
@@ -216,7 +266,7 @@ export class Edge extends Cell {
     if (this.dashRafId != null) return;
     let offset = 0;
     const animate = (): void => {
-      offset -= 0.5;
+      offset -= ((this.styleProps().dashFlowSpeed as number) ?? 0.5);
       this.body?.setAttribute('lineDashOffset', offset);
       this.dashRafId = requestAnimationFrame(animate);
     };
@@ -230,18 +280,19 @@ export class Edge extends Cell {
   protected createMarker(color: string): Path {
     // 尖端在 (0,0)（= 路径终点/target 边缘），底朝 +x（g-lite orient 使 +x 朝 source，即边外）
     // 这样箭头完整落在边外、尖端刚好贴 target 边缘，不会伸入节点被遮挡
-    return new Path({ style: { d: 'M 0 0 L 10 -5 L 10 5 Z', fill: color } });
+    const sz = (this.styleProps().markerSize as number) ?? 10;
+    return new Path({ style: { d: `M 0 0 L ${sz} ${-sz / 2} L ${sz} ${sz / 2} Z`, fill: color } });
   }
 
   /** 同步边标签 */
   protected syncLabel(): void {
     const s = this.styleProps();
-    const labels = s.labels as { text: string }[] | undefined;
+    const labels = s.labels as any[] | undefined;
     if (labels && labels.length > 0) {
       for (const lt of this._labelTexts) lt.destroy();
       this._labelTexts = [];
       for (const item of labels) {
-        const lt = new Text({ style: { text: item.text, fontSize: 12, fill: '#333333', textAlign: 'center', textBaseline: 'middle' } });
+        const lt = new Text({ style: { text: item.text, fontSize: (item.fontSize as number) ?? (this.styleProps().labelFontSize as number) ?? 12, fill: (item.fill as string) ?? (this.styleProps().labelFill as string) ?? '#333333', textAlign: 'center', textBaseline: 'middle' } });
         this.appendChild(lt);
         this._labelTexts.push(lt);
       }

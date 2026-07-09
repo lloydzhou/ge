@@ -86,28 +86,47 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
   }
   const sx = Math.round(start.x / res), sy = Math.round(start.y / res);
   const ex = Math.round(end.x / res), ey = Math.round(end.y / res);
+  const gridArea = (Math.abs(ex - sx) + 1) * (Math.abs(ey - sy) + 1);
+  if (!isFinite(gridArea) || gridArea > 1000) return manhattanRouter(d);
   blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
-  const open: { x: number; y: number; g: number; f: number }[] = [];
+  // 最小堆优先队列：O(log N) push/pop，替代线性查找 O(N²)
+  const heap: any[] = [];
+  const hpush = (it: any) => {
+    heap.push(it); let i = heap.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (heap[p].f <= heap[i].f) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; }
+  };
+  const hpop = (): any => {
+    if (!heap.length) return; const top = heap[0]; const last = heap.pop()!;
+    if (heap.length) { heap[0] = last; let i = 0, n = heap.length;
+      while (true) { let m = i, l = i * 2 + 1, r = l + 1;
+        if (l < n && heap[l].f < heap[m].f) m = l; if (r < n && heap[r].f < heap[m].f) m = r;
+        if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } }
+    return top;
+  };
   const closed = new Set<string>();
   const cameFrom = new Map<string, string>();
   const gScore = new Map<string, number>();
   const h = (x: number, y: number) => Math.abs(x - ex) + Math.abs(y - ey);
-  open.push({ x: sx, y: sy, g: 0, f: h(sx, sy) });
+  hpush({ x: sx, y: sy, g: 0, f: h(sx, sy), dx: 0, dy: 0 });
   gScore.set(sx + ',' + sy, 0);
   let found = false;
-  while (open.length > 0) {
-    open.sort((a, b) => a.f - b.f);
-    const cur = open.shift()!;
+  const dl = performance.now() + 15; // 15ms 时间上限
+  while (heap.length > 0) {
+    if (performance.now() > dl) break;
+    const cur = hpop();
     const ck = cur.x + ',' + cur.y;
-    if (cur.x === ex && cur.y === ey) { found = true; break; }
+    if (closed.has(ck)) continue;
     closed.add(ck);
+    if (cur.x === ex && cur.y === ey) { found = true; break; }
     for (const [dxx, dyy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = cur.x + dxx, ny = cur.y + dyy, nk = nx + ',' + ny;
       if (closed.has(nk) || blocked.has(nk)) continue;
-      const ng = cur.g + 1;
+      // 转弯惩罚：方向变化 +1 代价，A* 倾向直线（L/Z 形），避免锯齿阶梯
+      const turned = cur.g > 0 && (cur.dx !== dxx || cur.dy !== dyy);
+      const ng = cur.g + 1 + (turned ? 1 : 0);
       if (!gScore.has(nk) || ng < gScore.get(nk)!) {
         gScore.set(nk, ng); cameFrom.set(nk, ck);
-        open.push({ x: nx, y: ny, g: ng, f: ng + h(nx, ny) });
+        hpush({ x: nx, y: ny, g: ng, f: ng + h(nx, ny), dx: dxx, dy: dyy });
       }
     }
   }
@@ -119,15 +138,14 @@ export const manhattanAStarRouter: RouterFn = (points, options) => {
     path.unshift({ x: px * res, y: py * res });
     curKey = cameFrom.get(curKey)!;
   }
+  // 路径简化：跳过共线中间点
   const simp: Point[] = [path[0]];
   for (let i = 1; i < path.length - 1; i++) {
     const p = simp[simp.length - 1], c = path[i], n = path[i + 1];
-    if (Math.sign(c.x - p.x) === Math.sign(n.x - c.x) && Math.sign(c.y - p.y) === Math.sign(n.y - c.y)) continue;
+    if ((p.x === c.x && c.x === n.x) || (p.y === c.y && c.y === n.y)) continue;
     simp.push(c);
   }
   simp.push(path[path.length - 1]);
-  simp[0] = { ...start };
-  simp[simp.length - 1] = { ...end };
   return simp;
 };
 

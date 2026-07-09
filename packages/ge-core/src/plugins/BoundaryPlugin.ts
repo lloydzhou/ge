@@ -20,6 +20,8 @@ export class BoundaryPlugin extends OverlayPlugin {
       'position:absolute;border:1.5px dashed #1890ff;border-radius:2px;' +
       'pointer-events:none;z-index:8;display:none;';
     container.appendChild(this.box);
+    // 节点移动/resize 时即时跟随（boundschange 在 Scheduler flush 内同步触发）
+    graph.addEventListener('node:boundschange', () => this.update());
   }
 
   protected update(): void {
@@ -28,14 +30,20 @@ export class BoundaryPlugin extends OverlayPlugin {
     if (sel.length !== 1) { this.box.style.display = 'none'; return; }
     const node = this.graph.getNode(sel[0]);
     if (!node) { this.box.style.display = 'none'; return; }
-    const bb = node.getWorldBBox();
+    const x = node.getAttribute('x') as number;
+    const y = node.getAttribute('y') as number;
+    const w = node.getAttribute('width') as number;
+    const h = node.getAttribute('height') as number;
+    const angle = (node.getAttribute('angle') as number) ?? 0;
     const padding = 4;
-    const tl = this.graph.canvas2Viewport({ x: bb.x - padding, y: bb.y - padding });
-    const br = this.graph.canvas2Viewport({ x: bb.x + bb.width + padding, y: bb.y + bb.height + padding });
-    this.box.style.left = tl.x + 'px';
-    this.box.style.top = tl.y + 'px';
-    this.box.style.width = (br.x - tl.x) + 'px';
-    this.box.style.height = (br.y - tl.y) + 'px';
+    const zoom = this.graph.getCamera().getZoom() || 1;
+    const c = this.graph.canvas2Viewport({ x: x + w / 2, y: y + h / 2 });
+    this.box.style.left = (c.x - (w / 2 + padding) * zoom) + 'px';
+    this.box.style.top = (c.y - (h / 2 + padding) * zoom) + 'px';
+    this.box.style.width = ((w + padding * 2) * zoom) + 'px';
+    this.box.style.height = ((h + padding * 2) * zoom) + 'px';
+    this.box.style.transform = `rotate(${angle}deg)`;
+    this.box.style.transformOrigin = 'center center';
     this.box.style.display = 'block';
   }
 

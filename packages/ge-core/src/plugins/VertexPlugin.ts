@@ -117,15 +117,13 @@ export class VertexPlugin extends Plugin {
     const sNode = graph.getNode(typeof sId === 'string' ? sId : sId?.cell);
     const tNode = graph.getNode(typeof tId === 'string' ? tId : tId?.cell);
     if (sNode && this.srcHandle) {
-      const bb = sNode.getWorldBBox();
-      const p = graph.canvas2Viewport({ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 });
+      const p = graph.canvas2Viewport(sNode.getWorldCenter());
       this.srcHandle.style.left = (p.x - 5) + 'px';
       this.srcHandle.style.top = (p.y - 5) + 'px';
       this.srcHandle.style.display = 'block';
     }
     if (tNode && this.tgtHandle) {
-      const bb = tNode.getWorldBBox();
-      const p = graph.canvas2Viewport({ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 });
+      const p = graph.canvas2Viewport(tNode.getWorldCenter());
       this.tgtHandle.style.left = (p.x - 5) + 'px';
       this.tgtHandle.style.top = (p.y - 5) + 'px';
       this.tgtHandle.style.display = 'block';

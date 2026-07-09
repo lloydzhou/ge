@@ -6,7 +6,7 @@
  *   查询走 getElementById / getElementsByClassName，无平行 Map（修复 P0-4/Registry 双轨）。
  * - 统一持有 Anchor / Router / Connector 注册表，并注入到 Edge。
  */
-import { Canvas } from '@antv/g-lite';
+import { Canvas, CustomEvent } from '@antv/g-lite';
 import { Renderer as CanvasRenderer } from '@antv/g-canvas';
 import { Renderer as SVGRenderer } from '@antv/g-svg';
 import { Node } from './Node';
@@ -34,6 +34,7 @@ import {
 } from '../edge/connector';
 import { createDefaultShapeRegistry, type ShapeRegistry } from '../shape';
 import type { Plugin } from '../plugins/plugin';
+import { Scheduler } from './Scheduler';
 
 const resolveContainer = (c: HTMLElement | string): HTMLElement =>
   typeof c === 'string' ? document.querySelector<HTMLElement>(c)! : c;
@@ -43,6 +44,8 @@ export class Graph extends Canvas {
   readonly shapes: ShapeRegistry;
   readonly routers: RouterRegistry;
   readonly connectors: ConnectorRegistry;
+  /** 全局渲染调度器（rAF 合并 dirty cell，仿浏览器渲染队列） */
+  readonly scheduler: Scheduler;
   private plugins: Plugin[] = [];
   /** pan 偏移（世界坐标），由 panBy 累积；坐标转换用 2D 公式保证与 SVG 渲染一致 */
   panOffset = { x: 0, y: 0 };
@@ -63,6 +66,9 @@ export class Graph extends Canvas {
     this.shapes = createDefaultShapeRegistry();
     this.routers = createDefaultRouterRegistry();
     this.connectors = createDefaultConnectorRegistry();
+    this.scheduler = new Scheduler();
+    // 挂到 document 上，Cell 通过 ownerDocument 可直接访问（兼容 g-lite ownerDocument 返回 Document 而非 Canvas）
+    (this.document as any).scheduler = this.scheduler;
     this.registerElements();
     this.addEventListener('afterrender', () => { if (this._culling) this.cullViewport(); });
   }
@@ -75,6 +81,23 @@ export class Graph extends Canvas {
     this.panOffset.x += dwx;
     this.panOffset.y += dwy;
     (this as any).document.documentElement.translate(dwx, dwy);
+    this.fireViewportChange();
+  }
+
+  /** 设置缩放（统一出口，派发 viewportchange；外部插件改 zoom 应走这里而非直接 camera.setZoom） */
+  setZoom(zoom: number): void {
+    this.getCamera().setZoom(zoom);
+    this.fireViewportChange();
+  }
+
+  /** viewport（pan/zoom）变化通知：Minimap 等视图订阅后更新视口框，无需轮询 afterrender */
+  private fireViewportChange(): void {
+    this.dispatchEvent(new CustomEvent('viewportchange', {
+      detail: {
+        panOffset: { x: this.panOffset.x, y: this.panOffset.y },
+        zoom: this.getCamera().getZoom() || 1,
+      },
+    }));
   }
 
   /** 平移使世界点 (worldX, worldY) 位于视口中心（minimap 导航用） */
@@ -246,6 +269,34 @@ export class Graph extends Canvas {
     cfg.height = height;
   }
 
+  /** 聚焦到指定节点（平移使其居中，easeOutCubic 动画） */
+  focusNode(id: string, animate = true): void {
+    const node = this.getNode(id);
+    if (!node) return;
+    const c = node.getWorldCenter();
+    const tx = c.x;
+    const ty = c.y;
+    if (!animate) { this.panTo(tx, ty); return; }
+    const cfg = this.getConfig();
+    const cx = (cfg.width ?? 800) / 2;
+    const cy = (cfg.height ?? 600) / 2;
+    const dxWorld = (cx - tx) - this.panOffset.x;
+    const dyWorld = (cy - ty) - this.panOffset.y;
+    const zoom = this.getCamera().getZoom() || 1;
+    const dur = 300;
+    const t0 = performance.now();
+    let lastE = 0;
+    const step = (now: number): void => {
+      const t = Math.min((now - t0) / dur, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      const deltaE = e - lastE;
+      lastE = e;
+      this.panBy(dxWorld * deltaE * zoom, dyWorld * deltaE * zoom);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   // ---- 虚拟渲染（viewport culling） ----
   private _culling = false;
   /** 启用/禁用视口裁剪（大图性能优化，只渲染可见节点） */
@@ -274,17 +325,49 @@ export class Graph extends Canvas {
   }
 
   // ---- 导出 ----
-  /** 导出为 data URL：canvas 渲染→PNG，svg 渲染→SVG data URL */
-  toDataURL(type: string = 'image/png', quality?: number): string {
-    const container = this.getConfig().container as HTMLElement;
-    const canvas = container.querySelector('canvas');
-    if (canvas) return (canvas as HTMLCanvasElement).toDataURL(type, quality);
-    const svg = container.querySelector('svg');
-    if (svg) {
-      const xml = new XMLSerializer().serializeToString(svg);
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  /**
+   * 导出为 data URL（异步）。
+   * canvas 渲染器 → canvas.toDataURL；svg 渲染器 → ContextService.toDataURL 得 SVG data URL，再用 canvas 栅格化为真正的 PNG/JPEG。
+   * SVG renderer 直接 toDataURL 只会产出 `data:image/svg+xml`，浏览器/图片查看器按 .png 解析会无法查看，故强制栅格化。
+   */
+  async toDataURL(type: string = 'image/png', quality?: number): Promise<string> {
+    const domEl = this.getContextService().getDomElement();
+    if ((domEl as any)?.tagName === 'CANVAS') {
+      return (domEl as HTMLCanvasElement).toDataURL(type, quality);
     }
-    throw new Error('[GE] no canvas/svg element found for export');
+    const svgUrl = await this.getContextService().toDataURL({ type: type as any, encoderOptions: quality ?? 1 });
+    return this.rasterizeSvgDataUrl(svgUrl, type, quality);
+  }
+
+  /** 把 SVG data URL 绘制到 canvas，导出真正的 PNG/JPEG；失败则回退原 SVG data URL。 */
+  private async rasterizeSvgDataUrl(svgDataUrl: string, type: string, quality?: number): Promise<string> {
+    const cfg = this.getConfig();
+    const w = cfg.width ?? 800;
+    const h = cfg.height ?? 600;
+    const dpr = ((this.getContextService() as any)?.getDPR?.() as number) || (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('[GE] rasterize: SVG image load failed'));
+      img.src = svgDataUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return svgDataUrl;
+    if (type === 'image/jpeg' || type === 'image/jpg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    try {
+      return canvas.toDataURL(type, quality);
+    } catch {
+      // canvas 被 tainted（如含跨域 image）→ 回退 SVG data URL
+      return svgDataUrl;
+    }
   }
 
   /** 导出为 SVG 字符串（含 xmlns，可直接保存 .svg 文件） */

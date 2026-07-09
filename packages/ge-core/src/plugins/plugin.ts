@@ -26,9 +26,16 @@ export abstract class OverlayPlugin extends Plugin {
     const container = graph.getConfig().container as HTMLElement;
     if (container && getComputedStyle(container).position === 'static') container.style.position = 'relative';
     const update = (): void => this.update();
+    let lastOverlayDraw = 0;
     graph.addEventListener('pointerdown', () => setTimeout(update, 0));
     graph.addEventListener('node:dragend', update);
-    graph.addEventListener('afterrender', () => { if (this.isActive()) update(); });
+    graph.addEventListener('afterrender', () => {
+      if (!this.isActive()) return;
+      const now = performance.now();
+      if (now - lastOverlayDraw < 200) return; // 概览视图 5fps 够，不跟 60fps
+      lastOverlayDraw = now;
+      update();
+    });
   }
   protected isActive(): boolean { return true; }
   protected abstract update(): void;
