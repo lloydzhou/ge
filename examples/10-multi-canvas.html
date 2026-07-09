@@ -25,6 +25,7 @@
     </div>
     <button id="move">移动节点 B</button>
     <button id="add">新增节点</button>
+    <button id="clone">克隆节点 A（cloneNode）</button>
     <button id="export">导出主视图 PNG</button>
     <div class="log" id="status">初始化中...</div>
     <img id="preview" />
@@ -66,6 +67,15 @@
       graph.addNode({ id, x: 80 + count * 90, y: 520 + count * 35, width: 96, height: 46, fill: '#fff1f0', stroke: '#ff4d4f', label: id });
       graph.addEdge({ id: `e-${id}`, source: 'd', target: id, router: 'orthogonal', connector: 'rounded', stroke: '#ff4d4f' });
       log(`已新增 ${id}，Minimap 增量创建`);
+    };
+    document.getElementById("clone").onclick = () => {
+      const a = graph.getNode("a");
+      if (!a) return;
+      const copy = a.cloneNode(true);
+      copy.id = `a-${Date.now()}`;
+      copy.moveTo((copy.getAttribute("x") || 0) + 40, (copy.getAttribute("y") || 0) + 40);
+      graph.appendChild(copy);
+      log(`克隆 A → ${copy.id}（cloneNode）`);
     };
 
     document.getElementById('export').onclick = async () => {
