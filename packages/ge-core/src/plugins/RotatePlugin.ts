@@ -24,6 +24,8 @@ export class RotatePlugin extends OverlayPlugin {
       'position:absolute;width:12px;height:12px;background:#722ed1;border:2px solid #fff;' +
       'border-radius:50%;cursor:grab;z-index:11;display:none;pointer-events:auto;';
     container.appendChild(this.handle);
+    // 节点移动/旋转时即时跟随（boundschange 在 Scheduler flush 内同步触发）
+    graph.addEventListener('node:boundschange', () => this.update());
 
     this.handle.addEventListener('pointerdown', (e: PointerEvent) => {
       if (!this.target) return;

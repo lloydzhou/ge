@@ -60,6 +60,7 @@ export class ResizePlugin extends OverlayPlugin {
     const update = (): void => this.update();
     graph.addEventListener('pointerdown', () => setTimeout(update, 0));
     graph.addEventListener('node:dragend', update);
+    graph.addEventListener('node:boundschange', update);
     graph.addEventListener('afterrender', () => {
       if (this.handles['se'] && this.handles['se'].style.display !== 'none') update();
     });
