@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>GE · 10 Multi-Canvas 验证</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; display: flex; gap: 16px; padding: 16px; }
+    #app { border: 1px solid #d9d9d9; border-radius: 8px; }
+    .sidebar { display: flex; flex-direction: column; gap: 12px; }
+    #mini { border: 1px solid #d9d9d9; border-radius: 4px; background: #f5f5f5; }
+    button { padding: 8px 16px; border: 1px solid #1890ff; background: #1890ff; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    button:hover { background: #40a9ff; }
+    .log { font-size: 12px; color: #666; max-width: 220px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="sidebar">
+    <div class="log" id="status">初始化中...</div>
+    <div><b>Minimap（drawImage 复制）</b></div>
+    <canvas id="mini" width="200" height="150"></canvas>
+    <button id="b-export">导出 PNG（主画布 toDataURL）</button>
+    <img id="preview" style="max-width:200px;border:1px solid #eee;border-radius:4px;display:none" />
+  </div>
+  <script type="module">
+    import { Graph } from '@ge';
+
+    const status = document.getElementById('status');
+    const log = (msg) => { status.textContent = msg; console.log('[验证]', msg); };
+
+    try {
+      // ① 主画布 —— canvas 渲染器（导出 + drawImage 都需要 canvas）
+      log('创建主画布 (canvas renderer)...');
+      const graph = new Graph({ container: '#app', renderer: 'canvas', width: 600, height: 400, background: '#fafafa' });
+      await graph.ready;
+      log('主画布 ready');
+
+      graph.addNode({ id: 'a', shape: 'rect', x: 80, y: 80, width: 100, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'Node A' });
+      graph.addNode({ id: 'b', shape: 'circle', x: 350, y: 200, width: 80, height: 80, fill: '#f6ffed', stroke: '#52c41a', label: 'Circle' });
+      graph.addNode({ id: 'c', shape: 'triangle', x: 150, y: 250, width: 90, height: 70, fill: '#fff7e6', stroke: '#fa8c16', label: 'Tri' });
+      graph.addEdge({ source: 'a', target: 'b', stroke: '#722ed1', strokeWidth: 2 });
+      graph.addEdge({ source: 'a', target: 'c', stroke: '#722ed1', strokeWidth: 2 });
+      log('节点 + 边已添加');
+
+      // ② Minimap —— drawImage 复制主画布（GPU 加速，<1ms）
+      const miniCanvas = document.getElementById('mini');
+      const miniCtx = miniCanvas.getContext('2d');
+      const mainCanvasEl = graph.getContextService().getDomElement();
+      log(`主画布 DOM 元素: ${mainCanvasEl?.tagName}`);
+
+      let drawCount = 0;
+      const renderMini = () => {
+        if (mainCanvasEl && mainCanvasEl.tagName === 'CANVAS') {
+          miniCtx.clearRect(0, 0, 200, 150);
+          // 直接 GPU 复制主画布像素到 minimap（缩放）
+          miniCtx.drawImage(mainCanvasEl, 0, 0, 200, 150);
+          drawCount++;
+          if (drawCount === 1) log('✅ minimap drawImage 成功');
+        }
+        requestAnimationFrame(renderMini);
+      };
+      renderMini();
+
+      // ③ 导出 —— 主画布的 ContextService.toDataURL
+      document.getElementById('b-export').onclick = async () => {
+        log('导出中...');
+        try {
+          const url = await graph.getContextService().toDataURL({ type: 'image/png' });
+          const img = document.getElementById('preview');
+          img.src = url;
+          img.style.display = 'block';
+          log(`✅ 导出成功 (${url.length} 字符)`);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'ge-export.png'; a.click();
+        } catch (e) {
+          log(`❌ 导出失败: ${e.message}`);
+        }
+      };
+
+      log('✅ 全部就绪');
+    } catch (e) {
+      log(`❌ 错误: ${e.message}`);
+      console.error(e);
+    }
+  </script>
+</body>
+</html>
