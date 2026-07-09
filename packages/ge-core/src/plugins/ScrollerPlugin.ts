@@ -43,7 +43,8 @@ export class ScrollerPlugin extends Plugin {
       // 以光标为中心（2D）：记录光标处世界点，缩放后用 panBy 拉回光标
       const cursor = { x: e.viewportX, y: e.viewportY };
       const wBefore = graph.viewport2Canvas(cursor);
-      camera.setZoom(next);
+      if (typeof (graph as any).setZoom === 'function') (graph as any).setZoom(next);
+      else camera.setZoom(next);
       const vpAfter = graph.canvas2Viewport(wBefore);
       graph.panBy(cursor.x - vpAfter.x, cursor.y - vpAfter.y);
     });

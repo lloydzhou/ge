@@ -6,7 +6,7 @@
  *   查询走 getElementById / getElementsByClassName，无平行 Map（修复 P0-4/Registry 双轨）。
  * - 统一持有 Anchor / Router / Connector 注册表，并注入到 Edge。
  */
-import { Canvas } from '@antv/g-lite';
+import { Canvas, CustomEvent } from '@antv/g-lite';
 import { Renderer as CanvasRenderer } from '@antv/g-canvas';
 import { Renderer as SVGRenderer } from '@antv/g-svg';
 import { Node } from './Node';
@@ -81,6 +81,23 @@ export class Graph extends Canvas {
     this.panOffset.x += dwx;
     this.panOffset.y += dwy;
     (this as any).document.documentElement.translate(dwx, dwy);
+    this.fireViewportChange();
+  }
+
+  /** 设置缩放（统一出口，派发 viewportchange；外部插件改 zoom 应走这里而非直接 camera.setZoom） */
+  setZoom(zoom: number): void {
+    this.getCamera().setZoom(zoom);
+    this.fireViewportChange();
+  }
+
+  /** viewport（pan/zoom）变化通知：Minimap 等视图订阅后更新视口框，无需轮询 afterrender */
+  private fireViewportChange(): void {
+    this.dispatchEvent(new CustomEvent('viewportchange', {
+      detail: {
+        panOffset: { x: this.panOffset.x, y: this.panOffset.y },
+        zoom: this.getCamera().getZoom() || 1,
+      },
+    }));
   }
 
   /** 平移使世界点 (worldX, worldY) 位于视口中心（minimap 导航用） */

@@ -172,11 +172,15 @@ Node.applyPosition()  →  fire('node:boundschange')
 ```ts
 cell.setAttribute('fill', '#f00')
   → syncProp('fill', '#f00')
-  → fire('cell:attributechange', { cell, name: 'fill', oldValue, newValue })
+  → Scheduler.addAttributeChange(cell, 'fill', oldValue, newValue)   // 帧边界合并
   → markDirty(STYLE)
 ```
 
-这个事件不是独立 eventBus，而是标准 DOM 事件。它的用途是让插件或第二个 View 订阅模型层属性变化，做局部同步，而不扫描全图 diff。
+事件不直接同步派发，而是经 `Scheduler` 在帧边界合并（同一 cell 同一 attribute 一帧内多次变化只派发一次，保留首次 oldValue 与最新 newValue），避免拖拽等高频场景下的事件风暴。这个事件不是独立 eventBus，而是标准 DOM 事件（冒泡到 Graph）。它的用途是让插件或第二个 View 订阅模型层属性变化，做局部同步，而不扫描全图 diff。
+
+### viewport 变化事件
+
+`Graph` 的 `panBy` / `setZoom` 是 viewport 变化的统一出口，末尾派发 `viewportchange`（detail 含 `panOffset` 与 `zoom`）。Minimap 等视图订阅它更新视口框，无需轮询 `afterrender`。外部插件改 zoom 应走 `graph.setZoom()` 而非直接 `camera.setZoom()`，以保证事件派发。
 
 ---
 
@@ -216,7 +220,12 @@ GraphModel（唯一事实源：nodes / edges / ports / attrs / viewport）
 
 ### Scheduler 的演进方向
 
-现在的 `Scheduler` 仍以 `Cell` dirty flush 为主：收集 dirty cell，在 rAF 帧边界调用 `flushDirty()`。在多 View 架构中，它应进一步演进为 model dirty records 的收集与分发器：
+现在的 `Scheduler` 仍以 `Cell` dirty flush 为主：收集 dirty cell，在 rAF 帧边界调用 `flushDirty()`。多 View 架构的第一步已完成：
+
+- **`cell:attributechange` 已走 Scheduler 合并派发**：`Scheduler.addAttributeChange` 收集变更（cell+attr 去重），帧边界统一派发，解决拖拽高频事件风暴。
+- **`viewportchange` 显式事件**：`panBy` / `setZoom` 统一出口，视图订阅即更新，不再依赖 `afterrender` 兜底。
+
+下一步（拆出 `GraphModel` 后）再把 dirty records 从主 view 的 Cell 事件上移到 model 层：
 
 ```
 GraphModel mutation
@@ -226,7 +235,9 @@ GraphModel mutation
   → ExportView.consume(records)
 ```
 
-第一阶段先通过 DOM 事件实现增量同步，避免大重构；后续拆出 `GraphModel` 后，再把 dirty records 从主 view 的 Cell 事件上移到 model 层。
+### GraphSnapshot（一次性快照）
+
+`GraphSnapshot.from(graph)` 从 `toJSON()` + 当前 viewport 派生一份纯数据快照（深拷贝 nodes/edges），为未来的 ExportView / 截图等**非交互视图**提供一次性输入。与 Minimap 的常驻增量订阅不同：导出是「某一刻的全量」，适合快照而非订阅，不持有 DisplayObject、不常驻。
 
 ---
 

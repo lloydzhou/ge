@@ -65,8 +65,12 @@ export abstract class Cell extends CustomElement<any> {
     this.props[name] = value;
   }
 
-  /** 派发统一属性变更事件，供多 view / 插件做增量同步 */
+  /** 派发统一属性变更事件，供多 view / 插件做增量同步。走 Scheduler 帧边界合并派发。 */
   protected fireAttributeChange(name: string, oldValue: any, newValue: any): void {
+    const doc = this.ownerDocument as any;
+    const sched = doc?.scheduler ?? doc?.defaultView?.scheduler;
+    if (sched) { sched.addAttributeChange(this, name, oldValue, newValue); return; }
+    // 无 scheduler（测试 / 未挂载）：同步派发，保证行为一致
     this.fire('cell:attributechange', { cell: this, name, oldValue, newValue });
   }
 

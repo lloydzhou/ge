@@ -51,4 +51,29 @@ describe('Scheduler', () => {
     sched.add(loop);
     expect(() => sched.flush()).not.toThrow();
   });
+
+  it('addAttributeChange：同 cell 同属性一帧内合并（保留首次 oldValue、最新 newValue）', () => {
+    const received: any[] = [];
+    const cell = { dispatchEvent: (e: any) => { received.push(e.detail); } };
+    const sched = new Scheduler();
+    sched.addAttributeChange(cell, 'fill', 'red', 'blue');
+    sched.addAttributeChange(cell, 'fill', 'blue', 'green'); // 合并：只保留首 oldValue、最新 newValue
+    sched.addAttributeChange(cell, 'stroke', '#000', '#fff'); // 不同属性并存
+    sched.flush();
+    expect(received).toHaveLength(2);
+    const fill = received.find((r) => r.name === 'fill')!;
+    expect(fill.oldValue).toBe('red');
+    expect(fill.newValue).toBe('green');
+    expect(fill.cell).toBe(cell);
+  });
+
+  it('addAttributeChange：flush 后队列清空，再次 flush 无派发', () => {
+    const received: any[] = [];
+    const cell = { dispatchEvent: (e: any) => { received.push(e); } };
+    const sched = new Scheduler();
+    sched.addAttributeChange(cell, 'x', 0, 1);
+    sched.flush();
+    sched.flush();
+    expect(received).toHaveLength(1);
+  });
 });

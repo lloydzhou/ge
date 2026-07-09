@@ -114,7 +114,7 @@ export class MinimapPlugin extends Plugin {
       this.contentDirty = true;
       this.scheduleSync();
     });
-    this.addListener(graph, 'afterrender', () => this.scheduleViewport());
+    this.addListener(graph, 'viewportchange', () => this.scheduleViewport());
   }
 
   private bindNavigation(): void {
