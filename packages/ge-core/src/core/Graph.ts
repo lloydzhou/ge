@@ -308,17 +308,12 @@ export class Graph extends Canvas {
   }
 
   // ---- 导出 ----
-  /** 导出为 data URL：canvas 渲染→PNG，svg 渲染→SVG data URL */
-  toDataURL(type: string = 'image/png', quality?: number): string {
-    const container = this.getConfig().container as HTMLElement;
-    const canvas = container.querySelector('canvas');
-    if (canvas) return (canvas as HTMLCanvasElement).toDataURL(type, quality);
-    const svg = container.querySelector('svg');
-    if (svg) {
-      const xml = new XMLSerializer().serializeToString(svg);
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-    }
-    throw new Error('[GE] no canvas/svg element found for export');
+  /**
+   * 导出为 data URL（异步）。
+   * 走 ContextService.toDataURL：canvas 渲染器→PNG，svg 渲染器→SVG（cloneNode 保留样式）。
+   */
+  async toDataURL(type: string = 'image/png', quality?: number): Promise<string> {
+    return this.getContextService().toDataURL({ type: type as any, encoderOptions: quality ?? 1 });
   }
 
   /** 导出为 SVG 字符串（含 xmlns，可直接保存 .svg 文件） */

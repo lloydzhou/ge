@@ -113,8 +113,8 @@
     document.getElementById('b-fit').onclick = () => graph.zoomToFit();
 
     // ---- 8. 导出 PNG ----
-    document.getElementById('b-png').onclick = () => {
-      const url = graph.toDataURL('image/png');
+    document.getElementById('b-png').onclick = async () => {
+      const url = await graph.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = url; a.download = 'ge-09.png'; a.click();
     };
