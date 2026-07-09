@@ -58,11 +58,16 @@ export abstract class Cell extends CustomElement<any> {
     this.dispatchEvent(new CustomEvent(type, detail ? { detail } : undefined));
   }
 
-  /** 同步属性变化到 props model（Node/Edge 的 attributeChangedCallback 调用） */
+  /** 同步属性变化到 props model（Node/Edge/Port 的 attributeChangedCallback 调用） */
   protected syncProp(name: string, value: any): void {
     // super() 执行中 g-lite 可能触发 attributeChangedCallback，此时类字段尚未初始化，需惰性兜底
     if (!this.props) this.props = {};
     this.props[name] = value;
+  }
+
+  /** 派发统一属性变更事件，供多 view / 插件做增量同步 */
+  protected fireAttributeChange(name: string, oldValue: any, newValue: any): void {
+    this.fire('cell:attributechange', { cell: this, name, oldValue, newValue });
   }
 
   /**

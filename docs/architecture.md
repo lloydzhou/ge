@@ -65,6 +65,7 @@ CustomElement (g-lite)
 - `attributeChangedCallback()`：属性变化 → `markDirty(flag)`（走 Scheduler）
 - `flushDirty()`：Scheduler 帧边界调用，按 dirty flag 决定重算范围（子类重写）
 - `fire(type, detail)`：派发自定义事件（dispatchEvent + CustomEvent）
+- `fireAttributeChange(name, oldValue, newValue)`：派发统一 `cell:attributechange`，供多 view / 插件增量同步
 - `props`：可序列化属性 model（随 setAttribute 自动同步）
 
 #### Graph 职责
@@ -94,7 +95,8 @@ CustomElement (g-lite)
 - **ResizePlugin / RotatePlugin** — 缩放/旋转手柄
 - **CreateEdgePlugin** — 交互式连线
 - **HistoryPlugin** — 撤销/重做
-- **MinimapPlugin / GridPlugin / SnaplinePlugin** — 辅助视图
+- **MinimapPlugin** — 同一份图数据的第二个 overview view（内部 Graph + canvas renderer）
+- **GridPlugin / SnaplinePlugin** — 辅助视图
 - **ClipboardPlugin / KeyboardPlugin** — 快捷操作
 
 ---
@@ -108,7 +110,7 @@ CustomElement (g-lite)
 ```
 setAttribute('width', 200)  →  markDirty(GEOMETRY)     ← 廉价，只标记位
 setAttribute('fill', 'red') →  markDirty(STYLE)
-moveTo(100, 100)            →  markDirty(GEOMETRY)
+moveTo(100, 100)            →  markDirty(POSITION)
       ⋮（一帧内 N 次，全是标记，零重算）
 ──────────── rAF 帧边界 ────────────
 scheduler.flush()
@@ -122,12 +124,13 @@ scheduler.flush()
 ### dirty flag
 
 ```ts
-export const GEOMETRY = 1;   // width/height/x/y/radius
-export const STYLE = 2;      // fill/stroke/strokeWidth
-export const LABEL = 4;      // label/labels
-export const ROUTE = 8;      // 边路径重算
-export const LAYOUT = 16;    // port 定位
-export const REBUILD = 32;   // shape 类型变化，需销毁重建
+export const POSITION = 1;   // x/y → 只需 setLocalPosition
+export const GEOMETRY = 2;   // width/height/radius
+export const STYLE = 4;      // fill/stroke/strokeWidth
+export const LABEL = 8;      // label/labels
+export const ROUTE = 16;     // 边路径重算
+export const LAYOUT = 32;    // port 定位
+export const REBUILD = 64;   // shape 类型变化，需销毁重建
 ```
 
 ### 关键特性
@@ -161,6 +164,69 @@ Node.applyPosition()  →  fire('node:boundschange')
 ```
 
 事件用标准 DOM API（`dispatchEvent` / `addEventListener`），事件冒泡到 Graph。**不使用 eventBus**。
+
+### 属性变更事件
+
+`Node` / `Edge` / `Port` 在 `attributeChangedCallback()` 中同步 `props` 后，会派发统一的 `cell:attributechange`：
+
+```ts
+cell.setAttribute('fill', '#f00')
+  → syncProp('fill', '#f00')
+  → fire('cell:attributechange', { cell, name: 'fill', oldValue, newValue })
+  → markDirty(STYLE)
+```
+
+这个事件不是独立 eventBus，而是标准 DOM 事件。它的用途是让插件或第二个 View 订阅模型层属性变化，做局部同步，而不扫描全图 diff。
+
+---
+
+## Model 多 View 方向
+
+长期方向是 **一个 GraphModel，多种 GraphView**：
+
+```
+GraphModel（唯一事实源：nodes / edges / ports / attrs / viewport）
+  ├─ MainGraphView      主编辑视图，可使用 SVG 或 Canvas renderer
+  ├─ MinimapView        缩略视图，固定使用 Canvas renderer
+  └─ ExportView         导出 / 截图视图，按需创建
+```
+
+当前代码还没有完全拆出 `GraphModel`，因此采用过渡实现：`Graph` 的 `Cell.props` / attributes 先承担轻量 model 职责，`MinimapPlugin` 订阅主图的 cell 事件，把变化同步到一个独立的 overview `Graph`。
+
+关键原则：
+
+- 不共享 g-lite `root` / `DisplayObject` tree：每个 View 维护自己的 g-lite 对象，避免 renderer / document / dirty tracking 绑定问题。
+- 不使用主画布截图：主画布的渲染结果会随 viewport pan/zoom 变化（是“当前视图”而非“全图俯瞰”），且 SVG renderer 下根本拿不到 canvas 像素缓冲。
+- 不使用低保真 canvas 2D 手动画：Minimap 也通过 GE 的 `Node` / `Edge` / `ShapeRegistry` / `Router` / `Connector` 渲染。
+- 初始化时从 model snapshot 构建一次；后续通过 `cell:added` / `cell:removed` / `cell:attributechange` / `node:boundschange` 增量同步。
+- pan / zoom 高频路径只更新 minimap 上的 DOM viewport rect，不重绘 overview graph。
+
+### 当前 MinimapPlugin 架构
+
+`MinimapPlugin` 安装后会：
+
+1. 在主图容器右下角创建 minimap DOM host 和 viewport rect。
+2. 在 host 内创建常驻 overview `Graph`，`renderer: 'canvas'`。
+3. 初始化时同步主图已有节点、端口、边，并维护 `mainCellId → overviewCell` 映射。
+4. 节点 / 边 / 端口属性变化时，仅同步对应 overview cell；节点移动时同步该节点和相关边。
+5. 节点 / 边新增删除时局部创建 / 删除；大范围变化可调用 rebuild 兜底。
+6. overview 内容范围变化时重新 fit overview root；主图 pan / zoom 只更新 viewport rect。
+
+这使 Minimap 成为“同一份图数据的第二个 View”的雏形，而不是主视图截图、共享 root 副本或手绘缩略图。
+
+### Scheduler 的演进方向
+
+现在的 `Scheduler` 仍以 `Cell` dirty flush 为主：收集 dirty cell，在 rAF 帧边界调用 `flushDirty()`。在多 View 架构中，它应进一步演进为 model dirty records 的收集与分发器：
+
+```
+GraphModel mutation
+  → Scheduler 记录 dirty records（Structure / Geometry / Style / Label / Ports / Route / ZIndex / Visible）
+  → MainGraphView.consume(records)
+  → MinimapView.consume(records)
+  → ExportView.consume(records)
+```
+
+第一阶段先通过 DOM 事件实现增量同步，避免大重构；后续拆出 `GraphModel` 后，再把 dirty records 从主 view 的 Cell 事件上移到 model 层。
 
 ---
 

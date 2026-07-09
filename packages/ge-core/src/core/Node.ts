@@ -155,6 +155,7 @@ export class Node extends Cell {
   ): void {
     if (oldV === newV) return;
     this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
     if (!this.rendered) return; // 构造期间不处理，等 connectedCallback 统一渲染
     switch (name) {
       case 'x':

@@ -310,14 +310,47 @@ export class Graph extends Canvas {
   // ---- 导出 ----
   /**
    * 导出为 data URL（异步）。
-   * canvas 渲染器 → canvas.toDataURL；svg 渲染器 → ContextService.toDataURL（cloneNode 保留样式）。
+   * canvas 渲染器 → canvas.toDataURL；svg 渲染器 → ContextService.toDataURL 得 SVG data URL，再用 canvas 栅格化为真正的 PNG/JPEG。
+   * SVG renderer 直接 toDataURL 只会产出 `data:image/svg+xml`，浏览器/图片查看器按 .png 解析会无法查看，故强制栅格化。
    */
   async toDataURL(type: string = 'image/png', quality?: number): Promise<string> {
     const domEl = this.getContextService().getDomElement();
-    if (domEl?.tagName === 'CANVAS') {
+    if ((domEl as any)?.tagName === 'CANVAS') {
       return (domEl as HTMLCanvasElement).toDataURL(type, quality);
     }
-    return this.getContextService().toDataURL({ type: type as any, encoderOptions: quality ?? 1 });
+    const svgUrl = await this.getContextService().toDataURL({ type: type as any, encoderOptions: quality ?? 1 });
+    return this.rasterizeSvgDataUrl(svgUrl, type, quality);
+  }
+
+  /** 把 SVG data URL 绘制到 canvas，导出真正的 PNG/JPEG；失败则回退原 SVG data URL。 */
+  private async rasterizeSvgDataUrl(svgDataUrl: string, type: string, quality?: number): Promise<string> {
+    const cfg = this.getConfig();
+    const w = cfg.width ?? 800;
+    const h = cfg.height ?? 600;
+    const dpr = ((this.getContextService() as any)?.getDPR?.() as number) || (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('[GE] rasterize: SVG image load failed'));
+      img.src = svgDataUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return svgDataUrl;
+    if (type === 'image/jpeg' || type === 'image/jpg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    try {
+      return canvas.toDataURL(type, quality);
+    } catch {
+      // canvas 被 tainted（如含跨域 image）→ 回退 SVG data URL
+      return svgDataUrl;
+    }
   }
 
   /** 导出为 SVG 字符串（含 xmlns，可直接保存 .svg 文件） */

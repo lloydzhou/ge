@@ -2,106 +2,83 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8" />
-  <title>GE · 10 共享 root 验证</title>
+  <title>GE · 10 Model 多 View Minimap 验证</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; display: flex; gap: 16px; padding: 16px; }
-    #app { border: 1px solid #d9d9d9; border-radius: 8px; }
-    .sidebar { display: flex; flex-direction: column; gap: 12px; }
-    #mini-container { width: 220px; height: 160px; border: 1px solid #d9d9d9; border-radius: 4px; background: #f5f5f5; }
+    body { margin: 0; font-family: -apple-system, system-ui, sans-serif; display: flex; gap: 16px; padding: 16px; background: #f7f8fa; }
+    #app { width: 720px; height: 460px; border: 1px solid #d9d9d9; border-radius: 8px; background: #fff; }
+    .sidebar { width: 260px; display: flex; flex-direction: column; gap: 12px; }
     button { padding: 8px 16px; border: 1px solid #1890ff; background: #1890ff; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
-    .log { font-size: 12px; color: #666; max-width: 240px; word-break: break-all; }
+    .card { padding: 12px; background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+    .log { font-size: 12px; color: #666; word-break: break-all; }
+    img { max-width: 240px; border: 1px solid #eee; border-radius: 4px; display: none; }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div class="sidebar">
+    <div class="card">
+      <b>Minimap 验证</b>
+      <div>主画布：SVG renderer</div>
+      <div>Minimap：独立 overview Graph + Canvas renderer</div>
+      <div>拖动节点 / 滚轮缩放 / 右键拖画布，观察右下角缩略图。</div>
+    </div>
+    <button id="move">移动节点 B</button>
+    <button id="add">新增节点</button>
+    <button id="export">导出主视图 PNG</button>
     <div class="log" id="status">初始化中...</div>
-    <div><b>Minimap（共享 root + canvas renderer）</b></div>
-    <div id="mini-container"></div>
-    <button id="b-export">导出（ContextService.toDataURL）</button>
-    <img id="preview" style="max-width:220px;border:1px solid #eee;border-radius:4px;display:none" />
+    <img id="preview" />
   </div>
   <script type="module">
-    import { Graph } from '@ge';
-    import { Canvas } from '@antv/g-lite';
-    import { Renderer as CanvasRenderer } from '@antv/g-canvas';
+    import { Graph, DragPlugin, MinimapPlugin, ScrollerPlugin, SelectionPlugin } from '@ge';
 
     const status = document.getElementById('status');
-    const log = (msg) => { status.textContent = msg; console.log('[验证]', msg); };
+    const log = (msg) => { status.textContent = msg; console.log('[10-minimap]', msg); };
 
-    try {
-      // 主画布 SVG 渲染器
-      log('创建主画布 (svg renderer)...');
-      const graph = new Graph({ container: '#app', width: 600, height: 400, background: '#fafafa' });
-      await graph.ready;
-      log('主画布 ready');
+    const graph = new Graph({ container: '#app', width: 720, height: 460, background: '#fafafa' });
+    await graph.ready;
 
-      graph.addNode({ id: 'a', shape: 'rect', x: 80, y: 80, width: 100, height: 50, fill: '#e6f7ff', stroke: '#1890ff', label: 'Node A' });
-      graph.addNode({ id: 'b', shape: 'circle', x: 350, y: 200, width: 80, height: 80, fill: '#f6ffed', stroke: '#52c41a', label: 'Circle' });
-      graph.addNode({ id: 'c', shape: 'triangle', x: 150, y: 250, width: 90, height: 70, fill: '#fff7e6', stroke: '#fa8c16', label: 'Tri' });
-      graph.addEdge({ source: 'a', target: 'b', stroke: '#722ed1', strokeWidth: 2 });
-      graph.addEdge({ source: 'a', target: 'c', stroke: '#722ed1', strokeWidth: 2 });
-      log('节点 + 边已添加');
+    graph.use(new DragPlugin());
+    graph.use(new SelectionPlugin());
+    graph.use(new ScrollerPlugin({ minZoom: 0.2, maxZoom: 4 }));
+    graph.use(new MinimapPlugin({ width: 220, height: 160 }));
 
-      // Minimap：独立 Canvas（canvas renderer），共享 root
-      log('创建 minimap canvas...');
-      const root = graph.getRoot();
-      const mini = new Canvas({
-        container: document.getElementById('mini-container'),
-        renderer: new CanvasRenderer(),
-        width: 220,
-        height: 160,
-      });
-      await mini.ready;
-      log('minimap canvas ready');
+    graph.addNode({ id: 'a', shape: 'rect', x: 80, y: 80, width: 120, height: 56, fill: '#e6f7ff', stroke: '#1890ff', label: 'Node A' });
+    graph.addNode({ id: 'b', shape: 'circle', x: 420, y: 180, width: 88, height: 88, fill: '#f6ffed', stroke: '#52c41a', label: 'Circle' });
+    graph.addNode({ id: 'c', shape: 'triangle', x: 180, y: 330, width: 110, height: 80, fill: '#fff7e6', stroke: '#fa8c16', label: 'Tri' });
+    graph.addNode({ id: 'd', shape: 'diamond', x: 620, y: 360, width: 120, height: 82, fill: '#f9f0ff', stroke: '#722ed1', label: 'Diamond' });
+    graph.addEdge({ id: 'ab', source: 'a', target: 'b', router: 'orthogonal', connector: 'rounded', stroke: '#1890ff', strokeWidth: 2 });
+    graph.addEdge({ id: 'ac', source: 'a', target: 'c', router: 'manhattan', connector: 'rounded', stroke: '#fa8c16', strokeWidth: 2 });
+    graph.addEdge({ id: 'bd', source: 'b', target: 'd', router: 'normal', connector: 'smooth', stroke: '#722ed1', strokeWidth: 2 });
 
-      // 关键：共享场景图根
-      const miniRC = mini.getRenderingContext();
-      miniRC.root = root;
-      log(`共享 root: ${miniRC.root === root ? '✅' : '❌'}`);
+    let flip = false;
+    document.getElementById('move').onclick = () => {
+      flip = !flip;
+      graph.getNode('b').moveTo(flip ? 520 : 420, flip ? 80 : 180);
+      graph.scheduler.flush();
+      log('已移动节点 B，Minimap 局部同步');
+    };
 
-      // 每帧渲染：手动标记所有 DisplayObject dirty（解决 dirty tracking 不共享）
-      let frameCount = 0;
-      const renderMini = () => {
-        // 递归标记所有后代 dirty
-        const markDirty = (obj) => {
-          if (!obj) return;
-          obj.dirty = true;
-          if (obj.renderBoundsDirty !== undefined) obj.renderBoundsDirty = true;
-          if (obj.children) for (const child of obj.children) markDirty(child);
-        };
-        markDirty(root);
-        miniRC.force = true;
-        mini.render();
-        frameCount++;
-        if (frameCount === 1) log('✅ minimap 首帧渲染完成');
-        if (frameCount <= 3) console.log(`[验证] minimap frame ${frameCount}`);
-        requestAnimationFrame(renderMini);
-      };
-      // 延迟一帧启动（等主画布渲染完）
-      setTimeout(() => { log('启动 minimap 渲染循环...'); renderMini(); }, 100);
+    let count = 0;
+    document.getElementById('add').onclick = () => {
+      count += 1;
+      const id = `n${count}`;
+      graph.addNode({ id, x: 80 + count * 90, y: 520 + count * 35, width: 96, height: 46, fill: '#fff1f0', stroke: '#ff4d4f', label: id });
+      graph.addEdge({ id: `e-${id}`, source: 'd', target: id, router: 'orthogonal', connector: 'rounded', stroke: '#ff4d4f' });
+      log(`已新增 ${id}，Minimap 增量创建`);
+    };
 
-      // 导出测试
-      document.getElementById('b-export').onclick = async () => {
-        log('导出中...');
-        try {
-          const url = await graph.toDataURL('image/png');
-          const img = document.getElementById('preview');
-          img.src = url; img.style.display = 'block';
-          log(`✅ 导出成功 (${url.length} 字符)`);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'ge-export.png'; a.click();
-        } catch (e) {
-          log(`❌ 导出失败: ${e.message}`);
-        }
-      };
+    document.getElementById('export').onclick = async () => {
+      log('导出中...');
+      const url = await graph.toDataURL('image/png');
+      const img = document.getElementById('preview');
+      img.src = url;
+      img.style.display = 'block';
+      log(`导出成功：${url.length} 字符`);
+    };
 
-      log('✅ 全部就绪');
-    } catch (e) {
-      log(`❌ 错误: ${e.message}`);
-      console.error(e);
-    }
+    window.ge = graph;
+    log('就绪：共享 root 验证页已替换为 Model 多 View Minimap demo');
   </script>
 </body>
 </html>

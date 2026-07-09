@@ -27,7 +27,10 @@ export class Port extends Cell {
   private ownerBound = false;
 
   constructor(config: Record<string, any> = {}) {
-    const style = { ...DEFAULTS, ...config?.style, layout: config?.layout, x: config?.x, y: config?.y };
+    const style = { ...DEFAULTS, ...config?.style };
+    if (config?.layout !== undefined) style.layout = config.layout;
+    if (config?.x !== undefined) style.x = config.x;
+    if (config?.y !== undefined) style.y = config.y;
     super({ className: CLASS.port, ...config, style });
     this.initProps({ id: config?.id, style });
   }
@@ -82,7 +85,10 @@ export class Port extends Cell {
   }
 
   attributeChangedCallback(name: any, oldV: any, newV: any): void {
-    if (oldV === newV || !this.rendered) return;
+    if (oldV === newV) return;
+    this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
+    if (!this.rendered) return;
     if (name === 'x' || name === 'y' || name === 'layout') {
       this.markDirty(LAYOUT);
     } else if (this.body) {

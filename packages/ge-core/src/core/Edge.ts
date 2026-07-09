@@ -91,6 +91,7 @@ export class Edge extends Cell {
   ): void {
     if (oldV === newV) return;
     this.syncProp(name as string, newV);
+    this.fireAttributeChange(name as string, oldV, newV);
     if (!this.rendered) return;
     switch (name) {
       case 'source':
