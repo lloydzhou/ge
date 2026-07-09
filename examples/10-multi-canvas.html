@@ -2,37 +2,38 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8" />
-  <title>GE · 10 Multi-Canvas 验证</title>
+  <title>GE · 10 共享 root 验证</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, system-ui, sans-serif; display: flex; gap: 16px; padding: 16px; }
     #app { border: 1px solid #d9d9d9; border-radius: 8px; }
     .sidebar { display: flex; flex-direction: column; gap: 12px; }
-    #mini { border: 1px solid #d9d9d9; border-radius: 4px; background: #f5f5f5; }
+    #mini-container { width: 220px; height: 160px; border: 1px solid #d9d9d9; border-radius: 4px; background: #f5f5f5; }
     button { padding: 8px 16px; border: 1px solid #1890ff; background: #1890ff; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
-    button:hover { background: #40a9ff; }
-    .log { font-size: 12px; color: #666; max-width: 220px; word-break: break-all; }
+    .log { font-size: 12px; color: #666; max-width: 240px; word-break: break-all; }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div class="sidebar">
     <div class="log" id="status">初始化中...</div>
-    <div><b>Minimap（drawImage 复制）</b></div>
-    <canvas id="mini" width="200" height="150"></canvas>
-    <button id="b-export">导出 PNG（主画布 toDataURL）</button>
-    <img id="preview" style="max-width:200px;border:1px solid #eee;border-radius:4px;display:none" />
+    <div><b>Minimap（共享 root + canvas renderer）</b></div>
+    <div id="mini-container"></div>
+    <button id="b-export">导出（ContextService.toDataURL）</button>
+    <img id="preview" style="max-width:220px;border:1px solid #eee;border-radius:4px;display:none" />
   </div>
   <script type="module">
     import { Graph } from '@ge';
+    import { Canvas } from '@antv/g-lite';
+    import { Renderer as CanvasRenderer } from '@antv/g-canvas';
 
     const status = document.getElementById('status');
     const log = (msg) => { status.textContent = msg; console.log('[验证]', msg); };
 
     try {
-      // ① 主画布 —— canvas 渲染器（导出 + drawImage 都需要 canvas）
-      log('创建主画布 (canvas renderer)...');
-      const graph = new Graph({ container: '#app', renderer: 'canvas', width: 600, height: 400, background: '#fafafa' });
+      // 主画布 SVG 渲染器
+      log('创建主画布 (svg renderer)...');
+      const graph = new Graph({ container: '#app', width: 600, height: 400, background: '#fafafa' });
       await graph.ready;
       log('主画布 ready');
 
@@ -43,33 +44,51 @@
       graph.addEdge({ source: 'a', target: 'c', stroke: '#722ed1', strokeWidth: 2 });
       log('节点 + 边已添加');
 
-      // ② Minimap —— drawImage 复制主画布（GPU 加速，<1ms）
-      const miniCanvas = document.getElementById('mini');
-      const miniCtx = miniCanvas.getContext('2d');
-      const mainCanvasEl = graph.getContextService().getDomElement();
-      log(`主画布 DOM 元素: ${mainCanvasEl?.tagName}`);
+      // Minimap：独立 Canvas（canvas renderer），共享 root
+      log('创建 minimap canvas...');
+      const root = graph.getRoot();
+      const mini = new Canvas({
+        container: document.getElementById('mini-container'),
+        renderer: new CanvasRenderer(),
+        width: 220,
+        height: 160,
+      });
+      await mini.ready;
+      log('minimap canvas ready');
 
-      let drawCount = 0;
+      // 关键：共享场景图根
+      const miniRC = mini.getRenderingContext();
+      miniRC.root = root;
+      log(`共享 root: ${miniRC.root === root ? '✅' : '❌'}`);
+
+      // 每帧渲染：手动标记所有 DisplayObject dirty（解决 dirty tracking 不共享）
+      let frameCount = 0;
       const renderMini = () => {
-        if (mainCanvasEl && mainCanvasEl.tagName === 'CANVAS') {
-          miniCtx.clearRect(0, 0, 200, 150);
-          // 直接 GPU 复制主画布像素到 minimap（缩放）
-          miniCtx.drawImage(mainCanvasEl, 0, 0, 200, 150);
-          drawCount++;
-          if (drawCount === 1) log('✅ minimap drawImage 成功');
-        }
+        // 递归标记所有后代 dirty
+        const markDirty = (obj) => {
+          if (!obj) return;
+          obj.dirty = true;
+          if (obj.renderBoundsDirty !== undefined) obj.renderBoundsDirty = true;
+          if (obj.children) for (const child of obj.children) markDirty(child);
+        };
+        markDirty(root);
+        miniRC.force = true;
+        mini.render();
+        frameCount++;
+        if (frameCount === 1) log('✅ minimap 首帧渲染完成');
+        if (frameCount <= 3) console.log(`[验证] minimap frame ${frameCount}`);
         requestAnimationFrame(renderMini);
       };
-      renderMini();
+      // 延迟一帧启动（等主画布渲染完）
+      setTimeout(() => { log('启动 minimap 渲染循环...'); renderMini(); }, 100);
 
-      // ③ 导出 —— 主画布的 ContextService.toDataURL
+      // 导出测试
       document.getElementById('b-export').onclick = async () => {
         log('导出中...');
         try {
-          const url = await graph.getContextService().toDataURL({ type: 'image/png' });
+          const url = await graph.toDataURL('image/png');
           const img = document.getElementById('preview');
-          img.src = url;
-          img.style.display = 'block';
+          img.src = url; img.style.display = 'block';
           log(`✅ 导出成功 (${url.length} 字符)`);
           const a = document.createElement('a');
           a.href = url; a.download = 'ge-export.png'; a.click();

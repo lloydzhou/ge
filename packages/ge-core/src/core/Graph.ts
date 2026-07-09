@@ -307,96 +307,17 @@ export class Graph extends Canvas {
     }
   }
 
-  // ---- Mirror Canvas（SVG→Canvas 中转，懒加载） ----
-  private _mirrorCanvas?: HTMLCanvasElement;
-  private _mirrorImg?: HTMLImageElement;
-  private _mirrorEnabled = false;
-  private _syncing = false;
-  private _lastSync = 0;
-
-  /**
-   * 启用 mirror canvas（MinimapPlugin init / 导出时调用）。
-   * 不启用时零开销（不创建 canvas、不监听 afterrender）。
-   * canvas 渲染器下直接复用主画布，无需 mirror。
-   */
-  enableMirror(): void {
-    if (this._mirrorEnabled) return;
-    this._mirrorEnabled = true;
-    const domEl = this.getContextService().getDomElement();
-    if (!domEl || domEl.tagName === 'CANVAS') return; // canvas 渲染器不需要 mirror
-    this.addEventListener('afterrender', () => this._syncMirror());
-  }
-
-  /**
-   * 输出 canvas（统一接口）：
-   * - canvas 渲染器 → 主画布 canvas 本身（零成本）
-   * - svg 渲染器 → mirrorCanvas（懒加载，afterrender 后异步同步）
-   */
-  get mirrorCanvas(): HTMLCanvasElement | undefined {
-    if (!this._mirrorEnabled) return undefined;
-    const domEl = this.getContextService().getDomElement();
-    if (domEl?.tagName === 'CANVAS') return domEl as HTMLCanvasElement;
-    if (!this._mirrorCanvas) {
-      const cfg = this.getConfig();
-      this._mirrorCanvas = document.createElement('canvas');
-      this._mirrorCanvas.width = cfg.width ?? 800;
-      this._mirrorCanvas.height = cfg.height ?? 600;
-      this._syncMirror();
-    }
-    return this._mirrorCanvas;
-  }
-
-  /** SVG → Image → mirrorCanvas（afterrender 触发，降频 200ms，异步不阻塞渲染） */
-  private _syncMirror(): void {
-    if (this._syncing || !this._mirrorEnabled) return;
-    const now = performance.now();
-    if (now - this._lastSync < 200) return; // 降频 5fps
-    this._lastSync = now;
-    this._syncing = true;
-    this.getContextService().toDataURL({ type: 'image/svg+xml' }).then((url: string) => {
-      const img = this._mirrorImg ?? (this._mirrorImg = new Image());
-      img.onload = () => {
-        const mc = this._mirrorCanvas;
-        if (mc) {
-          const ctx = mc.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, mc.width, mc.height);
-            ctx.drawImage(img, 0, 0, mc.width, mc.height);
-          }
-        }
-        this._syncing = false;
-      };
-      img.onerror = () => { this._syncing = false; };
-      img.src = url;
-    }).catch(() => { this._syncing = false; });
-  }
-
-  /** 等 mirrorCanvas 同步完成（导出时用，跳过降频） */
-  private async _awaitMirror(): Promise<void> {
-    this._lastSync = 0;
-    this._syncMirror();
-    const start = performance.now();
-    while (this._syncing && performance.now() - start < 5000) {
-      await new Promise(r => setTimeout(r, 16));
-    }
-  }
-
   // ---- 导出 ----
   /**
    * 导出为 data URL（异步）。
-   * canvas 渲染器 → 主画布 canvas.toDataURL 直接导出。
-   * svg 渲染器 → mirrorCanvas（同步完成后）→ PNG。
+   * canvas 渲染器 → canvas.toDataURL；svg 渲染器 → ContextService.toDataURL（cloneNode 保留样式）。
    */
   async toDataURL(type: string = 'image/png', quality?: number): Promise<string> {
     const domEl = this.getContextService().getDomElement();
     if (domEl?.tagName === 'CANVAS') {
       return (domEl as HTMLCanvasElement).toDataURL(type, quality);
     }
-    // SVG → mirrorCanvas → toDataURL
-    this.enableMirror();
-    await this._awaitMirror();
-    if (!this._mirrorCanvas) throw new Error('[GE] mirrorCanvas not available');
-    return this._mirrorCanvas.toDataURL(type, quality);
+    return this.getContextService().toDataURL({ type: type as any, encoderOptions: quality ?? 1 });
   }
 
   /** 导出为 SVG 字符串（含 xmlns，可直接保存 .svg 文件） */
