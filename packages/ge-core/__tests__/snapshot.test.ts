@@ -5,8 +5,18 @@ import { GraphSnapshot } from '../src/core/GraphSnapshot';
 const mockGraph = (overrides: any = {}) => ({
   getConfig: () => ({ width: 800, height: 600 }),
   toJSON: () => ({
-    nodes: [{ id: 'a', x: 1 }, { id: 'b', x: 2 }],
-    edges: [{ id: 'e1', source: 'a', target: 'b' }],
+    version: 1,
+    viewport: { panX: 0, panY: 0, zoom: 1 },
+    cells: [
+      {
+        tag: 'ge-group', id: 'group', props: { x: 10 }, data: { nested: { value: 1 } }, children: [
+          { tag: 'ge-node', id: 'node', props: { stateStyles: { selected: { stroke: '#1890ff' } } }, data: {}, children: [
+            { tag: 'ge-port', id: 'port', props: { layout: 'left' }, data: {}, children: [] },
+          ] },
+        ],
+      },
+      { tag: 'ge-edge', id: 'edge', props: { source: { cell: 'node', port: 'port' } }, data: {}, children: [] },
+    ],
   }),
   panOffset: { x: 10, y: 20 },
   getCamera: () => ({ getZoom: () => 1.5 }),
@@ -14,22 +24,33 @@ const mockGraph = (overrides: any = {}) => ({
 });
 
 describe('GraphSnapshot', () => {
-  it('from：派生 nodes/edges/viewport/size 全量快照', () => {
+  it('from：保留完整递归 GraphJSON、viewport 与尺寸', () => {
     const snap = GraphSnapshot.from(mockGraph() as any);
-    expect(snap.data.nodes).toHaveLength(2);
-    expect(snap.data.edges).toHaveLength(1);
+    expect(snap.data.version).toBe(1);
+    expect(snap.data.cells).toHaveLength(2);
+    expect((snap.data.cells as any[])[0].children[0].children[0].id).toBe('port');
     expect(snap.data.viewport).toEqual({ panX: 10, panY: 20, zoom: 1.5 });
     expect(snap.data.width).toBe(800);
     expect(snap.data.height).toBe(600);
   });
 
-  it('from：深拷贝 nodes/edges，修改快照不污染源', () => {
-    const g = mockGraph();
-    const snap = GraphSnapshot.from(g as any);
-    snap.data.nodes[0].id = 'mutated';
-    // 再次派生，源数据未变
-    const snap2 = GraphSnapshot.from(g as any);
-    expect(snap2.data.nodes[0].id).toBe('a');
+  it('from：深拷贝嵌套 props/data/children，修改快照不污染源', () => {
+    const source = mockGraph().toJSON();
+    const graph = mockGraph({ toJSON: () => source });
+    const snap = GraphSnapshot.from(graph as any);
+    const group = (snap.data.cells as any[])[0];
+    group.data.nested.value = 99;
+    group.children[0].props.stateStyles.selected.stroke = '#f00';
+    group.children[0].children[0].props.layout = 'right';
+    expect(source.cells[0].data.nested.value).toBe(1);
+    expect(source.cells[0].children[0].props.stateStyles.selected.stroke).toBe('#1890ff');
+    expect(source.cells[0].children[0].children[0].props.layout).toBe('left');
+  });
+
+  it('兼容保留旧 nodes/edges GraphJSON', () => {
+    const snap = GraphSnapshot.from(mockGraph({ toJSON: () => ({ nodes: [{ id: 'a', style: { fill: '#fff' } }], edges: [{ id: 'e' }] }) }) as any);
+    expect(snap.data.nodes?.[0].id).toBe('a');
+    expect(snap.data.edges?.[0].id).toBe('e');
   });
 
   it('toJSON：返回同一份数据', () => {

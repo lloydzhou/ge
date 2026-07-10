@@ -6,6 +6,7 @@
  */
 import { Circle } from '@antv/g-lite';
 import { Cell, LAYOUT } from './Cell';
+import { getCellChildren } from './cell-tree';
 import { CLASS } from './types';
 
 export interface PortStyleProps {
@@ -24,7 +25,9 @@ const DEFAULTS: PortStyleProps = { x: 0, y: 0, r: 4, fill: '#1890ff', stroke: '#
 export class Port extends Cell {
   static readonly tag = 'ge-port';
   protected body?: Circle;
-  private ownerBound = false;
+  /** 当前 owner 与其回调；Port 重挂载和断开时必须重绑/释放。 */
+  private boundOwner?: any;
+  private ownerBoundsListener?: () => void;
 
   constructor(config: Record<string, any> = {}) {
     const style = { ...DEFAULTS, ...config?.style };
@@ -54,7 +57,7 @@ export class Port extends Cell {
     let x = s.x as number, y = s.y as number;
     if (layout) {
       // 同方向 sibling ports → 均匀排列
-      const siblings = (parent?.childNodes as any[])?.filter((c) => (c.getAttribute?.('layout') ?? '') === layout) ?? [];
+      const siblings = getCellChildren(parent ?? {}).filter((c) => (c.getAttribute?.('layout') ?? '') === layout);
       const idx = siblings.indexOf(this);
       const count = siblings.length || 1;
       const ratio = count <= 1 ? 0.5 : idx / (count - 1);
@@ -69,12 +72,45 @@ export class Port extends Cell {
     this.setLocalPosition(x, y);
   }
 
-  /** 监听 owner（Node）尺寸变化，重算 port 位置（resize 后 port 贴随节点边缘） */
+  /** 监听 owner（Node）尺寸变化，重算 port 位置（resize 后 port 贴随节点边缘）。 */
   protected bindOwnerBounds(): void {
     const owner = this.parentNode as any;
-    if (!owner || this.ownerBound) return;
-    this.ownerBound = true;
-    owner.addEventListener('node:boundschange', () => this.markDirty(LAYOUT));
+    if (owner === this.boundOwner) return;
+    this.unbindOwnerBounds();
+    if (!owner?.addEventListener) return;
+    const listener = (): void => this.markDirty(LAYOUT);
+    owner.addEventListener('node:boundschange', listener);
+    this.boundOwner = owner;
+    this.ownerBoundsListener = listener;
+  }
+
+  protected unbindOwnerBounds(): void {
+    if (this.boundOwner && this.ownerBoundsListener) {
+      this.boundOwner.removeEventListener?.('node:boundschange', this.ownerBoundsListener);
+    }
+    this.boundOwner = undefined;
+    this.ownerBoundsListener = undefined;
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.bindOwnerBounds();
+  }
+
+  /** Port 圆心的世界坐标；当前不处理 owner/ancestor 的旋转变换。 */
+  getWorldPosition(): { x: number; y: number } {
+    const local = (this.getLocalPosition?.() ?? { x: 0, y: 0 }) as any;
+    const owner = this.parentNode as any;
+    if (owner?.getWorldBBox) {
+      const bbox = owner.getWorldBBox();
+      return { x: bbox.x + bbox.width / 2 + local.x, y: bbox.y + bbox.height / 2 + local.y };
+    }
+    return { x: local.x, y: local.y };
+  }
+
+  disconnectedCallback(): void {
+    this.unbindOwnerBounds();
+    super.disconnectedCallback();
   }
 
   /** Scheduler 帧边界统一调用 */

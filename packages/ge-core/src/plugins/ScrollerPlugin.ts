@@ -1,75 +1,56 @@
-/**
- * ScrollerPlugin —— 画布平移与缩放。
- *
- * - wheel：以光标为中心缩放（camera.setZoomByViewportPoint）。
- * - 空白处拖拽：平移画布（camera.pan），不与节点拖拽冲突（节点上交给 DragPlugin）。
- */
-import { Plugin, closestCell } from './plugin';
+/** 画布平移与缩放。 */
+import { Plugin } from './plugin';
 
-export interface ScrollerOptions {
-  /** 每次滚轮缩放因子 */
-  zoomFactor?: number;
-  minZoom?: number;
-  maxZoom?: number;
-  /** 是否启用空白拖拽平移 */
-  panOnBlank?: boolean;
-}
+export interface ScrollerOptions { zoomFactor?: number; minZoom?: number; maxZoom?: number; panOnBlank?: boolean; }
 
 export class ScrollerPlugin extends Plugin {
   readonly name = 'scroller';
   private opts: Required<ScrollerOptions>;
   private panning: { x: number; y: number } | null = null;
+  private readonly onWheel = (event: any): void => {
+    const camera = this.graph.getCamera();
+    const factor = event.deltaY < 0 ? this.opts.zoomFactor : 1 / this.opts.zoomFactor;
+    const current = camera.getZoom(), next = clamp(current * factor, this.opts.minZoom, this.opts.maxZoom);
+    if (Math.abs(next - current) < 1e-6) return;
+    const cursor = { x: event.viewportX, y: event.viewportY }, world = this.graph.viewport2Canvas(cursor);
+    if (typeof this.graph.setZoom === 'function') this.graph.setZoom(next); else camera.setZoom(next);
+    const after = this.graph.canvas2Viewport(world);
+    this.graph.panBy(cursor.x - after.x, cursor.y - after.y);
+  };
+  private readonly onPointerDown = (event: any): void => {
+    if (!this.opts.panOnBlank || event.button === 0 || this.graph.pickNode(event.viewportX, event.viewportY)) return;
+    this.panning = { x: event.viewportX, y: event.viewportY };
+  };
+  private readonly onPointerMove = (event: any): void => {
+    if (!this.panning) return;
+    this.graph.panBy(event.viewportX - this.panning.x, event.viewportY - this.panning.y);
+    this.panning = { x: event.viewportX, y: event.viewportY };
+  };
+  private readonly onPointerUp = (): void => { this.panning = null; };
 
   constructor(options: ScrollerOptions = {}) {
     super();
-    this.opts = {
-      zoomFactor: options.zoomFactor ?? 1.1,
-      minZoom: options.minZoom ?? 0.1,
-      maxZoom: options.maxZoom ?? 10,
-      panOnBlank: options.panOnBlank ?? true,
-    };
+    this.opts = { zoomFactor: options.zoomFactor ?? 1.1, minZoom: options.minZoom ?? 0.1, maxZoom: options.maxZoom ?? 10, panOnBlank: options.panOnBlank ?? true };
   }
 
   init(graph: any): void {
     super.init(graph);
-    const camera = graph.getCamera();
-    const { zoomFactor, minZoom, maxZoom, panOnBlank } = this.opts;
+    graph.addEventListener('wheel', this.onWheel);
+    graph.addEventListener('pointerdown', this.onPointerDown);
+    graph.addEventListener('pointermove', this.onPointerMove);
+    graph.addEventListener('pointerup', this.onPointerUp);
+    graph.addEventListener('pointerupoutside', this.onPointerUp);
+  }
 
-    graph.addEventListener('wheel', (e: any) => {
-      const factor = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
-      const cur = camera.getZoom();
-      const next = clamp(cur * factor, minZoom, maxZoom);
-      if (Math.abs(next - cur) < 1e-6) return;
-      // 以光标为中心（2D）：记录光标处世界点，缩放后用 panBy 拉回光标
-      const cursor = { x: e.viewportX, y: e.viewportY };
-      const wBefore = graph.viewport2Canvas(cursor);
-      if (typeof (graph as any).setZoom === 'function') (graph as any).setZoom(next);
-      else camera.setZoom(next);
-      const vpAfter = graph.canvas2Viewport(wBefore);
-      graph.panBy(cursor.x - vpAfter.x, cursor.y - vpAfter.y);
-    });
-
-    graph.addEventListener('pointerdown', (e: any) => {
-      if (!panOnBlank) return;
-      if (e.button === 0) return; // 左键留给框选（SelectionPlugin）
-      if (graph.pickNode(e.viewportX, e.viewportY)) return; // 点在节点上交给 Drag
-      this.panning = { x: e.viewportX, y: e.viewportY };
-    });
-
-    graph.addEventListener('pointermove', (e: any) => {
-      if (!this.panning) return;
-      const dx = e.viewportX - this.panning.x;
-      const dy = e.viewportY - this.panning.y;
-      graph.panBy(dx, dy);
-      this.panning = { x: e.viewportX, y: e.viewportY };
-    });
-
-    const end = (): void => {
-      this.panning = null;
-    };
-    graph.addEventListener('pointerup', end);
-    graph.addEventListener('pointerupoutside', end);
+  destroy(): void {
+    this.graph.removeEventListener('wheel', this.onWheel);
+    this.graph.removeEventListener('pointerdown', this.onPointerDown);
+    this.graph.removeEventListener('pointermove', this.onPointerMove);
+    this.graph.removeEventListener('pointerup', this.onPointerUp);
+    this.graph.removeEventListener('pointerupoutside', this.onPointerUp);
+    this.panning = null;
+    super.destroy();
   }
 }
 
-const clamp = (v: number, min: number, max: number): number => (v < min ? min : v > max ? max : v);
+const clamp = (value: number, min: number, max: number): number => value < min ? min : value > max ? max : value;

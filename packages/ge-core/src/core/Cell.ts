@@ -101,4 +101,32 @@ export abstract class Cell extends CustomElement<any> {
     this.model = { ...this.model, ...patch };
     this.fire('cell:change', { data: this.model });
   }
+
+  /**
+   * 克隆当前 cell（DOM Node.cloneNode 语义）。
+   *
+   * - 基于 props 重建一个**未挂载**的副本；deep=true 时递归克隆 GE 领域子元素（Port / Group 内 Node）。
+   * - 内部渲染元素（body / labelText / marker）不克隆，由 connectedCallback 在插入时重建。
+   * - id 遵循 DOM 行为保留原值；插入同一 Graph 前应改为唯一 id（否则 getElementById 命中首个）。
+   * - Edge 的 source/target 是 id 引用，克隆后不重连，沿用原端点（与 DOM 引用语义一致）。
+   *
+   * @see https://developer.mozilla.org/zh-CN/docs/Web/API/Node/cloneNode
+   */
+  cloneNode(deep = false): this {
+    const doc = this.ownerDocument as any;
+    const tag = (this.constructor as any).tag as string | undefined;
+    if (!doc?.createElement || !tag) {
+      throw new Error('[GE] cloneNode 需要 cell 已挂载到 Graph（ownerDocument 可用）');
+    }
+    const style = { ...this.props };
+    delete style.id;
+    const copy = doc.createElement(tag, { id: this.id, style });
+    if (deep) {
+      for (const child of (this.childNodes ?? []) as any[]) {
+        // 只递归克隆 GE 领域子元素（Port / Group 内 Node），跳过 body/labelText 等内部渲染元素
+        if (child instanceof Cell) copy.appendChild((child as Cell).cloneNode(true));
+      }
+    }
+    return copy;
+  }
 }

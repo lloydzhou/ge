@@ -23,6 +23,7 @@ export class GridPlugin extends Plugin {
   readonly name = 'grid';
   private opts: Required<GridPluginOptions>;
   private layer?: HTMLDivElement;
+  private readonly onAfterRender = (): void => this.update();
 
   constructor(options: GridPluginOptions = {}) {
     super();
@@ -46,9 +47,8 @@ export class GridPlugin extends Plugin {
     this.layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:0;';
     container.insertBefore(this.layer, container.firstChild);
 
-    const update = (): void => this.update();
-    graph.addEventListener('afterrender', update);
-    update();
+    graph.addEventListener('afterrender', this.onAfterRender);
+    this.update();
   }
 
   private update(): void {
@@ -83,6 +83,8 @@ export class GridPlugin extends Plugin {
   }
 
   destroy(): void {
+    this.graph.removeEventListener('afterrender', this.onAfterRender);
     this.layer?.remove();
+    super.destroy();
   }
 }

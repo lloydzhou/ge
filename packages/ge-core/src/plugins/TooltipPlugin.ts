@@ -19,6 +19,15 @@ export class TooltipPlugin extends Plugin {
   private el?: HTMLDivElement;
   private opts: Required<TooltipOptions>;
   private currentTarget: any = null;
+  private throttle = false;
+  private readonly onPointerMove = (e: any): void => {
+    if (this.throttle) return;
+    this.throttle = true;
+    requestAnimationFrame(() => { this.throttle = false; });
+    const node = this.graph.pickNode(e.viewportX, e.viewportY);
+    if (node) this.show(node, e.viewportX, e.viewportY); else this.hide();
+  };
+  private readonly onPointerLeave = (): void => this.hide();
 
   constructor(options: TooltipOptions = {}) {
     super();
@@ -41,16 +50,8 @@ export class TooltipPlugin extends Plugin {
       'white-space:nowrap;max-width:300px;';
     container.appendChild(this.el);
 
-    let throttle = false;
-    graph.addEventListener('pointermove', (e: any) => {
-      if (throttle) return;
-      throttle = true;
-      requestAnimationFrame(() => { throttle = false; });
-      const node = graph.pickNode(e.viewportX, e.viewportY);
-      if (node) this.show(node, e.viewportX, e.viewportY);
-      else this.hide();
-    });
-    graph.addEventListener('pointerleave', () => this.hide());
+    graph.addEventListener('pointermove', this.onPointerMove);
+    graph.addEventListener('pointerleave', this.onPointerLeave);
   }
 
   private show(target: any, x: number, y: number): void {
@@ -74,6 +75,9 @@ export class TooltipPlugin extends Plugin {
   }
 
   destroy(): void {
+    this.graph.removeEventListener('pointermove', this.onPointerMove);
+    this.graph.removeEventListener('pointerleave', this.onPointerLeave);
     this.el?.remove();
+    super.destroy();
   }
 }

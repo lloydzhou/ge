@@ -21,22 +21,33 @@ export abstract class Plugin {
  * 子类实现 update() + isActive()，不用重复 container position + 事件监听。
  */
 export abstract class OverlayPlugin extends Plugin {
+  private readonly onPointerDown = (): void => { setTimeout(() => this.update(), 0); };
+  private readonly onNodeDragEnd = (): void => this.update();
+  private lastOverlayDraw = 0;
+  private readonly onAfterRender = (): void => {
+    if (!this.isActive()) return;
+    const now = performance.now();
+    if (now - this.lastOverlayDraw < 200) return;
+    this.lastOverlayDraw = now;
+    this.update();
+  };
+
   init(graph: Graph): void {
     super.init(graph);
     const container = graph.getConfig().container as HTMLElement;
     if (container && getComputedStyle(container).position === 'static') container.style.position = 'relative';
-    const update = (): void => this.update();
-    let lastOverlayDraw = 0;
-    graph.addEventListener('pointerdown', () => setTimeout(update, 0));
-    graph.addEventListener('node:dragend', update);
-    graph.addEventListener('afterrender', () => {
-      if (!this.isActive()) return;
-      const now = performance.now();
-      if (now - lastOverlayDraw < 200) return; // 概览视图 5fps 够，不跟 60fps
-      lastOverlayDraw = now;
-      update();
-    });
+    graph.addEventListener('pointerdown', this.onPointerDown);
+    graph.addEventListener('node:dragend', this.onNodeDragEnd);
+    graph.addEventListener('afterrender', this.onAfterRender);
   }
+
+  destroy(): void {
+    this.graph.removeEventListener('pointerdown', this.onPointerDown);
+    this.graph.removeEventListener('node:dragend', this.onNodeDragEnd);
+    this.graph.removeEventListener('afterrender', this.onAfterRender);
+    super.destroy();
+  }
+
   protected isActive(): boolean { return true; }
   protected abstract update(): void;
 }
@@ -67,11 +78,12 @@ export const removeClass = (el: any, cls: string): void => {
   el.className = (el.className || '').split(/\s+/).filter((c: string) => c && c !== cls).join(' ');
 };
 
-/** 向上查找最近的边（ge-edge） */
+/** 向上查找最近的 edge */
 export const closestEdge = (el: any): any => {
   let cur: any = el;
   while (cur) {
-    if (typeof cur.className === 'string' && cur.className.includes(CLASS.edge)) return cur;
+    const cls = cur.className;
+    if (typeof cls === 'string' && cls.includes(CLASS.edge)) return cur;
     cur = cur.parentNode;
   }
   return null;

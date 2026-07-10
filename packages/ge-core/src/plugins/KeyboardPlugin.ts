@@ -78,5 +78,7 @@ export class KeyboardPlugin extends Plugin {
 
   destroy(): void {
     if (this.handler) window.removeEventListener('keydown', this.handler);
+    this.handler = undefined;
+    super.destroy();
   }
 }

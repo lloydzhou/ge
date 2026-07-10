@@ -17,6 +17,8 @@ export class SnaplinePlugin extends Plugin {
   private threshold: number;
   private color: string;
   private layer?: HTMLDivElement;
+  private readonly onBoundsChange = (event: any): void => this.detect(event.target);
+  private readonly onPointerUp = (): void => this.clear();
 
   constructor(options: SnaplineOptions = {}) {
     super();
@@ -34,10 +36,9 @@ export class SnaplinePlugin extends Plugin {
     this.layer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;';
     container.appendChild(this.layer);
 
-    graph.addEventListener('node:boundschange', (e: any) => this.detect(e.target));
-    const clear = (): void => this.clear();
-    graph.addEventListener('pointerup', clear);
-    graph.addEventListener('pointerupoutside', clear);
+    graph.addEventListener('node:boundschange', this.onBoundsChange);
+    graph.addEventListener('pointerup', this.onPointerUp);
+    graph.addEventListener('pointerupoutside', this.onPointerUp);
   }
 
   private detect(node: any): void {
@@ -86,6 +87,10 @@ export class SnaplinePlugin extends Plugin {
   }
 
   destroy(): void {
+    this.graph.removeEventListener('node:boundschange', this.onBoundsChange);
+    this.graph.removeEventListener('pointerup', this.onPointerUp);
+    this.graph.removeEventListener('pointerupoutside', this.onPointerUp);
     this.layer?.remove();
+    super.destroy();
   }
 }

@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENT.md
 
 > 架构设计详见 [docs/architecture.md](./docs/architecture.md)。本文件只记录开发注意事项。
 
@@ -64,6 +64,23 @@ packages/ge-core/
 ```
 
 ## 开发约束
+
+### API 设计原则（DOM-like）
+
+GE 的核心设计是 **API 尽可能模仿浏览器原生 DOM**。Cell/Node/Edge/Port/Group 继承 g-lite `CustomElement`，是**真正的 DOM 元素**，不是 X6 那种「数据对象 + 自渲染」。
+
+| 操作 | 用 DOM 原语 | 禁止 |
+|------|------------|------|
+| 增删元素 | `createElement` + `appendChild` / `removeChild` | 不要维护平行 Map 索引 |
+| 查询 | `getElementById` / `getElementsByClassName` | 不要自造 registry 查询 |
+| 改属性 | `setAttribute` / `getAttribute` | 不要 jQuery 风格 `prop()`/`attr(path)` |
+| 事件 | `addEventListener` / `dispatchEvent` / `CustomEvent`（冒泡） | **禁止 eventBus**，禁止自有 `on/off` |
+| 序列化 | `toJSON()` / `fromJSON()` | 不要自定义 `toObject` |
+| 业务数据 | `getData()` / `setData()`（类似 `dataset`） | — |
+
+**合理例外**（DOM 无对应物的 Canvas/图表能力，保留即可）：`panBy` / `panTo` / `setZoom` / `canvas2Viewport` / `viewport2Canvas` / `pickNode` / `toDataURL` / `zoomToFit` / `cullViewport`。
+
+判断准则：犹豫时问「浏览器原生对应的是什么？MDN 如何记录这种模式？」。X6 的 `cell.on()` / `cell.prop()` / `cell.attr('body/fill')` 这类 jQuery 风格 API 在 GE 里一律不引入。
 
 ### 渲染调度（Scheduler）
 

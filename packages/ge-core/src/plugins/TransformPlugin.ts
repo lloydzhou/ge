@@ -1,56 +1,44 @@
-/**
- * TransformPlugin —— 选中集组合变换。
- *
- * - 多选拖拽时：被拖节点由 DragPlugin 移动，其余选中节点由本插件同步偏移，
- *   实现选中集整体平移。
- * - 依赖 SelectionPlugin（多选）+ DragPlugin。
- */
-import { Plugin, closestCell } from './plugin';
+/** 选中集组合变换。 */
+import { Plugin } from './plugin';
 
-interface TransformState {
-  draggedId: string;
-  lastX: number;
-  lastY: number;
-}
+interface TransformState { draggedId: string; lastX: number; lastY: number; }
 
 export class TransformPlugin extends Plugin {
   readonly name = 'transform';
   private state: TransformState | null = null;
+  private readonly onPointerDown = (event: any): void => {
+    const selection = this.graph.getPlugin('selection');
+    const node = selection && this.graph.pickNode(event.viewportX, event.viewportY);
+    const selected = (selection as any)?.getSelected?.() ?? [];
+    this.state = node && selected.includes(node.id) && selected.length > 1 ? { draggedId: node.id, lastX: event.canvasX, lastY: event.canvasY } : null;
+  };
+  private readonly onPointerMove = (event: any): void => {
+    if (!this.state) return;
+    const dx = event.canvasX - this.state.lastX, dy = event.canvasY - this.state.lastY;
+    for (const id of (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? []) {
+      if (id === this.state.draggedId) continue;
+      const node = this.graph.getNode(id);
+      if (node) node.moveTo((node.getAttribute('x') ?? 0) + dx, (node.getAttribute('y') ?? 0) + dy);
+    }
+    this.state.lastX = event.canvasX;
+    this.state.lastY = event.canvasY;
+  };
+  private readonly onPointerUp = (): void => { this.state = null; };
 
   init(graph: any): void {
     super.init(graph);
+    graph.addEventListener('pointerdown', this.onPointerDown);
+    graph.addEventListener('pointermove', this.onPointerMove);
+    graph.addEventListener('pointerup', this.onPointerUp);
+    graph.addEventListener('pointerupoutside', this.onPointerUp);
+  }
 
-    graph.addEventListener('pointerdown', (e: any) => {
-      const sel = graph.getPlugin('selection');
-      if (!sel) return;
-      const node = graph.pickNode(e.viewportX, e.viewportY);
-      if (!node) return;
-      const selected = sel.getSelected?.() ?? [];
-      if (!selected.includes(node.id) || selected.length <= 1) {
-        this.state = null;
-        return;
-      }
-      this.state = { draggedId: node.id, lastX: e.canvasX, lastY: e.canvasY };
-    });
-
-    graph.addEventListener('pointermove', (e: any) => {
-      if (!this.state) return;
-      const dx = e.canvasX - this.state.lastX;
-      const dy = e.canvasY - this.state.lastY;
-      const selected = (graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
-      for (const id of selected) {
-        if (id === this.state.draggedId) continue; // 被拖节点交给 DragPlugin
-        const n = graph.getNode(id);
-        if (n) n.moveTo((n.getAttribute('x') ?? 0) + dx, (n.getAttribute('y') ?? 0) + dy);
-      }
-      this.state.lastX = e.canvasX;
-      this.state.lastY = e.canvasY;
-    });
-
-    const end = (): void => {
-      this.state = null;
-    };
-    graph.addEventListener('pointerup', end);
-    graph.addEventListener('pointerupoutside', end);
+  destroy(): void {
+    this.graph.removeEventListener('pointerdown', this.onPointerDown);
+    this.graph.removeEventListener('pointermove', this.onPointerMove);
+    this.graph.removeEventListener('pointerup', this.onPointerUp);
+    this.graph.removeEventListener('pointerupoutside', this.onPointerUp);
+    this.state = null;
+    super.destroy();
   }
 }

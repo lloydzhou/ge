@@ -46,6 +46,34 @@ describe('HistoryPlugin 栈逻辑', () => {
     });
   });
 
+it('恢复快照期间不记录由 fromJSON 派发的事件', () => {
+  const listeners = new Map<string, Array<() => void>>();
+  let state = 1;
+  const graph = {
+    addEventListener(type: string, listener: () => void) {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    removeEventListener(type: string, listener: () => void) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((item) => item !== listener));
+    },
+    toJSON: () => ({ version: 1, viewport: { panX: 0, panY: 0, zoom: 1 }, cells: [{ tag: 'ge-node', props: { state }, data: {}, children: [] }] }),
+    fromJSON(data: any) {
+      state = data.cells[0].props.state;
+      for (const listener of listeners.get('pointerdown') ?? []) listener();
+      for (const listener of listeners.get('pointerup') ?? []) listener();
+    },
+  };
+  const history = new HistoryPlugin();
+  history.init(graph as any);
+  history.mark();
+  state = 2;
+  history.commit();
+  expect(history.canUndo()).toBe(true);
+  history.undo();
+  expect(history.canUndo()).toBe(false);
+  expect(history.canRedo()).toBe(true);
+});
+
 describe('closestCell', () => {
   it('向上找到最近 node', () => {
     const node = { className: 'ge-node', parentNode: { className: 'x', parentNode: null } };

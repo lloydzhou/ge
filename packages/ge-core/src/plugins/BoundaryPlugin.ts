@@ -7,6 +7,7 @@ import { OverlayPlugin } from './plugin';
 export class BoundaryPlugin extends OverlayPlugin {
   readonly name = 'boundary';
   private box?: HTMLDivElement;
+  private readonly onBoundsChange = (): void => this.update();
 
   init(graph: any): void {
     super.init(graph);
@@ -21,7 +22,7 @@ export class BoundaryPlugin extends OverlayPlugin {
       'pointer-events:none;z-index:8;display:none;';
     container.appendChild(this.box);
     // 节点移动/resize 时即时跟随（boundschange 在 Scheduler flush 内同步触发）
-    graph.addEventListener('node:boundschange', () => this.update());
+    graph.addEventListener('node:boundschange', this.onBoundsChange);
   }
 
   protected update(): void {
@@ -49,5 +50,9 @@ export class BoundaryPlugin extends OverlayPlugin {
 
   protected isActive(): boolean { return !!this.box && this.box.style.display !== 'none'; }
 
-  destroy(): void { this.box?.remove(); }
+  destroy(): void {
+    this.graph.removeEventListener('node:boundschange', this.onBoundsChange);
+    this.box?.remove();
+    super.destroy();
+  }
 }

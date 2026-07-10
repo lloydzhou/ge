@@ -3,6 +3,7 @@
  * 子节点 appendChild 进来即被「包含」，可整体移动（embed 留待 L3 完善）。
  */
 import { Node } from './Node';
+import { getCellDescendants } from './cell-tree';
 import { CLASS } from './types';
 
 export class Group extends Node {
@@ -25,7 +26,7 @@ export class Group extends Node {
   /** 移动分组时，同步通知组内子节点重发 boundschange（其世界位置已变，触发相连 edge 更新） */
   protected applyPosition(): void {
     super.applyPosition();
-    for (const child of this.children) {
+    for (const child of getCellDescendants(this)) {
       const c = child as any;
       if (c && typeof c.fire === 'function' && typeof c.className === 'string' && c.className.includes(CLASS.node)) {
         c.fire('node:boundschange');

@@ -8,6 +8,131 @@ import {
   ConnectorRegistry, createDefaultConnectorRegistry, updatePath,
 } from '../src/edge/connector';
 import type { Point } from '../src/utils/types';
+import { Edge } from '../src/core/Edge';
+import { Port } from '../src/core/Port';
+import { Node } from '../src/core/Node';
+import { getCellChildren, getCellDescendants } from '../src/core/cell-tree';
+
+describe('Edge 端点监听', () => {
+  const endpoint = (): any => {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+      addEventListener(type: string, listener: () => void) {
+        (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener);
+      },
+      removeEventListener(type: string, listener: () => void) {
+        listeners.get(type)?.delete(listener);
+      },
+      emit(type: string) {
+        for (const listener of listeners.get(type) ?? []) listener();
+      },
+      listenerCount(type: string) { return listeners.get(type)?.size ?? 0; },
+    };
+  };
+
+  it('端点变更时解绑旧节点、绑定新节点且同端点不重复绑定', () => {
+    const edge = new Edge() as any;
+    const a = endpoint();
+    const b = endpoint();
+    const c = endpoint();
+    const markDirty = vi.fn();
+    edge.markDirty = markDirty;
+    edge.syncBoundsChangeBindings([a, b]);
+    edge.syncBoundsChangeBindings([a, b]);
+    expect(a.listenerCount('node:boundschange')).toBe(1);
+    expect(b.listenerCount('node:boundschange')).toBe(1);
+    edge.syncBoundsChangeBindings([b, c]);
+    expect(a.listenerCount('node:boundschange')).toBe(0);
+    expect(b.listenerCount('node:boundschange')).toBe(1);
+    expect(c.listenerCount('node:boundschange')).toBe(1);
+    a.emit('node:boundschange');
+    b.emit('node:boundschange');
+    c.emit('node:boundschange');
+    expect(markDirty).toHaveBeenCalledTimes(2);
+  });
+
+  it('断开时解除全部端点监听并停止虚线动画', () => {
+    const edge = new Edge() as any;
+    const a = endpoint();
+    edge.syncBoundsChangeBindings([a]);
+    edge.stopDashFlow = vi.fn();
+    edge.disconnectedCallback();
+    expect(edge.stopDashFlow).toHaveBeenCalledOnce();
+    expect(a.listenerCount('node:boundschange')).toBe(0);
+  });
+});
+
+describe('Port owner 监听', () => {
+  const owner = (): any => {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+      addEventListener(type: string, listener: () => void) {
+        (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener);
+      },
+      removeEventListener(type: string, listener: () => void) {
+        listeners.get(type)?.delete(listener);
+      },
+      emit(type: string) { for (const listener of listeners.get(type) ?? []) listener(); },
+      listenerCount(type: string) { return listeners.get(type)?.size ?? 0; },
+    };
+  };
+
+  it('重挂载时只保留新 owner 的监听，断开时释放', () => {
+    const port = new Port() as any;
+    const first = owner();
+    const second = owner();
+    const markDirty = vi.fn();
+    port.markDirty = markDirty;
+    port.parentNode = first;
+    port.bindOwnerBounds();
+    port.parentNode = second;
+    port.bindOwnerBounds();
+    expect(first.listenerCount('node:boundschange')).toBe(0);
+    expect(second.listenerCount('node:boundschange')).toBe(1);
+    first.emit('node:boundschange');
+    second.emit('node:boundschange');
+    expect(markDirty).toHaveBeenCalledTimes(1);
+    port.disconnectedCallback();
+    expect(second.listenerCount('node:boundschange')).toBe(0);
+  });
+});
+
+describe('领域子树与世界几何', () => {
+  it('领域子树工具过滤渲染内部节点并保留嵌套 Cell', () => {
+    const port = new Port();
+    const nested = new Node();
+    const parent: any = { childNodes: [{ kind: 'body' }, port, nested] };
+    const nestedPort = new Port();
+    (nested as any).childNodes = [{ kind: 'label' }, nestedPort];
+    expect(getCellChildren(parent)).toEqual([port, nested]);
+    expect(getCellDescendants(parent)).toEqual([port, nested, nestedPort]);
+  });
+
+  it('嵌套 Group 的 Node 中心由世界 bbox 计算', () => {
+    const group: any = { className: 'ge-group', styleProps: () => ({ x: 100, y: 200 }), parentNode: null };
+    const node = new Node({ style: { x: 10, y: 20, width: 30, height: 40 } });
+    (node as any).parentNode = group;
+    expect(node.getWorldBBox()).toEqual({ x: 110, y: 220, width: 30, height: 40 });
+    expect(node.getWorldCenter()).toEqual({ x: 125, y: 240 });
+  });
+
+  it('Port 世界位置叠加 owner 的世界中心与局部坐标', () => {
+    const port = new Port() as any;
+    port.parentNode = { getWorldBBox: () => ({ x: 100, y: 200, width: 80, height: 40 }) };
+    port.getLocalPosition = () => ({ x: -40, y: 0 });
+    expect(port.getWorldPosition()).toEqual({ x: 100, y: 220 });
+  });
+
+  it('Edge 端点 bbox 使用 Node/Port 的世界几何', () => {
+    const edge = new Edge() as any;
+    const node = { getWorldBBox: () => ({ x: 100, y: 200, width: 80, height: 40 }), childNodes: [] };
+    expect(edge.endpointBBox(node, { cell: 'n' })).toEqual({ x: 100, y: 200, width: 80, height: 40 });
+    const port = new Port({ id: 'p' }) as any;
+    port.getWorldPosition = () => ({ x: 100, y: 220 });
+    node.childNodes = [port];
+    expect(edge.endpointBBox(node, { cell: 'n', port: 'p' })).toEqual({ x: 99.5, y: 219.5, width: 1, height: 1 });
+  });
+});
 
 describe('router', () => {
   it('normalRouter 去除连续重复点', () => {

@@ -17,24 +17,31 @@ export class HistoryPlugin extends Plugin {
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
   private beforeSnapshot: any = null;
+  private restoring = false;
+  private readonly onPointerDown = (): void => {
+    if (!this.restoring) this.beforeSnapshot = this.snap();
+  };
+  private readonly onPointerUp = (): void => {
+    if (this.restoring || !this.beforeSnapshot) return;
+    const after = this.snap();
+    if (JSON.stringify(after) !== JSON.stringify(this.beforeSnapshot)) {
+      this.pushRaw(this.beforeSnapshot, after);
+    }
+    this.beforeSnapshot = null;
+  };
 
   init(graph: any): void {
     super.init(graph);
-    // pointerdown：记录 before（拖拽/resize/rotate 前）
-    graph.addEventListener('pointerdown', () => {
-      this.beforeSnapshot = this.snap();
-    });
-    // pointerup：记录 after，如果不同 push
-    const onUp = (): void => {
-      if (!this.beforeSnapshot) return;
-      const after = this.snap();
-      if (JSON.stringify(after) !== JSON.stringify(this.beforeSnapshot)) {
-        this.pushRaw(this.beforeSnapshot, after);
-      }
-      this.beforeSnapshot = null;
-    };
-    graph.addEventListener('pointerup', onUp);
-    graph.addEventListener('pointerupoutside', onUp);
+    graph.addEventListener('pointerdown', this.onPointerDown);
+    graph.addEventListener('pointerup', this.onPointerUp);
+    graph.addEventListener('pointerupoutside', this.onPointerUp);
+  }
+
+  destroy(): void {
+    this.graph.removeEventListener('pointerdown', this.onPointerDown);
+    this.graph.removeEventListener('pointerup', this.onPointerUp);
+    this.graph.removeEventListener('pointerupoutside', this.onPointerUp);
+    super.destroy();
   }
 
   private snap(): any {
@@ -79,7 +86,13 @@ export class HistoryPlugin extends Plugin {
   }
 
   private restore(data: any): void {
-    this.graph.fromJSON(data);
+    this.restoring = true;
+    try {
+      this.graph.fromJSON(data);
+    } finally {
+      this.beforeSnapshot = null;
+      this.restoring = false;
+    }
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
