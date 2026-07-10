@@ -1,6 +1,7 @@
 export * from './types';
 export * from './compute';
 export { Cell } from './Cell';
+export { getCellChildren, getCellDescendants } from './cell-tree';
 export { Node, type NodeStyleProps } from './Node';
 export { Edge, type EdgeStyleProps } from './Edge';
 export { Port, type PortStyleProps } from './Port';

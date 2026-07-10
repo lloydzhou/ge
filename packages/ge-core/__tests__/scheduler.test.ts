@@ -44,12 +44,31 @@ describe('Scheduler', () => {
     expect(count).toBe(1);
   });
 
-  it('guard 防御：极端环依赖不会无限循环', () => {
+  it('guard 防御：极端环依赖不会无限循环，残余任务会保留到下一帧', () => {
     const sched = new Scheduler();
     const loop: any = { _dirty: 1 };
     loop.flushDirty = () => { sched.add(loop); }; // 每次又把自己加回去
     sched.add(loop);
     expect(() => sched.flush()).not.toThrow();
+    expect((sched as any).queue.has(loop)).toBe(true);
+    sched.destroy();
+  });
+
+  it('超出轮次预算后保留未完成任务，下一轮可继续完成', () => {
+    const sched = new Scheduler();
+    const log: number[] = [];
+    const cells = Array.from({ length: 17 }, (_, i) => ({
+      flushDirty: () => {
+        log.push(i);
+        if (i < 16) sched.add(cells[i + 1]);
+      },
+    }));
+    sched.add(cells[0]);
+    sched.flush();
+    expect(log).toHaveLength(16);
+    expect((sched as any).queue.has(cells[16])).toBe(true);
+    sched.flush();
+    expect(log).toEqual(Array.from({ length: 17 }, (_, i) => i));
   });
 
   it('addAttributeChange：同 cell 同属性一帧内合并（保留首次 oldValue、最新 newValue）', () => {

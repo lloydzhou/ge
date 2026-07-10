@@ -65,6 +65,27 @@ export interface PortProps {
 }
 
 /** Graph 构造选项 */
+/** 领域元素的递归序列化结构；仅包含 Cell 子树，不含 body、label、marker 等渲染内部节点。 */
+export interface CellJSON {
+  tag: string;
+  id?: string;
+  props: Record<string, unknown>;
+  data: Record<string, unknown>;
+  children: CellJSON[];
+}
+
+/** 版本化图序列化结构。 */
+export interface GraphJSON {
+  version: 1;
+  viewport: {
+    panX: number;
+    panY: number;
+    zoom: number;
+  };
+  cells: CellJSON[];
+}
+
+/** Graph 构造选项 */
 export interface GraphOptions {
   /** DOM 容器或选择器 */
   container: HTMLElement | string;

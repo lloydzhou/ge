@@ -15,6 +15,7 @@ import { updatePath, type ConnectorFn, type ConnectorOptions } from '../edge/con
 import type { RouterFn } from '../edge/router';
 import type { NodeAnchorFn } from '../anchor/types';
 import type { Node } from './Node';
+import { getCellChildren } from './cell-tree';
 import type { Point } from '../utils/types';
 
 export interface EdgeStyleProps {
@@ -57,7 +58,8 @@ export class Edge extends Cell {
   resolveRouter?: (name?: string) => RouterFn;
   resolveConnector?: (name?: string) => ConnectorFn;
 
-  private boundNodes = new Set<string>();
+  /** 当前端点的 boundschange 监听器；端点变更或断开时必须解绑。 */
+  private boundNodes = new Map<Node, () => void>();
 
   constructor(config: Record<string, any> = {}) {
     const style = { ...DEFAULTS, ...config?.style };
@@ -154,21 +156,13 @@ export class Edge extends Cell {
   /** 端点 bbox：有 port → port 世界坐标（1x1）；无 port → node worldBBox */
   protected endpointBBox(node: Node, cfg: EndpointConfig): { x: number; y: number; width: number; height: number } {
     if (cfg.port) {
-      const port = (node.children as any[])?.find((c: any) => c.id === cfg.port);
-      if (port) {
-        const local = (port as any).getLocalPosition?.() ?? { x: 0, y: 0 };
-        const nx = (node.getAttribute('x') as number) ?? 0;
-        const ny = (node.getAttribute('y') as number) ?? 0;
-        return { x: nx + local.x - 0.5, y: ny + local.y - 0.5, width: 1, height: 1 };
+      const port = getCellChildren(node).find((child: any) => child.id === cfg.port) as any;
+      if (port?.getWorldPosition) {
+        const position = port.getWorldPosition();
+        return { x: position.x - 0.5, y: position.y - 0.5, width: 1, height: 1 };
       }
     }
-    // 用 attribute 直接构造 bbox（O(1)），不用 getWorldBBox（矩阵计算，拖动时 3ms/次）
-    return {
-      x: (node.getAttribute('x') as number) ?? 0,
-      y: (node.getAttribute('y') as number) ?? 0,
-      width: (node.getAttribute('width') as number) ?? 0,
-      height: (node.getAttribute('height') as number) ?? 0,
-    };
+    return node.getWorldBBox();
   }
 
   /** 重算并原地更新路径 */
@@ -177,10 +171,8 @@ export class Edge extends Cell {
     const s = this.styleProps();
     const srcNode = this.resolveNode(s.source);
     const tgtNode = this.resolveNode(s.target);
+    this.syncBoundsChangeBindings([srcNode, tgtNode].filter((node): node is Node => !!node));
     if (!srcNode || !tgtNode) return;
-
-    this.bindBoundsChange(srcNode);
-    this.bindBoundsChange(tgtNode);
 
     const resolveAnchor = this.resolveAnchor ?? (() => undefined as unknown as NodeAnchorFn);
     const routerFn = (this.resolveRouter ?? (() => undefined as unknown as RouterFn))(s.router as string);
@@ -195,13 +187,9 @@ export class Edge extends Cell {
     const graph = (this as any).ownerDocument?.defaultView;
     // 仅 astar 路由器需要避障，避免普通路由每次遍历所有节点算 getWorldBBox
     const needObstacles = typeof s.router === 'string' && s.router.includes('astar');
-    // 用 attribute 直接算 bbox（O(1)），不用 getWorldBBox（矩阵计算，O(N) 子元素遍历）
-    const obstacles = needObstacles ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => ({
-      x: (n.getAttribute('x') as number) ?? 0,
-      y: (n.getAttribute('y') as number) ?? 0,
-      width: (n.getAttribute('width') as number) ?? 0,
-      height: (n.getAttribute('height') as number) ?? 0,
-    })) ?? []) : [];
+    const obstacles = needObstacles
+      ? (graph?.getNodes?.()?.filter((n: any) => n.id !== srcNode.id && n.id !== tgtNode.id).map((n: any) => n.getWorldBBox()) ?? [])
+      : [];
     const points = computeEdgePoints(
       { bbox: this.endpointBBox(srcNode, srcCfg), anchorFn: resolveAnchor(srcCfg.anchor), anchorArgs: { shape: srcShape, ...srcCfg.anchorArgs } },
       { bbox: this.endpointBBox(tgtNode, tgtCfg), anchorFn: resolveAnchor(tgtCfg.anchor), anchorArgs: { shape: tgtShape, ...tgtCfg.anchorArgs } },
@@ -230,13 +218,35 @@ export class Edge extends Cell {
     return (doc?.getElementById?.(cfg.cell) as Node) ?? null;
   }
 
-  /** 监听端点节点的 boundschange，去重绑定 */
-  protected bindBoundsChange(node: Node): void {
-    const id = (node as any).id;
-    if (!id || this.boundNodes.has(id)) return;
-    this.boundNodes.add(id);
-    // boundschange 高频触发（拖拽），走 Scheduler 合并（每帧最多 1 次 update）
-    node.addEventListener('node:boundschange', () => this.markDirty(ROUTE));
+  /** 端点变更时重绑，避免旧节点与已删除 Edge 保留闭包引用。 */
+  protected syncBoundsChangeBindings(nodes: Node[]): void {
+    const expected = new Set(nodes);
+    for (const [node, listener] of this.boundNodes) {
+      if (!expected.has(node)) {
+        node.removeEventListener('node:boundschange', listener);
+        this.boundNodes.delete(node);
+      }
+    }
+    for (const node of expected) {
+      if (this.boundNodes.has(node)) continue;
+      // boundschange 高频触发（拖拽），走 Scheduler 合并（每帧最多 1 次 update）
+      const listener = (): void => this.markDirty(ROUTE);
+      node.addEventListener('node:boundschange', listener);
+      this.boundNodes.set(node, listener);
+    }
+  }
+
+  protected unbindBoundsChanges(): void {
+    for (const [node, listener] of this.boundNodes) {
+      node.removeEventListener('node:boundschange', listener);
+    }
+    this.boundNodes.clear();
+  }
+
+  disconnectedCallback(): void {
+    this.stopDashFlow();
+    this.unbindBoundsChanges();
+    super.disconnectedCallback();
   }
 
   /** 根据 className 应用 stateStyles（hover/selected 等） */

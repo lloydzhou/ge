@@ -60,7 +60,8 @@
     document.getElementById('export').onclick = () => {
       const json = graph.toJSON();
       window.__lastJSON = json;
-      console.log('GE JSON:', JSON.stringify(json));
+      console.log('GE GraphJSON:', JSON.stringify(json));
+      // 可在另一张 Graph 上恢复：otherGraph.fromJSON(json)
     };
 
     // 键盘快捷键

@@ -13,10 +13,23 @@ export interface ContextMenuItem {
   separator?: boolean;
 }
 
+type MenuItemListener = { element: HTMLElement; type: string; listener: EventListener };
+
 export class ContextMenuPlugin extends Plugin {
   readonly name = 'contextMenu';
   private menu?: HTMLDivElement;
   private items: ContextMenuItem[];
+  private container?: HTMLElement;
+  private menuItemListeners: MenuItemListener[] = [];
+  private readonly onContextMenu = (e: MouseEvent): void => {
+    const container = this.container;
+    if (!container) return;
+    e.preventDefault();
+    const rect = container.getBoundingClientRect();
+    const target = this.graph.pickNode(e.clientX - rect.left, e.clientY - rect.top);
+    this.show(e.clientX - rect.left, e.clientY - rect.top, target);
+  };
+  private readonly onDocumentClick = (): void => this.hide();
 
   constructor(items: ContextMenuItem[] = []) {
     super();
@@ -28,6 +41,7 @@ export class ContextMenuPlugin extends Plugin {
     const container = graph.getConfig().container as HTMLElement;
     if (!container) return;
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    this.container = container;
 
     this.menu = document.createElement('div');
     this.menu.style.cssText =
@@ -36,18 +50,25 @@ export class ContextMenuPlugin extends Plugin {
       'min-width:120px;font-size:13px;font-family:system-ui,sans-serif;';
     container.appendChild(this.menu);
 
-    container.addEventListener('contextmenu', (e: MouseEvent) => {
-      e.preventDefault();
-      const rect = container.getBoundingClientRect();
-      const target = graph.pickNode(e.clientX - rect.left, e.clientY - rect.top);
-      this.show(e.clientX - rect.left, e.clientY - rect.top, target);
-    });
+    container.addEventListener('contextmenu', this.onContextMenu);
+    document.addEventListener('click', this.onDocumentClick);
+  }
 
-    document.addEventListener('click', () => this.hide());
+  private addMenuItemListener(element: HTMLElement, type: string, listener: EventListener): void {
+    element.addEventListener(type, listener);
+    this.menuItemListeners.push({ element, type, listener });
+  }
+
+  private clearMenuItemListeners(): void {
+    for (const { element, type, listener } of this.menuItemListeners) {
+      element.removeEventListener(type, listener);
+    }
+    this.menuItemListeners = [];
   }
 
   private show(x: number, y: number, target: any): void {
     if (!this.menu) return;
+    this.clearMenuItemListeners();
     this.menu.innerHTML = '';
     for (const item of this.items) {
       if (item.separator) {
@@ -59,12 +80,15 @@ export class ContextMenuPlugin extends Plugin {
       const el = document.createElement('div');
       el.textContent = item.label;
       el.style.cssText = 'padding:6px 16px;cursor:pointer;white-space:nowrap;';
-      el.addEventListener('mouseenter', () => { el.style.background = '#f5f5f5'; });
-      el.addEventListener('mouseleave', () => { el.style.background = ''; });
-      el.addEventListener('click', () => {
+      const onEnter = (): void => { el.style.background = '#f5f5f5'; };
+      const onLeave = (): void => { el.style.background = ''; };
+      const onClick = (): void => {
         item.action?.({ target, graph: this.graph });
         this.hide();
-      });
+      };
+      this.addMenuItemListener(el, 'mouseenter', onEnter);
+      this.addMenuItemListener(el, 'mouseleave', onLeave);
+      this.addMenuItemListener(el, 'click', onClick);
       this.menu.appendChild(el);
     }
     this.menu.style.left = x + 'px';
@@ -77,6 +101,12 @@ export class ContextMenuPlugin extends Plugin {
   }
 
   destroy(): void {
+    if (this.container) this.container.removeEventListener('contextmenu', this.onContextMenu);
+    document.removeEventListener('click', this.onDocumentClick);
+    this.clearMenuItemListeners();
     this.menu?.remove();
+    this.menu = undefined;
+    this.container = undefined;
+    super.destroy();
   }
 }

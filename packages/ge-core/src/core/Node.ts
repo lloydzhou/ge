@@ -371,10 +371,9 @@ export class Node extends Cell {
     return this;
   }
 
-  /** 几何中心（旋转感知，x+w/2, y+h/2，不用 AABB） */
+  /** 世界几何中心。当前 bbox 未纳入旋转后的 AABB，保持与 getWorldBBox() 一致。 */
   getWorldCenter(): { x: number; y: number } {
-    const x = this.getAttribute('x') as number;
-    const y = this.getAttribute('y') as number;
-    return { x: x + (this.getAttribute('width') as number) / 2, y: y + (this.getAttribute('height') as number) / 2 };
+    const bbox = this.getWorldBBox();
+    return { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 };
   }
 }

@@ -13,12 +13,16 @@ import { Node } from './Node';
 import { Edge } from './Edge';
 import { Port } from './Port';
 import { Group } from './Group';
+import { Cell } from './Cell';
+import { getCellChildren } from './cell-tree';
 import {
   TAG,
   CLASS,
   type GraphOptions,
   type NodeProps,
   type EdgeProps,
+  type CellJSON,
+  type GraphJSON,
 } from './types';
 import {
   createDefaultAnchorRegistry,
@@ -38,6 +42,11 @@ import { Scheduler } from './Scheduler';
 
 const resolveContainer = (c: HTMLElement | string): HTMLElement =>
   typeof c === 'string' ? document.querySelector<HTMLElement>(c)! : c;
+
+const deepClone = <T>(value: T): T => {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
+};
 
 export class Graph extends Canvas {
   readonly anchors: AnchorRegistry;
@@ -236,10 +245,9 @@ export class Graph extends Canvas {
     return [...this.getNodes(), ...this.getEdges()];
   }
 
-  /** 清空所有节点和边 */
+  /** 清空所有领域根节点和边，保留 Canvas 的内部渲染树。 */
   clear(): void {
-    for (const e of this.getEdges()) e.remove();
-    for (const n of this.getNodes()) n.remove();
+    for (const cell of getCellChildren(this as any)) cell.remove();
   }
 
   /** 缩放并平移使所有内容适配视口 */
@@ -258,15 +266,15 @@ export class Graph extends Canvas {
     const cw = maxX - minX, ch = maxY - minY;
     if (cw <= 0 || ch <= 0) return;
     const zoom = Math.min(vw / cw, vh / ch, 2);
-    this.getCamera().setZoom(zoom);
+    this.setZoom(zoom);
     this.panTo((minX + maxX) / 2, (minY + maxY) / 2);
   }
 
-  /** 动态调整画布尺寸 */
+  /** 动态调整画布尺寸。 */
   resize(width: number, height: number): void {
-    const cfg = this.getConfig() as any;
-    cfg.width = width;
-    cfg.height = height;
+    super.resize(width, height);
+    if (this._culling) this.cullViewport();
+    this.fireViewportChange();
   }
 
   /** 聚焦到指定节点（平移使其居中，easeOutCubic 动画） */
@@ -381,18 +389,102 @@ export class Graph extends Canvas {
   }
 
   // ---- 序列化 ----
-  toJSON(): { nodes: Record<string, unknown>[]; edges: Record<string, unknown>[] } {
-    // 直接返回 Cell 的 props model（用户设的所有字段都保留，不漏 data/stateStyles 等）
-    const nodes = this.getNodes().map((n: any) => ({ ...n.props }));
-    const edges = this.getEdges().map((e: any) => ({ ...e.props }));
-    return { nodes, edges };
+  /** 序列化整个领域 Cell 树；渲染内部节点不会进入 JSON。 */
+  toJSON(): GraphJSON {
+    return deepClone({
+      version: 1,
+      viewport: {
+        panX: this.panOffset.x,
+        panY: this.panOffset.y,
+        zoom: this.getCamera().getZoom() || 1,
+      },
+      cells: getCellChildren(this as any).filter((cell) => !(cell instanceof Edge)).map((cell) => this.serializeCell(cell))
+        .concat(getCellChildren(this as any).filter((cell): cell is Edge => cell instanceof Edge).map((cell) => this.serializeCell(cell))),
+    });
   }
 
-  fromJSON(data: { nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[] }): void {
-    for (const n of this.getNodes()) n.remove();
-    for (const e of this.getEdges()) e.remove();
-    for (const node of data.nodes ?? []) this.addNode(node as NodeProps & { id?: string });
-    for (const edge of data.edges ?? []) this.addEdge(edge as EdgeProps & { id?: string });
+  /**
+   * 恢复版本化领域树。兼容旧版 { nodes, edges } 输入；未知 tag、重复 id 与非法端点抛出异常。
+   */
+  fromJSON(data: GraphJSON | { nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[] }): void {
+    const normalized = this.normalizeJSON(data);
+    this.validateJSON(normalized);
+    this.clear();
+
+    const edges: CellJSON[] = [];
+    for (const cell of normalized.cells) {
+      if (cell.tag === TAG.edge) edges.push(cell);
+      else this.restoreCell(cell, this);
+    }
+    for (const edge of edges) this.restoreCell(edge, this);
+
+    this.setZoom(normalized.viewport.zoom);
+    const current = { ...this.panOffset };
+    this.panBy((normalized.viewport.panX - current.x) * normalized.viewport.zoom, (normalized.viewport.panY - current.y) * normalized.viewport.zoom);
+  }
+
+  private serializeCell(cell: Cell): CellJSON {
+    const tag = (cell.constructor as any).tag as string;
+    return {
+      tag,
+      id: cell.id || undefined,
+      props: deepClone({ ...cell.props }),
+      data: deepClone(cell.getData()),
+      children: getCellChildren(cell).map((child) => this.serializeCell(child)),
+    };
+  }
+
+  private restoreCell(json: CellJSON, parent: any): Cell {
+    const cell = this.document.createElement<Cell, any>(json.tag, { id: json.id, style: deepClone(json.props) });
+    if (cell instanceof Edge) {
+      cell.resolveAnchor = (name) => this.anchors.resolveNode(name ?? 'perimeter');
+      cell.resolveRouter = (name) => this.routers.resolve(name ?? 'normal');
+      cell.resolveConnector = (name) => this.connectors.resolve(name ?? 'rounded');
+    }
+    parent.appendChild(cell);
+    if (Object.keys(json.data).length > 0) cell.setData(deepClone(json.data));
+    for (const child of json.children) this.restoreCell(child, cell);
+    return cell;
+  }
+
+  private normalizeJSON(data: GraphJSON | { nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[] }): GraphJSON {
+    if ('version' in data && 'cells' in data) return deepClone(data as GraphJSON);
+    return {
+      version: 1,
+      viewport: { panX: this.panOffset.x, panY: this.panOffset.y, zoom: this.getCamera().getZoom() || 1 },
+      cells: [
+        ...((data.nodes ?? []).map((props) => ({ tag: TAG.node, id: props.id as string | undefined, props, data: {}, children: [] }))),
+        ...((data.edges ?? []).map((props) => ({ tag: TAG.edge, id: props.id as string | undefined, props, data: {}, children: [] }))),
+      ].map((cell) => deepClone(cell)),
+    };
+  }
+
+  private validateJSON(data: GraphJSON): void {
+    if (data.version !== 1 || !Array.isArray(data.cells)) throw new Error('[GE] 无效 GraphJSON。');
+    const ids = new Set<string>();
+    const validateCell = (cell: CellJSON, allowEdge: boolean): void => {
+      if (![TAG.node, TAG.group, TAG.port, TAG.edge].includes(cell.tag as any)) throw new Error(`[GE] 未知 Cell tag: ${cell.tag}`);
+      if (!allowEdge && cell.tag === TAG.edge) throw new Error('[GE] Edge 只能位于 Graph 根节点。');
+      if (cell.id) {
+        if (ids.has(cell.id)) throw new Error(`[GE] 重复 Cell id: ${cell.id}`);
+        ids.add(cell.id);
+      }
+      if (!cell.props || !cell.data || !Array.isArray(cell.children)) throw new Error('[GE] 非法 CellJSON。');
+      for (const child of cell.children) {
+        if (cell.tag !== TAG.node && cell.tag !== TAG.group) throw new Error('[GE] 只有 Node/Group 可以拥有领域子元素。');
+        if (child.tag !== TAG.node && child.tag !== TAG.group && child.tag !== TAG.port) throw new Error('[GE] 非法领域子元素。');
+        validateCell(child, false);
+      }
+    };
+    for (const cell of data.cells) validateCell(cell, true);
+    for (const cell of data.cells.filter((item) => item.tag === TAG.edge)) {
+      for (const endpoint of [cell.props.source, cell.props.target]) {
+        const id = typeof endpoint === 'string' ? endpoint : (endpoint as any)?.cell;
+        const isPoint = typeof endpoint === 'object' && endpoint !== null
+          && typeof (endpoint as any).x === 'number' && typeof (endpoint as any).y === 'number';
+        if (!isPoint && (!id || !ids.has(id))) throw new Error(`[GE] Edge 引用了不存在的端点: ${String(id)}`);
+      }
+    }
   }
 
   // ---- 布局 ----
@@ -409,6 +501,9 @@ export class Graph extends Canvas {
 
   // ---- 插件 ----
   use<T extends Plugin>(plugin: T): T {
+    if (this.getPlugin(plugin.name)) {
+      throw new Error(`[GE] Plugin "${plugin.name}" 已安装；请先调用 graph.dispose("${plugin.name}")。`);
+    }
     plugin.init(this);
     this.plugins.push(plugin);
     return plugin;
@@ -416,5 +511,22 @@ export class Graph extends Canvas {
 
   getPlugin(name: string): Plugin | undefined {
     return this.plugins.find((p) => p.name === name);
+  }
+
+  /** 卸载指定插件并释放其事件/DOM 资源。 */
+  dispose(name: string): boolean {
+    const index = this.plugins.findIndex((plugin) => plugin.name === name);
+    if (index < 0) return false;
+    const [plugin] = this.plugins.splice(index, 1);
+    plugin.destroy();
+    return true;
+  }
+
+  /** 销毁 Graph 前先销毁插件和调度器，避免全局监听器与 rAF 泄漏。 */
+  destroy(cleanUp?: boolean, skipTriggerEvent?: boolean): void {
+    for (const plugin of [...this.plugins].reverse()) plugin.destroy();
+    this.plugins = [];
+    this.scheduler.destroy();
+    super.destroy(cleanUp, skipTriggerEvent);
   }
 }

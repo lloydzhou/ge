@@ -33,7 +33,7 @@ GE 继承 g-lite 的基础类：
 
 | g-lite 类 | GE 类 | 说明 |
 |-----------|-------|------|
-| `Canvas` | `Graph` | 图容器，类似 DOM 的 document |
+| `Canvas` | `Graph` | 图容器；`graph.document` 提供 document 风格 API |
 | `CustomElement` | `Cell` → `Node`/`Edge`/`Port` | 可视化元素，类似 DOM 元素 |
 | `DisplayObject` | — | 所有可见元素的基础 |
 
@@ -72,8 +72,8 @@ CustomElement (g-lite)
 
 - 继承 Canvas，持有 `scheduler`（渲染队列）、`anchors`/`routers`/`connectors`/`shapes`（注册表）
 - DOM 操作（appendChild / getElementById / getNodes / getEdges）
-- 插件系统（`use(plugin)` / `dispose(name)`）
-- 撤销/重做（CommandHistory）
+- 插件系统（`use(plugin)` / `dispose(name)` / `destroy()`）；插件销毁时自动解除通过基类登记的监听
+- 通过 `HistoryPlugin` 提供基于完整 GraphJSON 快照的撤销/重做
 
 ### Layer 3: 原语（纯函数，无渲染）
 
@@ -184,18 +184,11 @@ cell.setAttribute('fill', '#f00')
 
 ---
 
-## Model 多 View 方向
+## DOM 领域树与多视图边界
 
-长期方向是 **一个 GraphModel，多种 GraphView**：
+当前唯一事实源是 Graph 内的领域 Cell DOM 树：Node、Group、Port 与 Edge。`body`、label、marker 等是渲染内部元素，不属于领域模型，也不会参与领域遍历或序列化。
 
-```
-GraphModel（唯一事实源：nodes / edges / ports / attrs / viewport）
-  ├─ MainGraphView      主编辑视图，可使用 SVG 或 Canvas renderer
-  ├─ MinimapView        缩略视图，固定使用 Canvas renderer
-  └─ ExportView         导出 / 截图视图，按需创建
-```
-
-当前代码还没有完全拆出 `GraphModel`，因此采用过渡实现：`Graph` 的 `Cell.props` / attributes 先承担轻量 model 职责，`MinimapPlugin` 订阅主图的 cell 事件，把变化同步到一个独立的 overview `Graph`。
+未来可选演进为一个独立的 GraphModel 与多个 View，但这不是当前架构；当前 `MinimapPlugin` 订阅主图的 Cell 事件，把变化同步到独立的 overview Graph。
 
 关键原则：
 
@@ -225,19 +218,11 @@ GraphModel（唯一事实源：nodes / edges / ports / attrs / viewport）
 - **`cell:attributechange` 已走 Scheduler 合并派发**：`Scheduler.addAttributeChange` 收集变更（cell+attr 去重），帧边界统一派发，解决拖拽高频事件风暴。
 - **`viewportchange` 显式事件**：`panBy` / `setZoom` 统一出口，视图订阅即更新，不再依赖 `afterrender` 兜底。
 
-下一步（拆出 `GraphModel` 后）再把 dirty records 从主 view 的 Cell 事件上移到 model 层：
-
-```
-GraphModel mutation
-  → Scheduler 记录 dirty records（Structure / Geometry / Style / Label / Ports / Route / ZIndex / Visible）
-  → MainGraphView.consume(records)
-  → MinimapView.consume(records)
-  → ExportView.consume(records)
-```
+未来若拆出独立 GraphModel，再将 dirty records 从 Cell 事件上移到模型层；在此之前不得维护与 DOM 树并行的 Cell Map。
 
 ### GraphSnapshot（一次性快照）
 
-`GraphSnapshot.from(graph)` 从 `toJSON()` + 当前 viewport 派生一份纯数据快照（深拷贝 nodes/edges），为未来的 ExportView / 截图等**非交互视图**提供一次性输入。与 Minimap 的常驻增量订阅不同：导出是「某一刻的全量」，适合快照而非订阅，不持有 DisplayObject、不常驻。
+`GraphSnapshot.from(graph)` 从完整 `GraphJSON` 与当前 viewport 派生深拷贝纯数据快照，保留递归 cells、viewport 和尺寸，为未来 ExportView / 截图等**非交互视图**提供一次性输入。与 Minimap 的常驻增量订阅不同：导出是「某一刻的全量」，适合快照而非订阅，不持有 DisplayObject、不常驻。
 
 ---
 
@@ -302,16 +287,21 @@ graph.use(new MyPlugin());
 
 ---
 
-## 命令模式（撤销/重做）
+## 序列化与撤销/重做
+
+`graph.toJSON()` 导出版本化的递归 `GraphJSON`：
 
 ```typescript
-await graph.executeCommand(new AddNodeCommand(graph, nodeData));
-await graph.undo();
-await graph.redo();
-graph.canUndo();  // true/false
+{
+  version: 1,
+  viewport: { panX, panY, zoom },
+  cells: [{ tag, id, props, data, children }]
+}
 ```
 
-命令位于 `src/core/commands/`：AddNodeCommand / RemoveNodeCommand / AddEdgeCommand / MoveNodeCommand / BatchCommand 等。
+仅领域 Cell 子树参与序列化；`graph.fromJSON()` 先恢复 Node / Group / Port，再恢复 Edge，因此恢复后端点监听和布局联动仍有效。旧版 `{ nodes, edges }` 输入暂时兼容。
+
+安装 `HistoryPlugin` 后，调用 `mark()` / `commit()` 或 `graph.batch(fn)` 记录完整 GraphJSON 快照，并用 `undo()` / `redo()` 恢复。恢复期间 HistoryPlugin 会抑制自身记录。
 
 ---
 

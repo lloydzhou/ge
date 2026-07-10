@@ -22,6 +22,8 @@ export class Scheduler {
   private queue = new Set<any>();
   private rafId: number | null = null;
   private isFlushing = false;
+  /** 连续超出帧预算的次数，仅用于开发期诊断。 */
+  private overBudgetCount = 0;
   /** 属性变更合并队列：cell → (attrName → record)，保留首次 oldValue 与最新 newValue */
   private attrQueue = new Map<any, Map<string, AttrRecord>>();
 
@@ -65,9 +67,17 @@ export class Scheduler {
       }
     }
     this.isFlushing = false;
-    // 环依赖或极重计算导致超限 → 清空残余（防下一帧继续无限循环）
-    if (this.queue.size > 0) this.queue.clear();
-    // 帧边界统一派发属性变更通知（此时 cell 几何已是最终态）
+    // 环依赖或极重计算导致超限：保留残余，下一帧继续，绝不能静默丢弃 dirty cell。
+    if (this.queue.size > 0) {
+      this.overBudgetCount++;
+      if ((globalThis as any).process?.env?.NODE_ENV !== 'production') {
+        console.warn(`[GE] Scheduler 超出本帧预算，延后处理 ${this.queue.size} 个 dirty cell（第 ${this.overBudgetCount} 次）。`);
+      }
+      if (this.rafId == null) this.schedule();
+    } else {
+      this.overBudgetCount = 0;
+    }
+    // 帧边界统一派发属性变更通知（此时本轮 cell 几何已是最终态）
     this.flushAttributeChanges();
   }
 

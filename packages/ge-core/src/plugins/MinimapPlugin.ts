@@ -9,6 +9,7 @@
 import { Graph } from '../core/Graph';
 import { CLASS } from '../core/types';
 import { Plugin } from './plugin';
+import { getCellChildren, getCellDescendants } from '../core/cell-tree';
 
 export interface MinimapOptions {
   width?: number;
@@ -25,7 +26,7 @@ interface ViewParam {
   pad: number;
 }
 
-type ListenerTarget = { addEventListener?: (type: string, fn: any) => void; removeEventListener?: (type: string, fn: any) => void };
+type ListenerTarget = { addEventListener: (type: string, fn: any) => void; removeEventListener: (type: string, fn: any) => void };
 
 type ListenerRecord = { target: ListenerTarget; type: string; fn: any };
 
@@ -90,31 +91,38 @@ export class MinimapPlugin extends Plugin {
     this.scheduleSync(true);
   }
 
-  private addListener(target: ListenerTarget, type: string, fn: any): void {
-    target.addEventListener?.(type, fn);
-    this.listeners.push({ target, type, fn });
-  }
-
   private bindMainGraph(): void {
     const graph = this.graph as any;
 
-    this.addListener(graph, 'cell:added', (e: any) => this.onCellAdded(e.target));
-    this.addListener(graph, 'cell:removed', (e: any) => this.onCellRemoved(e.target));
-    this.addListener(graph, 'node:boundschange', (e: any) => {
+    const onCellAdded = (e: any): void => this.onCellAdded(e.target);
+    const onCellRemoved = (e: any): void => this.onCellRemoved(e.target);
+    const onBoundsChange = (e: any): void => {
       this.syncNode(e.target);
       this.syncConnectedEdges(e.target?.id);
       this.contentDirty = true;
       this.scheduleSync();
-    });
-    this.addListener(graph, 'cell:attributechange', (e: any) => {
+    };
+    const onAttributeChange = (e: any): void => {
       const cell = e.target;
       this.syncCell(cell);
       if (this.isNode(cell)) this.syncConnectedEdges(cell.id);
       if (this.isPort(cell)) this.syncConnectedEdges((cell.parentNode as any)?.id);
       this.contentDirty = true;
       this.scheduleSync();
-    });
-    this.addListener(graph, 'viewportchange', () => this.scheduleViewport());
+    };
+    const onViewportChange = (): void => this.scheduleViewport();
+    graph.addEventListener('cell:added', onCellAdded);
+    graph.addEventListener('cell:removed', onCellRemoved);
+    graph.addEventListener('node:boundschange', onBoundsChange);
+    graph.addEventListener('cell:attributechange', onAttributeChange);
+    graph.addEventListener('viewportchange', onViewportChange);
+    this.listeners.push(
+      { target: graph, type: 'cell:added', fn: onCellAdded },
+      { target: graph, type: 'cell:removed', fn: onCellRemoved },
+      { target: graph, type: 'node:boundschange', fn: onBoundsChange },
+      { target: graph, type: 'cell:attributechange', fn: onAttributeChange },
+      { target: graph, type: 'viewportchange', fn: onViewportChange },
+    );
   }
 
   private bindNavigation(): void {
@@ -133,7 +141,7 @@ export class MinimapPlugin extends Plugin {
       this.scheduleViewport();
     };
 
-    this.addListener(this.hostEl, 'pointerdown', (e: PointerEvent) => {
+    const onPointerDown = (e: PointerEvent): void => {
       if (!this.hostEl) return;
       e.preventDefault();
       this.dragging = true;
@@ -148,9 +156,17 @@ export class MinimapPlugin extends Plugin {
       const inside = Math.abs(mx - fcx) <= fw / 2 && Math.abs(my - fcy) <= fh / 2;
       this.dragOffset = inside ? { x: mx - fcx, y: my - fcy } : { x: 0, y: 0 };
       navigate(e);
-    });
-    this.addListener(window as any, 'pointermove', (e: PointerEvent) => { if (this.dragging) navigate(e); });
-    this.addListener(window as any, 'pointerup', () => { this.dragging = false; this.dragOffset = null; });
+    };
+    const onPointerMove = (e: PointerEvent): void => { if (this.dragging) navigate(e); };
+    const onPointerUp = (): void => { this.dragging = false; this.dragOffset = null; };
+    this.hostEl.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    this.listeners.push(
+      { target: this.hostEl, type: 'pointerdown', fn: onPointerDown },
+      { target: window, type: 'pointermove', fn: onPointerMove },
+      { target: window, type: 'pointerup', fn: onPointerUp },
+    );
   }
 
   private onCellAdded(cell: any): void {
@@ -181,9 +197,80 @@ export class MinimapPlugin extends Plugin {
     if (!this.overview) return;
     this.overview.clear();
     this.map.clear();
-    for (const node of this.graph.getNodes() as any[]) this.createOrUpdateNode(node);
-    for (const edge of this.graph.getEdges() as any[]) this.createOrUpdateEdge(edge);
+    const jsonCells = (this.graph.toJSON?.() as any)?.cells;
+    if (Array.isArray(jsonCells)) this.syncSerializedCells(jsonCells);
+    else this.syncLiveCells();
     this.contentDirty = true;
+  }
+
+  /** 当前 GraphJSON 使用递归 cells schema 时，直接从纯数据建立 overview。 */
+  private syncSerializedCells(cells: any[]): void {
+    const edges: any[] = [];
+    const visit = (items: any[], offset = { x: 0, y: 0 }): void => {
+      for (const cell of items) {
+        if (!cell || typeof cell !== 'object') continue;
+        if (cell.tag === 'ge-edge') { edges.push(cell); continue; }
+        if (cell.tag !== 'ge-node' && cell.tag !== 'ge-group') continue;
+        const props = { ...(cell.props ?? {}) };
+        const x = Number(props.x ?? 0) + offset.x;
+        const y = Number(props.y ?? 0) + offset.y;
+        const mini = this.createOrUpdateSerializedNode(cell, { ...props, x, y });
+        const children = Array.isArray(cell.children) ? cell.children : [];
+        this.syncSerializedPorts(children, mini);
+        visit(children, { x, y });
+      }
+    };
+    visit(cells);
+    for (const edge of edges) this.createOrUpdateSerializedEdge(edge);
+  }
+
+  /** 旧 schema 或运行时增量同步使用领域 DOM 树。 */
+  private syncLiveCells(): void {
+    const roots = getCellChildren(this.graph as any);
+    const cells = roots.flatMap((root) => [root, ...getCellDescendants(root)]);
+    for (const cell of cells) if (this.isNode(cell)) this.createOrUpdateNode(cell);
+    for (const cell of cells) if (this.isEdge(cell)) this.createOrUpdateEdge(cell);
+  }
+
+  private createOrUpdateSerializedNode(cell: any, props: Record<string, any>): any {
+    if (!this.overview || !cell.id) return null;
+    let mini = this.map.get(cell.id);
+    if (!mini) {
+      mini = cell.tag === 'ge-group'
+        ? this.overview.addGroup(definedProps({ ...props, id: cell.id }) as any)
+        : this.overview.addNode(definedProps({ ...props, id: cell.id }) as any);
+      this.map.set(cell.id, mini);
+    } else {
+      this.applyProps(mini, props);
+    }
+    return mini;
+  }
+
+  private syncSerializedPorts(children: any[], miniNode: any): void {
+    if (!this.overview || !miniNode) return;
+    for (const cell of children) {
+      if (cell?.tag !== 'ge-port' || !cell.id) continue;
+      const props = { ...(cell.props ?? {}), id: cell.id };
+      let miniPort = getCellChildren(miniNode).find((child: any) => this.isPort(child) && child.id === cell.id);
+      if (!miniPort) miniPort = this.overview.addPort(miniNode, definedProps(props) as any);
+      else this.applyProps(miniPort, props);
+    }
+  }
+
+  private createOrUpdateSerializedEdge(cell: any): any {
+    if (!this.overview || !cell?.id) return null;
+    const props = { ...(cell.props ?? {}), id: cell.id };
+    const sourceId = endpointId(props.source);
+    const targetId = endpointId(props.target);
+    if (!sourceId || !targetId || !this.overview.getNode(sourceId) || !this.overview.getNode(targetId)) return null;
+    let mini = this.map.get(cell.id);
+    if (!mini) {
+      mini = this.overview.addEdge(definedProps(props) as any);
+      this.map.set(cell.id, mini);
+    } else {
+      this.applyProps(mini, props);
+    }
+    return mini;
   }
 
   private syncCell(cell: any): void {
@@ -207,7 +294,10 @@ export class MinimapPlugin extends Plugin {
     const props = this.cloneNodeProps(node);
     let mini = this.map.get(node.id);
     if (!mini) {
-      mini = this.overview.addNode(definedProps(props) as any);
+      // Group 保留为 Group，内部 Node 以世界坐标平铺至 overview，避免继承坐标重复偏移。
+      mini = this.isGroup(node)
+        ? this.overview.addGroup(definedProps(props) as any)
+        : this.overview.addNode(definedProps(props) as any);
       this.map.set(node.id, mini);
     } else {
       this.applyProps(mini, props);
@@ -235,15 +325,15 @@ export class MinimapPlugin extends Plugin {
 
   private syncPorts(sourceNode: any, miniNode: any): void {
     if (!this.overview || !sourceNode || !miniNode) return;
-    const sourcePorts = ((sourceNode.children ?? []) as any[]).filter((c) => this.isPort(c) && c.id);
+    const sourcePorts = getCellChildren(sourceNode).filter((c: any) => this.isPort(c) && c.id) as any[];
     const keep = new Set(sourcePorts.map((p) => p.id));
 
-    for (const child of [...((miniNode.children ?? []) as any[])]) {
+    for (const child of getCellChildren(miniNode)) {
       if (this.isPort(child) && child.id && !keep.has(child.id)) child.remove?.();
     }
 
     for (const port of sourcePorts) {
-      let miniPort = ((miniNode.children ?? []) as any[]).find((c) => this.isPort(c) && c.id === port.id);
+      let miniPort = getCellChildren(miniNode).find((c: any) => this.isPort(c) && c.id === port.id);
       const props = { ...port.props, id: port.id };
       if (!miniPort) miniPort = this.overview.addPort(miniNode, definedProps(props) as any);
       else this.applyProps(miniPort, props);
@@ -252,9 +342,12 @@ export class MinimapPlugin extends Plugin {
 
   private syncConnectedEdges(nodeId?: string): void {
     if (!nodeId) return;
-    for (const edge of this.graph.getEdges() as any[]) {
-      const source = endpointId(edge.getAttribute('source'));
-      const target = endpointId(edge.getAttribute('target'));
+    const roots = getCellChildren(this.graph as any);
+    const cells = roots.flatMap((root) => [root, ...getCellDescendants(root)]);
+    for (const edge of cells) {
+      if (!this.isEdge(edge)) continue;
+      const source = endpointId((edge as any).getAttribute('source'));
+      const target = endpointId((edge as any).getAttribute('target'));
       if (source === nodeId || target === nodeId) this.syncEdge(edge);
     }
   }
@@ -346,7 +439,8 @@ export class MinimapPlugin extends Plugin {
   }
 
   private contentWorldBBox(): { minX: number; minY: number; maxX: number; maxY: number } {
-    const nodes = this.graph.getNodes() as any[];
+    const roots = getCellChildren(this.graph as any);
+    const nodes = roots.flatMap((root) => [root, ...getCellDescendants(root)]).filter((cell) => this.isNode(cell)) as any[];
     const viewport = this.viewportWorldBBox();
     if (nodes.length === 0) {
       return { minX: viewport.x, minY: viewport.y, maxX: viewport.x + viewport.width, maxY: viewport.y + viewport.height };
@@ -415,6 +509,10 @@ export class MinimapPlugin extends Plugin {
     return typeof cls === 'string' && (cls.includes(CLASS.node) || cls.includes(CLASS.group));
   }
 
+  private isGroup(cell: any): boolean {
+    return typeof cell?.className === 'string' && cell.className.includes(CLASS.group);
+  }
+
   private isEdge(cell: any): boolean {
     return typeof cell?.className === 'string' && cell.className.includes(CLASS.edge);
   }
@@ -426,7 +524,7 @@ export class MinimapPlugin extends Plugin {
   destroy(): void {
     if (this.syncRafId) cancelAnimationFrame(this.syncRafId);
     if (this.viewportRafId) cancelAnimationFrame(this.viewportRafId);
-    for (const { target, type, fn } of this.listeners) target.removeEventListener?.(type, fn);
+    for (const { target, type, fn } of this.listeners) target.removeEventListener(type, fn);
     this.listeners = [];
     this.map.clear();
     this.overview?.destroy?.();
@@ -434,6 +532,7 @@ export class MinimapPlugin extends Plugin {
     this.overview = undefined;
     this.hostEl = undefined;
     this.viewportEl = undefined;
+    super.destroy();
   }
 }
 

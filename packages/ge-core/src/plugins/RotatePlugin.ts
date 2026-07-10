@@ -1,81 +1,73 @@
-/**
- * RotatePlugin —— 节点旋转手柄（中心用实际几何中心，非 AABB）。
- *
- * - 选中单个节点 + `rotatable: true` 时，在节点上方显示旋转手柄（紫色圆柄）。
- * - 拖拽手柄 → 计算角度 → setAttribute('angle', x)（DOM 化声明式）。
- * - 旋转中心用 x+w/2, y+h/2（不用 AABB，旋转后准确）。
- */
+/** 节点旋转手柄。 */
 import { OverlayPlugin } from './plugin';
 
 export class RotatePlugin extends OverlayPlugin {
   readonly name = 'rotate';
   private handle?: HTMLDivElement;
+  private container?: HTMLElement;
   private target?: any;
   private rotating = false;
+  private readonly onBoundsChange = (): void => this.update();
+  private readonly onHandlePointerDown = (event: PointerEvent): void => {
+    if (!this.target) return;
+    event.stopPropagation();
+    this.rotating = true;
+  };
+  private readonly onWindowPointerMove = (event: PointerEvent): void => {
+    if (!this.rotating || !this.target || !this.container) return;
+    const center = this.centerViewport(this.target);
+    const rect = this.container.getBoundingClientRect();
+    const angle = Math.atan2(event.clientX - rect.left - center.x, -(event.clientY - rect.top - center.y)) * 180 / Math.PI;
+    this.target.setAttribute('angle', Math.round(angle));
+    this.update();
+  };
+  private readonly onWindowPointerUp = (): void => { this.rotating = false; };
 
   init(graph: any): void {
     super.init(graph);
     const container = graph.getConfig().container as HTMLElement;
     if (!container) return;
-
+    this.container = container;
     this.handle = document.createElement('div');
     this.handle.setAttribute('data-ge-rotate', 'true');
-    this.handle.style.cssText =
-      'position:absolute;width:12px;height:12px;background:#722ed1;border:2px solid #fff;' +
-      'border-radius:50%;cursor:grab;z-index:11;display:none;pointer-events:auto;';
+    this.handle.style.cssText = 'position:absolute;width:12px;height:12px;background:#722ed1;border:2px solid #fff;border-radius:50%;cursor:grab;z-index:11;display:none;pointer-events:auto;';
     container.appendChild(this.handle);
-    // 节点移动/旋转时即时跟随（boundschange 在 Scheduler flush 内同步触发）
-    graph.addEventListener('node:boundschange', () => this.update());
-
-    this.handle.addEventListener('pointerdown', (e: PointerEvent) => {
-      if (!this.target) return;
-      e.stopPropagation();
-      this.rotating = true;
-    });
-    const containerRect = () => container.getBoundingClientRect();
-    window.addEventListener('pointermove', (e: PointerEvent) => {
-      if (!this.rotating || !this.target) return;
-      const centerVp = this.centerViewport(this.target);
-      const rect = containerRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const dx = mx - centerVp.x;
-      const dy = my - centerVp.y;
-      const angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
-      this.target.setAttribute('angle', Math.round(angle));
-      this.update();
-    });
-    window.addEventListener('pointerup', () => { this.rotating = false; });
+    graph.addEventListener('node:boundschange', this.onBoundsChange);
+    this.handle.addEventListener('pointerdown', this.onHandlePointerDown);
+    window.addEventListener('pointermove', this.onWindowPointerMove);
+    window.addEventListener('pointerup', this.onWindowPointerUp);
   }
 
-  /** 节点实际几何中心 → 视口坐标（不用 AABB，旋转后准确） */
   private centerViewport(node: any): { x: number; y: number } {
-    const x = node.getAttribute('x') as number;
-    const y = node.getAttribute('y') as number;
-    const w = node.getAttribute('width') as number;
-    const h = node.getAttribute('height') as number;
-    return this.graph.canvas2Viewport({ x: x + w / 2, y: y + h / 2 });
+    return this.graph.canvas2Viewport({ x: node.getAttribute('x') + node.getAttribute('width') / 2, y: node.getAttribute('y') + node.getAttribute('height') / 2 });
   }
 
   protected update(): void {
     if (!this.handle) return;
-    const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
-    if (sel.length !== 1) { this.handle.style.display = 'none'; this.target = undefined; return; }
-    const node = this.graph.getNode(sel[0]);
+    const selected = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
+    if (selected.length !== 1) { this.handle.style.display = 'none'; this.target = undefined; return; }
+    const node = this.graph.getNode(selected[0]);
     if (!node || !node.getAttribute('rotatable')) { this.handle.style.display = 'none'; this.target = undefined; return; }
     this.target = node;
-    const centerVp = this.centerViewport(node);
-    const angle = (node.getAttribute('angle') as number) ?? 0;
-    const rad = (angle * Math.PI) / 180;
-    const h = node.getAttribute('height') as number;
-    const zoom = this.graph.getCamera().getZoom() || 1;
-    const dist = (h / 2) * zoom + 22;
-    this.handle.style.left = centerVp.x + Math.sin(rad) * dist - 6 + 'px';
-    this.handle.style.top = centerVp.y - Math.cos(rad) * dist - 6 + 'px';
+    const center = this.centerViewport(node);
+    const radians = ((node.getAttribute('angle') ?? 0) * Math.PI) / 180;
+    const distance = node.getAttribute('height') / 2 * (this.graph.getCamera().getZoom() || 1) + 22;
+    this.handle.style.left = center.x + Math.sin(radians) * distance - 6 + 'px';
+    this.handle.style.top = center.y - Math.cos(radians) * distance - 6 + 'px';
     this.handle.style.display = 'block';
   }
 
   protected isActive(): boolean { return !!this.handle && this.handle.style.display !== 'none'; }
 
-  destroy(): void { this.handle?.remove(); }
+  destroy(): void {
+    this.graph.removeEventListener('node:boundschange', this.onBoundsChange);
+    this.handle?.removeEventListener('pointerdown', this.onHandlePointerDown);
+    window.removeEventListener('pointermove', this.onWindowPointerMove);
+    window.removeEventListener('pointerup', this.onWindowPointerUp);
+    this.handle?.remove();
+    this.handle = undefined;
+    this.container = undefined;
+    this.rotating = false;
+    super.destroy();
+  }
 }

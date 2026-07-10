@@ -1,80 +1,53 @@
-/**
- * DragPlugin —— 节点/分组拖拽移动（可选 snap to grid）。
- *
- * - 监听 graph 的 pointerdown/move/up（事件冒泡到 Canvas）。
- * - snapGrid > 0 时拖拽吸附网格。
- * - pointermove 直接 moveTo（setAttribute → markDirty），由 Scheduler 在帧边界合并 applyPosition。
- */
+/** 节点/分组拖拽移动（可选 snap to grid）。 */
 import { CustomEvent } from '@antv/g-lite';
-import { Plugin, closestCell } from './plugin';
+import { Plugin } from './plugin';
 
-interface DragState {
-  node: any;
-  sx: number;
-  sy: number;
-  ox: number;
-  oy: number;
-}
-
-export interface DragOptions {
-  /** 网格吸附大小（0 = 不吸附） */
-  snapGrid?: number;
-}
+interface DragState { node: any; sx: number; sy: number; ox: number; oy: number; }
+export interface DragOptions { snapGrid?: number; }
 
 export class DragPlugin extends Plugin {
   readonly name = 'drag';
   private dragging: DragState | null = null;
   private snapGrid: number;
+  private readonly onPointerDown = (e: any): void => {
+    if (e.altKey || (typeof e.target?.className === 'string' && e.target.className.includes('ge-port'))) return;
+    const node = this.graph.pickNode(e.viewportX, e.viewportY);
+    if (!node) return;
+    const point = this.graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
+    this.dragging = { node, sx: point.x, sy: point.y, ox: node.getAttribute('x') ?? 0, oy: node.getAttribute('y') ?? 0 };
+  };
+  private readonly onPointerMove = (e: any): void => {
+    if (!this.dragging) return;
+    const point = this.graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
+    let x = this.dragging.ox + point.x - this.dragging.sx;
+    let y = this.dragging.oy + point.y - this.dragging.sy;
+    if (this.snapGrid > 0) { x = Math.round(x / this.snapGrid) * this.snapGrid; y = Math.round(y / this.snapGrid) * this.snapGrid; }
+    this.dragging.node.moveTo(x, y);
+  };
+  private readonly onPointerUp = (): void => {
+    const node = this.dragging?.node;
+    this.dragging = null;
+    if (!node) return;
+    this.graph.scheduler?.flush();
+    node.dispatchEvent(new CustomEvent('node:dragend', { bubbles: true }));
+  };
 
-  constructor(options: DragOptions = {}) {
-    super();
-    this.snapGrid = options.snapGrid ?? 0;
-  }
+  constructor(options: DragOptions = {}) { super(); this.snapGrid = options.snapGrid ?? 0; }
 
   init(graph: any): void {
     super.init(graph);
+    graph.addEventListener('pointerdown', this.onPointerDown);
+    graph.addEventListener('pointermove', this.onPointerMove);
+    graph.addEventListener('pointerup', this.onPointerUp);
+    graph.addEventListener('pointerupoutside', this.onPointerUp);
+  }
 
-    graph.addEventListener('pointerdown', (e: any) => {
-      if (e.altKey) return;
-      // port 拖出连线交给 CreateEdgePlugin，不拖动节点
-      const tgt = e.target;
-      if (tgt && typeof tgt.className === 'string' && tgt.className.includes('ge-port')) return;
-      const node = graph.pickNode(e.viewportX, e.viewportY);
-      if (!node) return;
-      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-      this.dragging = {
-        node,
-        sx: w.x,
-        sy: w.y,
-        ox: (node.getAttribute('x') as number) ?? 0,
-        oy: (node.getAttribute('y') as number) ?? 0,
-      };
-    });
-
-    graph.addEventListener('pointermove', (e: any) => {
-      if (!this.dragging) return;
-      const d = this.dragging;
-      const w = graph.viewport2Canvas({ x: e.viewportX, y: e.viewportY });
-      let nx = d.ox + (w.x - d.sx);
-      let ny = d.oy + (w.y - d.sy);
-      if (this.snapGrid > 0) {
-        nx = Math.round(nx / this.snapGrid) * this.snapGrid;
-        ny = Math.round(ny / this.snapGrid) * this.snapGrid;
-      }
-      // moveTo → setAttribute → markDirty → Scheduler 帧边界合并 applyPosition
-      d.node.moveTo(nx, ny);
-    });
-
-    const end = (): void => {
-      const node = this.dragging?.node;
-      this.dragging = null;
-      if (node) {
-        // 确保拖拽结束位置立即生效（视觉 + 联动 Edge/Port）
-        graph.scheduler?.flush();
-        node.dispatchEvent(new CustomEvent('node:dragend', { bubbles: true }));
-      }
-    };
-    graph.addEventListener('pointerup', end);
-    graph.addEventListener('pointerupoutside', end);
+  destroy(): void {
+    this.graph.removeEventListener('pointerdown', this.onPointerDown);
+    this.graph.removeEventListener('pointermove', this.onPointerMove);
+    this.graph.removeEventListener('pointerup', this.onPointerUp);
+    this.graph.removeEventListener('pointerupoutside', this.onPointerUp);
+    this.dragging = null;
+    super.destroy();
   }
 }

@@ -1,142 +1,99 @@
-/**
- * ResizePlugin —— 节点 8 向尺寸调整手柄（旋转感知 OBB）。
- *
- * - 选中单个节点 + `resizable: true` 时，显示 8 个手柄（4 角 + 4 边中点）。
- * - 手柄位置用节点局部角 + 旋转（OBB），旋转后仍贴合实际角。
- * - 拖拽 delta 沿节点局部轴（旋转后方向正确），保持对角固定。
- */
+/** 节点八向尺寸调整手柄（旋转感知 OBB）。 */
 import { OverlayPlugin } from './plugin';
 
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
 type Dir = (typeof HANDLES)[number];
-
-const CURSORS: Record<Dir, string> = {
-  nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize',
-  w: 'ew-resize', e: 'ew-resize',
-  sw: 'nesw-resize', s: 'ns-resize', se: 'nwse-resize',
-};
-
-const BASE_CURSOR_ANGLE: Record<Dir, number> = { e:0, se:45, s:90, sw:135, w:180, nw:225, n:270, ne:315 };
-const CURSOR_TYPES = ['ew-resize','nwse-resize','ns-resize','nesw-resize','ew-resize','nwse-resize','ns-resize','nesw-resize'];
-const cursorFor = (dir: Dir, angle: number): string => {
-  const a = ((BASE_CURSOR_ANGLE[dir] + angle) % 360 + 360) % 360;
-  return CURSOR_TYPES[Math.floor((a + 22.5) / 45) % 8];
-};
+const BASE_CURSOR_ANGLE: Record<Dir, number> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
+const CURSOR_TYPES = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize', 'ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
+const cursorFor = (dir: Dir, angle: number): string => CURSOR_TYPES[Math.floor((((BASE_CURSOR_ANGLE[dir] + angle) % 360 + 360) % 360 + 22.5) / 45) % 8];
 
 export class ResizePlugin extends OverlayPlugin {
   readonly name = 'resize';
   private handles: Record<string, HTMLDivElement> = {};
+  private handleListeners = new Map<HTMLDivElement, (event: PointerEvent) => void>();
   private target?: any;
   private resizing: { dir: Dir; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number; oa: number } | null = null;
+  private readonly onGraphPointerDown = (): void => { setTimeout(() => this.update(), 0); };
+  private readonly onUpdate = (): void => this.update();
+  private readonly onResizeAfterRender = (): void => { if (this.handles.se?.style.display !== 'none') this.update(); };
+  private readonly onWindowPointerMove = (event: PointerEvent): void => {
+    if (!this.resizing || !this.target) return;
+    const zoom = this.graph.getCamera().getZoom() || 1;
+    const { dir, sx, sy, ox, oy, ow, oh, oa } = this.resizing;
+    const worldX = (event.clientX - sx) / zoom, worldY = (event.clientY - sy) / zoom;
+    const radians = oa * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians);
+    const localX = worldX * cos + worldY * sin, localY = -worldX * sin + worldY * cos;
+    const width = Math.max(20, ow + (dir.includes('e') ? localX : dir.includes('w') ? -localX : 0));
+    const height = Math.max(20, oh + (dir.includes('s') ? localY : dir.includes('n') ? -localY : 0));
+    const centerLocalX = dir.includes('e') ? (width - ow) / 2 : dir.includes('w') ? -(width - ow) / 2 : 0;
+    const centerLocalY = dir.includes('s') ? (height - oh) / 2 : dir.includes('n') ? -(height - oh) / 2 : 0;
+    const centerWorldX = centerLocalX * cos - centerLocalY * sin, centerWorldY = centerLocalX * sin + centerLocalY * cos;
+    this.target.setAttribute('x', ox + ow / 2 + centerWorldX - width / 2);
+    this.target.setAttribute('y', oy + oh / 2 + centerWorldY - height / 2);
+    this.target.setAttribute('width', width); this.target.setAttribute('height', height);
+    this.update();
+  };
+  private readonly onWindowPointerUp = (): void => { this.resizing = null; };
 
   init(graph: any): void {
     super.init(graph);
     const container = graph.getConfig().container as HTMLElement;
     if (!container) return;
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-
     for (const dir of HANDLES) {
-      const h = document.createElement('div');
-      h.setAttribute('data-ge-resize', dir);
-      h.style.cssText =
-        `position:absolute;width:8px;height:8px;background:#1890ff;border:1px solid #fff;` +
-        `border-radius:2px;cursor:${CURSORS[dir]};z-index:11;display:none;pointer-events:auto;`;
-      container.appendChild(h);
-      this.handles[dir] = h;
-      h.addEventListener('pointerdown', (e: PointerEvent) => {
+      const handle = document.createElement('div');
+      handle.setAttribute('data-ge-resize', dir);
+      handle.style.cssText = `position:absolute;width:8px;height:8px;background:#1890ff;border:1px solid #fff;border-radius:2px;cursor:ew-resize;z-index:11;display:none;pointer-events:auto;`;
+      const listener = (event: PointerEvent): void => {
         if (!this.target) return;
-        e.stopPropagation();
-        this.resizing = {
-          dir, sx: e.clientX, sy: e.clientY,
-          ox: this.target.getAttribute('x') as number,
-          oy: this.target.getAttribute('y') as number,
-          ow: this.target.getAttribute('width') as number,
-          oh: this.target.getAttribute('height') as number,
-          oa: (this.target.getAttribute('angle') as number) ?? 0,
-        };
-      });
+        event.stopPropagation();
+        this.resizing = { dir, sx: event.clientX, sy: event.clientY, ox: this.target.getAttribute('x'), oy: this.target.getAttribute('y'), ow: this.target.getAttribute('width'), oh: this.target.getAttribute('height'), oa: this.target.getAttribute('angle') ?? 0 };
+      };
+      handle.addEventListener('pointerdown', listener);
+      this.handleListeners.set(handle, listener);
+      container.appendChild(handle); this.handles[dir] = handle;
     }
-
-    const update = (): void => this.update();
-    graph.addEventListener('pointerdown', () => setTimeout(update, 0));
-    graph.addEventListener('node:dragend', update);
-    graph.addEventListener('node:boundschange', update);
-    graph.addEventListener('afterrender', () => {
-      if (this.handles['se'] && this.handles['se'].style.display !== 'none') update();
-    });
-
-    window.addEventListener('pointermove', (e: PointerEvent) => {
-      if (!this.resizing || !this.target) return;
-      const zoom = graph.getCamera().getZoom() || 1;
-      const wdx = (e.clientX - this.resizing.sx) / zoom;
-      const wdy = (e.clientY - this.resizing.sy) / zoom;
-      const { dir, ox, oy, ow, oh, oa } = this.resizing;
-      // 世界 delta → 节点局部 delta（逆旋转）
-      const rad = oa * Math.PI / 180;
-      const cos = Math.cos(rad), sin = Math.sin(rad);
-      const ldx = wdx * cos + wdy * sin;
-      const ldy = -wdx * sin + wdy * cos;
-      // 局部尺寸变化
-      let lw = 0, lh = 0;
-      if (dir.includes('e')) lw = ldx;
-      if (dir.includes('w')) lw = -ldx;
-      if (dir.includes('s')) lh = ldy;
-      if (dir.includes('n')) lh = -ldy;
-      const nw = Math.max(20, ow + lw);
-      const nh = Math.max(20, oh + lh);
-      // 对角固定的局部中心位移
-      const clw = (dir.includes('e') ? (nw - ow) / 2 : (dir.includes('w') ? -(nw - ow) / 2 : 0));
-      const clh = (dir.includes('s') ? (nh - oh) / 2 : (dir.includes('n') ? -(nh - oh) / 2 : 0));
-      // 局部中心位移 → 世界
-      const cwx = clw * cos - clh * sin;
-      const cwy = clw * sin + clh * cos;
-      const ocx = ox + ow / 2, ocy = oy + oh / 2;
-      this.target.setAttribute('x', ocx + cwx - nw / 2);
-      this.target.setAttribute('y', ocy + cwy - nh / 2);
-      this.target.setAttribute('width', nw);
-      this.target.setAttribute('height', nh);
-      this.update();
-    });
-    window.addEventListener('pointerup', () => { this.resizing = null; });
+    graph.addEventListener('pointerdown', this.onGraphPointerDown);
+    graph.addEventListener('node:dragend', this.onUpdate);
+    graph.addEventListener('node:boundschange', this.onUpdate);
+    graph.addEventListener('afterrender', this.onResizeAfterRender);
+    window.addEventListener('pointermove', this.onWindowPointerMove);
+    window.addEventListener('pointerup', this.onWindowPointerUp);
   }
 
   protected update(): void {
-    const sel = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
-    const node = sel.length === 1 ? this.graph.getNode(sel[0]) : null;
-    const show = !!(node && node.getAttribute('resizable'));
-    this.target = show ? node : undefined;
-
+    const selected = (this.graph.getPlugin('selection') as any)?.getSelected?.() ?? [];
+    const node = selected.length === 1 ? this.graph.getNode(selected[0]) : null;
+    const visible = !!(node && node.getAttribute('resizable'));
+    this.target = visible ? node : undefined;
     for (const dir of HANDLES) {
-      const h = this.handles[dir];
-      if (!h) continue;
-      if (!show || !node) { h.style.display = 'none'; continue; }
-      // OBB：节点局部角 + 旋转
-      const x = node.getAttribute('x') as number;
-      const y = node.getAttribute('y') as number;
-      const w = node.getAttribute('width') as number;
-      const hh = node.getAttribute('height') as number;
-      const a = ((node.getAttribute('angle') as number) ?? 0) * Math.PI / 180;
-      const cos = Math.cos(a), sin = Math.sin(a);
-      const cx = x + w / 2, cy = y + hh / 2;
-      const rot = (lx: number, ly: number) => ({ x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos });
-      const C = { nw: rot(-w / 2, -hh / 2), ne: rot(w / 2, -hh / 2), se: rot(w / 2, hh / 2), sw: rot(-w / 2, hh / 2) };
-      const V = { nw: this.graph.canvas2Viewport(C.nw), ne: this.graph.canvas2Viewport(C.ne), se: this.graph.canvas2Viewport(C.se), sw: this.graph.canvas2Viewport(C.sw) };
-      const pos: Record<string, { x: number; y: number }> = {
-        nw: V.nw, n: { x: (V.nw.x + V.ne.x) / 2, y: (V.nw.y + V.ne.y) / 2 }, ne: V.ne,
-        w: { x: (V.nw.x + V.sw.x) / 2, y: (V.nw.y + V.sw.y) / 2 }, e: { x: (V.ne.x + V.se.x) / 2, y: (V.ne.y + V.se.y) / 2 },
-        sw: V.sw, s: { x: (V.sw.x + V.se.x) / 2, y: (V.sw.y + V.se.y) / 2 }, se: V.se,
-      };
-      const p = pos[dir];
-      h.style.left = p.x - 4 + 'px';
-      h.style.top = p.y - 4 + 'px';
-      h.style.cursor = cursorFor(dir, ((node.getAttribute('angle') as number) ?? 0));
-      h.style.display = 'block';
+      const handle = this.handles[dir]; if (!handle) continue;
+      if (!visible || !node) { handle.style.display = 'none'; continue; }
+      const x = node.getAttribute('x'), y = node.getAttribute('y'), width = node.getAttribute('width'), height = node.getAttribute('height');
+      const angle = (node.getAttribute('angle') ?? 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle), cx = x + width / 2, cy = y + height / 2;
+      const rotate = (localX: number, localY: number) => ({ x: cx + localX * cos - localY * sin, y: cy + localX * sin + localY * cos });
+      const corners = { nw: rotate(-width / 2, -height / 2), ne: rotate(width / 2, -height / 2), se: rotate(width / 2, height / 2), sw: rotate(-width / 2, height / 2) };
+      const points = { nw: this.graph.canvas2Viewport(corners.nw), ne: this.graph.canvas2Viewport(corners.ne), se: this.graph.canvas2Viewport(corners.se), sw: this.graph.canvas2Viewport(corners.sw) };
+      const positions: Record<Dir, { x: number; y: number }> = { nw: points.nw, n: { x: (points.nw.x + points.ne.x) / 2, y: (points.nw.y + points.ne.y) / 2 }, ne: points.ne, w: { x: (points.nw.x + points.sw.x) / 2, y: (points.nw.y + points.sw.y) / 2 }, e: { x: (points.ne.x + points.se.x) / 2, y: (points.ne.y + points.se.y) / 2 }, sw: points.sw, s: { x: (points.sw.x + points.se.x) / 2, y: (points.sw.y + points.se.y) / 2 }, se: points.se };
+      const point = positions[dir];
+      handle.style.left = point.x - 4 + 'px'; handle.style.top = point.y - 4 + 'px';
+      handle.style.cursor = cursorFor(dir, node.getAttribute('angle') ?? 0); handle.style.display = 'block';
     }
   }
 
-  protected isActive(): boolean { return !!(this.target && this.handles['se'] && this.handles['se'].style.display !== 'none'); }
+  protected isActive(): boolean { return !!(this.target && this.handles.se?.style.display !== 'none'); }
 
   destroy(): void {
+    this.graph.removeEventListener('pointerdown', this.onGraphPointerDown);
+    this.graph.removeEventListener('node:dragend', this.onUpdate);
+    this.graph.removeEventListener('node:boundschange', this.onUpdate);
+    this.graph.removeEventListener('afterrender', this.onResizeAfterRender);
+    window.removeEventListener('pointermove', this.onWindowPointerMove);
+    window.removeEventListener('pointerup', this.onWindowPointerUp);
+    for (const [handle, listener] of this.handleListeners) handle.removeEventListener('pointerdown', listener);
+    this.handleListeners.clear();
     for (const dir of HANDLES) this.handles[dir]?.remove();
+    this.handles = {}; this.target = undefined; this.resizing = null;
+    super.destroy();
   }
 }
