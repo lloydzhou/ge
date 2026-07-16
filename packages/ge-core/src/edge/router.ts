@@ -71,23 +71,32 @@ export const manhattanRouter: RouterFn = (points) => {
 };
 
 /** A* 避障路由：网格化 + 寻路避开 obstacles */
+const ASTAR_GRID_LIMIT = 1000;
+
 export const manhattanAStarRouter: RouterFn = (points, options) => {
   const d = dedup(points);
   if (d.length < 2) return d;
   const obstacles = (options?.obstacles as { x: number; y: number; width: number; height: number }[]) ?? [];
   const res = (options?.resolution as number) ?? 10;
+  if (!Number.isFinite(res) || res <= 0) return manhattanRouter(d);
   const pad = (options?.padding as number) ?? 5;
   const start = d[0], end = d[d.length - 1];
-  const blocked = new Set<string>();
-  for (const o of obstacles) {
-    const x1 = Math.floor((o.x - pad) / res), y1 = Math.floor((o.y - pad) / res);
-    const x2 = Math.ceil((o.x + o.width + pad) / res), y2 = Math.ceil((o.y + o.height + pad) / res);
-    for (let gx = x1; gx <= x2; gx++) for (let gy = y1; gy <= y2; gy++) blocked.add(gx + ',' + gy);
-  }
   const sx = Math.round(start.x / res), sy = Math.round(start.y / res);
   const ex = Math.round(end.x / res), ey = Math.round(end.y / res);
   const gridArea = (Math.abs(ex - sx) + 1) * (Math.abs(ey - sy) + 1);
-  if (!isFinite(gridArea) || gridArea > 1000) return manhattanRouter(d);
+  if (!Number.isFinite(gridArea) || gridArea > ASTAR_GRID_LIMIT) return manhattanRouter(d);
+  const blocked = new Set<string>();
+  let blockedArea = 0;
+  for (const o of obstacles) {
+    const x1 = Math.floor((o.x - pad) / res), y1 = Math.floor((o.y - pad) / res);
+    const x2 = Math.ceil((o.x + o.width + pad) / res), y2 = Math.ceil((o.y + o.height + pad) / res);
+    const obstacleArea = (x2 - x1 + 1) * (y2 - y1 + 1);
+    blockedArea += obstacleArea;
+    if (!Number.isFinite(obstacleArea) || obstacleArea < 0 || blockedArea > ASTAR_GRID_LIMIT) {
+      return manhattanRouter(d);
+    }
+    for (let gx = x1; gx <= x2; gx++) for (let gy = y1; gy <= y2; gy++) blocked.add(gx + ',' + gy);
+  }
   blocked.delete(sx + ',' + sy); blocked.delete(ex + ',' + ey);
   // 最小堆优先队列：O(log N) push/pop，替代线性查找 O(N²)
   const heap: any[] = [];

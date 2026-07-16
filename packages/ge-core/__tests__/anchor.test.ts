@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   anchorCenter, anchorTop, anchorBottom, anchorLeft, anchorRight,
   anchorTopLeft, anchorTopRight, anchorBottomLeft, anchorBottomRight,
-  anchorRatio, anchorCoordinate, anchorPerimeter,
-} from '../src/anchor/node-anchor';
-import { pathLength, edgeAnchorRatio, edgeAnchorLength, edgeAnchorMid, edgeAnchorSegment } from '../src/anchor/edge-anchor';
-import { AnchorRegistry, createDefaultAnchorRegistry } from '../src/anchor/registry';
+  anchorRatio, anchorCoordinate, anchorPerimeter, builtInNodeAnchors,
+  pathLength, edgeAnchorRatio, edgeAnchorLength, edgeAnchorMid, edgeAnchorSegment,
+  builtInEdgeAnchors, AnchorRegistry, createDefaultAnchorRegistry,
+} from '../src/index';
 import type { BBox, Point } from '../src/utils/types';
 
 const box: BBox = { x: 0, y: 0, width: 10, height: 6 };
@@ -83,21 +83,38 @@ describe('edge-anchor', () => {
     expect(edgeAnchorMid(pts)).toEqual({ x: 10, y: 0 });
   });
 
-  it('segment: 指定段', () => {
+  it('segment: 指定段并截断索引与段内比例', () => {
     // 第 1 段 (10,0)->(10,10)，t=0.5 → (10,5)
     expect(edgeAnchorSegment(pts, { segmentIndex: 1, segmentT: 0.5 })).toEqual({ x: 10, y: 5 });
+    expect(edgeAnchorSegment(pts, { segmentIndex: -1, segmentT: -1 })).toEqual({ x: 0, y: 0 });
+    expect(edgeAnchorSegment(pts, { segmentIndex: 99, segmentT: 2 })).toEqual({ x: 10, y: 10 });
+  });
+
+  it('空路径、单点和重复点均返回有限坐标', () => {
+    const single = [{ x: 3, y: -2 }];
+    const repeated = [{ x: 3, y: -2 }, { x: 3, y: -2 }];
+    const anchors = [edgeAnchorRatio, edgeAnchorLength, edgeAnchorMid, edgeAnchorSegment];
+    for (const anchor of anchors) {
+      expect(anchor([], {})).toEqual({ x: 0, y: 0 });
+      expect(anchor(single, {})).toEqual(single[0]);
+      const point = anchor(repeated, {});
+      expect(Number.isFinite(point.x)).toBe(true);
+      expect(Number.isFinite(point.y)).toBe(true);
+    }
+    expect(edgeAnchorRatio(pts, { t: NaN })).toEqual({ x: 0, y: 0 });
+    expect(edgeAnchorLength(pts, { length: Infinity })).toEqual({ x: 0, y: 0 });
   });
 });
 
 describe('AnchorRegistry', () => {
-  it('默认注册表包含全部内置锚点', () => {
+  it('默认注册表与全部内置锚点映射同步', () => {
     const r = createDefaultAnchorRegistry();
-    expect(r.hasNode('center')).toBe(true);
-    expect(r.hasNode('perimeter')).toBe(true);
-    expect(r.hasNode('ratio')).toBe(true);
-    expect(r.hasEdge('ratio')).toBe(true);
-    expect(r.hasEdge('mid')).toBe(true);
-    expect(r.listNode().length).toBeGreaterThanOrEqual(11);
+    expect(r.listNode().sort()).toEqual(Object.keys(builtInNodeAnchors).sort());
+    expect(r.listEdge().sort()).toEqual(Object.keys(builtInEdgeAnchors).sort());
+    for (const [name, fn] of Object.entries(builtInNodeAnchors)) expect(r.getNode(name)).toBe(fn);
+    for (const [name, fn] of Object.entries(builtInEdgeAnchors)) expect(r.getEdge(name)).toBe(fn);
+    expect(r.getNode('not-exist')).toBeUndefined();
+    expect(r.getEdge('not-exist')).toBeUndefined();
   });
 
   it('resolveNode 未知名称回退到 center', () => {
@@ -112,9 +129,20 @@ describe('AnchorRegistry', () => {
     expect(fn([{ x: 0, y: 0 }, { x: 10, y: 0 }], { t: 0.5 })).toEqual({ x: 5, y: 0 });
   });
 
-  it('自定义注册', () => {
-    const r = createDefaultAnchorRegistry();
-    r.registerNode('custom', (_b, args) => ({ x: args.x ?? 0, y: args.y ?? 0 }));
-    expect(r.resolveNode('custom')(box, { x: 9, y: 9 })).toEqual({ x: 9, y: 9 });
+  it('节点和边锚点支持链式注册与同名覆盖', () => {
+    const r = new AnchorRegistry();
+    const nodeFirst = (_b: BBox) => ({ x: 1, y: 1 });
+    const nodeSecond = (_b: BBox) => ({ x: 2, y: 2 });
+    const edgeFirst = (_points: Point[]) => ({ x: 3, y: 3 });
+    const edgeSecond = (_points: Point[]) => ({ x: 4, y: 4 });
+    expect(r.registerNode('custom', nodeFirst)).toBe(r);
+    expect(r.registerEdge('custom', edgeFirst)).toBe(r);
+    expect(r.hasNode('custom')).toBe(true);
+    expect(r.hasEdge('custom')).toBe(true);
+    expect(r.getNode('custom')).toBe(nodeFirst);
+    expect(r.getEdge('custom')).toBe(edgeFirst);
+    r.registerNode('custom', nodeSecond).registerEdge('custom', edgeSecond);
+    expect(r.getNode('custom')).toBe(nodeSecond);
+    expect(r.getEdge('custom')).toBe(edgeSecond);
   });
 });

@@ -6,7 +6,10 @@ import type { Point } from '../utils/types';
 import { distance } from '../utils/math';
 import type { EdgeAnchorFn } from './types';
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+const clamp01 = (v: number): number => {
+  if (!Number.isFinite(v)) return 0;
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+};
 
 /** 路径总长度（折线累加） */
 export const pathLength = (points: Point[]): number => {
@@ -47,11 +50,14 @@ export const edgeAnchorMid: EdgeAnchorFn = (points) => edgeAnchorRatio(points, {
 
 /** 在指定段的 t 位置取点 */
 export const edgeAnchorSegment: EdgeAnchorFn = (points, args = {}) => {
-  const idx = Math.min(Math.max(args.segmentIndex ?? 0, 0), points.length - 2);
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return { ...points[0] };
+  const requestedIndex = args.segmentIndex ?? 0;
+  const segmentIndex = Number.isFinite(requestedIndex) ? Math.trunc(requestedIndex) : 0;
+  const idx = Math.min(Math.max(segmentIndex, 0), points.length - 2);
   const a = points[idx];
   const b = points[idx + 1];
-  if (!a || !b) return a ? { ...a } : { x: 0, y: 0 };
-  const t = args.segmentT ?? 0;
+  const t = clamp01(args.segmentT ?? 0);
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 };
 

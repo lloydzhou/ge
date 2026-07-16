@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  add, sub, scale, dot, cross, length, distance, normalize, angle, lerp, equals, rad2deg, deg2rad,
-} from '../src/utils/math';
+  vec, clone, add, sub, scale, negate, dot, cross, length, distance,
+  normalize, angle, lerp, equals, rad2deg, deg2rad,
+} from '../src/index';
 import {
   EPS,
   isPointInBBox, bboxCenter, bboxCorners, bboxFromPoints, mergeBBox, expandBBox,
@@ -13,6 +14,18 @@ import type { BBox, Point } from '../src/utils/types';
 const around = (p: Point): [number, number] => [+p.x.toFixed(6), +p.y.toFixed(6)];
 
 describe('math', () => {
+  it('vec / clone / negate 返回新对象且不修改输入', () => {
+    expect(vec(2, -3)).toEqual({ x: 2, y: -3 });
+    const input = { x: 2, y: -3 };
+    const copy = clone(input);
+    const opposite = negate(input);
+    expect(copy).toEqual(input);
+    expect(copy).not.toBe(input);
+    expect(opposite).toEqual({ x: -2, y: 3 });
+    expect(opposite).not.toBe(input);
+    expect(input).toEqual({ x: 2, y: -3 });
+  });
+
   it('add / sub / scale', () => {
     expect(add({ x: 1, y: 2 }, { x: 3, y: 4 })).toEqual({ x: 4, y: 6 });
     expect(sub({ x: 5, y: 5 }, { x: 1, y: 2 })).toEqual({ x: 4, y: 3 });
@@ -68,7 +81,12 @@ describe('geometry', () => {
     expect(c.bottomRight).toEqual({ x: 10, y: 6 });
   });
 
-  it('bboxFromPoints', () => {
+  it('bboxFromPoints 处理空数组、单点和重复点', () => {
+    expect(bboxFromPoints([])).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+    expect(bboxFromPoints([{ x: 3, y: -2 }])).toEqual({ x: 3, y: -2, width: 0, height: 0 });
+    expect(bboxFromPoints([{ x: 3, y: -2 }, { x: 3, y: -2 }])).toEqual({
+      x: 3, y: -2, width: 0, height: 0,
+    });
     expect(bboxFromPoints([{ x: 1, y: 2 }, { x: 4, y: 6 }, { x: 0, y: 0 }])).toEqual({
       x: 0, y: 0, width: 4, height: 6,
     });
@@ -89,6 +107,11 @@ describe('geometry', () => {
     // 端点外 clamp
     expect(closestPointOnSegment({ x: -3, y: 5 }, a, b)).toEqual({ x: 0, y: 0 });
     expect(distanceToSegment({ x: 5, y: 5 }, a, b)).toBe(5);
+    const endpoint = { x: 2, y: 3 };
+    const closest = closestPointOnSegment({ x: 8, y: 7 }, endpoint, endpoint);
+    expect(closest).toEqual(endpoint);
+    expect(closest).not.toBe(endpoint);
+    expect(distanceToSegment({ x: 5, y: 7 }, endpoint, endpoint)).toBe(5);
   });
 
   it('segmentIntersect', () => {
@@ -98,11 +121,24 @@ describe('geometry', () => {
     expect(segmentIntersect({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 5 }, { x: 10, y: 5 })).toBeNull();
     // 不在线段范围
     expect(segmentIntersect({ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 5, y: 0 }, { x: 5, y: 5 })).toBeNull();
+    // 端点接触属于相交
+    expect(segmentIntersect(
+      { x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 },
+    )).toEqual({ x: 5, y: 0 });
+    // 共线重叠和零长度线段不返回唯一交点
+    expect(segmentIntersect(
+      { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 0 }, { x: 15, y: 0 },
+    )).toBeNull();
+    expect(segmentIntersect(
+      { x: 1, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 1 }, { x: 2, y: 1 },
+    )).toBeNull();
   });
 
-  it('getBBoxEdgePoint: 从中心向右', () => {
-    const edge = getBBoxEdgePoint({ x: 5, y: 3 }, { x: 100, y: 3 }, box);
+  it('getBBoxEdgePoint: 从中心向右并处理零方向', () => {
+    const center = { x: 5, y: 3 };
+    const edge = getBBoxEdgePoint(center, { x: 100, y: 3 }, box);
     expect(edge).toEqual({ x: 10, y: 3 });
+    expect(getBBoxEdgePoint(center, center, box)).toBe(center);
   });
 
   it('getBBoxEdgePoint: 斜向 (中心到右下角方向)', () => {

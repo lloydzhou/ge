@@ -14,6 +14,7 @@ export const circularLayout = (nodes: LayoutNode[], options: CircularOptions = {
   const cx = options.cx ?? 400;
   const cy = options.cy ?? 300;
   const radius = options.radius ?? Math.max(120, n * 30);
+  if (![cx, cy, radius].every(Number.isFinite)) throw new RangeError('圆形布局参数必须是有限数');
   const pos: Positions = new Map();
   nodes.forEach((node, i) => {
     const angle = (2 * Math.PI * i) / Math.max(1, n);

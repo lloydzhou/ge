@@ -29,10 +29,12 @@ export const treeLayout = (
   const sx = options.startX ?? 80;
   const sy = options.startY ?? 80;
 
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const validEdges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
   const childrenMap = new Map<string, string[]>();
   const parentSet = new Set<string>();
   nodes.forEach((n) => { if (!childrenMap.has(n.id)) childrenMap.set(n.id, []); });
-  edges.forEach((e) => {
+  validEdges.forEach((e) => {
     if (!childrenMap.has(e.source)) childrenMap.set(e.source, []);
     childrenMap.get(e.source)!.push(e.target);
     parentSet.add(e.target);

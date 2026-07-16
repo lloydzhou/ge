@@ -1,12 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   normalRouter, orthogonalRouter, manhattanRouter, manhattanAStarRouter,
-  RouterRegistry, createDefaultRouterRegistry,
-} from '../src/edge/router';
-import {
+  builtInRouters, RouterRegistry, createDefaultRouterRegistry,
   normalConnector, polylineConnector, roundedConnector, smoothConnector,
-  ConnectorRegistry, createDefaultConnectorRegistry, updatePath,
-} from '../src/edge/connector';
+  builtInConnectors, ConnectorRegistry, createDefaultConnectorRegistry, updatePath,
+} from '../src/index';
 import type { Point } from '../src/utils/types';
 import { Edge } from '../src/core/Edge';
 import { Port } from '../src/core/Port';
@@ -165,10 +163,17 @@ describe('router', () => {
     ]);
   });
 
-  it('RouterRegistry: 注册 / 解析 / 回退', () => {
+  it('RouterRegistry: 内置映射、链式注册、覆盖与回退', () => {
     const r = createDefaultRouterRegistry();
-    expect(r.has('manhattan')).toBe(true);
-    expect(r.list()).toContain('orthogonal');
+    expect(r.list().sort()).toEqual(Object.keys(builtInRouters).sort());
+    for (const [name, fn] of Object.entries(builtInRouters)) expect(r.resolve(name)).toBe(fn);
+    const first = () => [{ x: 1, y: 1 }];
+    const second = () => [{ x: 2, y: 2 }];
+    expect(r.register('custom', first)).toBe(r);
+    expect(r.has('custom')).toBe(true);
+    expect(r.resolve('custom')).toBe(first);
+    r.register('custom', second);
+    expect(r.resolve('custom')).toBe(second);
     expect(r.resolve('not-exist')([{ x: 1, y: 1 }])).toEqual([{ x: 1, y: 1 }]);
   });
 });
@@ -209,9 +214,28 @@ describe('connector', () => {
     expect(d.endsWith('10 10')).toBe(true);
   });
 
-  it('ConnectorRegistry: 回退到 normal', () => {
+  it('连接器退化参数不产生非有限路径', () => {
+    const repeated = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 10, y: 0 }];
+    for (const radius of [0, -1, 1e9, NaN, Infinity]) {
+      expect(roundedConnector(repeated, { radius })).not.toMatch(/NaN|Infinity/);
+    }
+    for (const tension of [0, -1, 1e9, NaN, Infinity, -Infinity]) {
+      expect(smoothConnector(repeated, { tension })).not.toMatch(/NaN|Infinity/);
+    }
+    expect(normalConnector([{ x: 1, y: 2 }])).toBe('M 1 2');
+  });
+
+  it('ConnectorRegistry: 内置映射、链式注册、覆盖与回退', () => {
     const r = createDefaultConnectorRegistry();
-    expect(r.has('smooth')).toBe(true);
+    expect(r.list().sort()).toEqual(Object.keys(builtInConnectors).sort());
+    for (const [name, fn] of Object.entries(builtInConnectors)) expect(r.resolve(name)).toBe(fn);
+    const first = () => 'first';
+    const second = () => 'second';
+    expect(r.register('custom', first)).toBe(r);
+    expect(r.has('custom')).toBe(true);
+    expect(r.resolve('custom')).toBe(first);
+    r.register('custom', second);
+    expect(r.resolve('custom')).toBe(second);
     expect(r.resolve('not-exist')(seg2)).toBe('M 0 0 L 10 0');
   });
 
@@ -223,6 +247,9 @@ describe('connector', () => {
     updatePath(fakePath, seg3, normalConnector, {});
     expect(fakePath.setAttribute).toHaveBeenCalledTimes(2);
     expect(fakePath.setAttribute).toHaveBeenLastCalledWith('d', 'M 0 0 L 10 0 L 10 10');
+    updatePath(fakePath, [], normalConnector, {});
+    expect(fakePath.setAttribute).toHaveBeenCalledTimes(3);
+    expect(fakePath.setAttribute).toHaveBeenLastCalledWith('d', '');
   });
 });
 
@@ -285,8 +312,17 @@ describe('manhattanAStarRouter', () => {
     }
   });
 
-  it('端点拖远（grid 搜索空间爆炸）→ 降级 manhattan 不卡死', () => {
-    // 模拟 astar-t 被拖到远处：grid 距离 > 4000 格，A* 必须降级
+  it('非法或过小分辨率在栅格化障碍前降级', () => {
+    const points = [{ x: 0, y: 0 }, { x: 100, y: 100 }];
+    const fallback = manhattanRouter(points);
+    const obstacles = [{ x: 20, y: 20, width: 40, height: 40 }];
+    for (const resolution of [0, -1, NaN, Infinity, -Infinity, Number.MIN_VALUE, 1e-9]) {
+      expect(manhattanAStarRouter(points, { obstacles, resolution })).toEqual(fallback);
+    }
+  });
+
+  it('端点拖远（网格搜索空间超过上限）→ 降级 manhattan 不卡死', () => {
+    // 模拟端点被拖到远处：网格搜索空间超过一千格，必须降级
     const far = manhattanAStarRouter(
       [{ x: 990, y: 82 }, { x: -2000, y: 3000 }],
       { obstacles: [], resolution: 10 }
