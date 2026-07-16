@@ -22,6 +22,8 @@ export const hierarchicalLayout = (
   const sx = options.startX ?? 80;
   const sy = options.startY ?? 80;
 
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const validEdges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
   const indeg = new Map<string, number>();
   const depth = new Map<string, number>();
   const adj = new Map<string, string[]>();
@@ -29,7 +31,7 @@ export const hierarchicalLayout = (
     indeg.set(n.id, 0);
     depth.set(n.id, 0);
   });
-  edges.forEach((e) => {
+  validEdges.forEach((e) => {
     if (!indeg.has(e.target)) indeg.set(e.target, 0);
     indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1);
     if (!adj.has(e.source)) adj.set(e.source, []);

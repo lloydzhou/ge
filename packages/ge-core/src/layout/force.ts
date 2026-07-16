@@ -18,7 +18,12 @@ export const forceLayout = (
   const W = options.width ?? 800;
   const H = options.height ?? 600;
   const iters = options.iterations ?? 300;
+  if (!Number.isFinite(W) || W <= 0 || !Number.isFinite(H) || H <= 0) {
+    throw new RangeError('力导向布局宽高必须是有限正数');
+  }
+  if (!Number.isInteger(iters) || iters < 0) throw new RangeError('iterations 必须是非负整数');
   const k = options.k ?? Math.sqrt((W * H) / Math.max(1, nodes.length));
+  if (!Number.isFinite(k) || k <= 0) throw new RangeError('k 必须是有限正数');
 
   const pos: Positions = new Map();
   nodes.forEach((node) => {

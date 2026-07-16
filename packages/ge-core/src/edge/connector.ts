@@ -33,7 +33,8 @@ export const normalConnector: ConnectorFn = (points) => {
 export const polylineConnector: ConnectorFn = normalConnector;
 
 export const roundedConnector: ConnectorFn = (points, options = {}) => {
-  const radius = options.radius ?? 8;
+  const requestedRadius = options.radius ?? 8;
+  const radius = Number.isFinite(requestedRadius) ? requestedRadius : 8;
   if (points.length < 3) return normalConnector(points);
   let d = moveTo(points[0]);
   for (let i = 1; i < points.length - 1; i++) {
@@ -64,7 +65,8 @@ export const roundedConnector: ConnectorFn = (points, options = {}) => {
 };
 
 export const smoothConnector: ConnectorFn = (points, options = {}) => {
-  const tension = options.tension ?? 1;
+  const requestedTension = options.tension ?? 1;
+  const tension = Number.isFinite(requestedTension) ? requestedTension : 1;
   if (points.length < 3) return normalConnector(points);
   let d = moveTo(points[0]);
   for (let i = 0; i < points.length - 1; i++) {

@@ -25,8 +25,9 @@ export const bboxCorners = (b: BBox): BBoxCorners => ({
   bottomRight: { x: b.x + b.width, y: b.y + b.height },
 });
 
-/** 由一组点构造 bbox */
+/** 由一组点构造 bbox；空点集返回零包围盒 */
 export const bboxFromPoints = (points: Point[]): BBox => {
+  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of points) {
     if (p.x < minX) minX = p.x;
