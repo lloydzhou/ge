@@ -2,6 +2,7 @@
   "name": "@antv/ge",
   "version": "2.0.0-alpha.0",
   "private": true,
+  "packageManager": "pnpm@10.24.0",
   "description": "GE - A modern graph editor built on AntV/G DOM model (graph-editing DOM spec on top of g-lite)",
   "keywords": [
     "antv",
