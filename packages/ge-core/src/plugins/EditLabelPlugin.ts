@@ -2,17 +2,19 @@
  * EditLabelPlugin —— 双击节点 inline 编辑标签。
  * 双击节点 → 在节点上方显示 input → 回车确认 / ESC 取消 / blur 确认。
  */
-import { Plugin, closestCell } from './plugin';
+import { Plugin } from './plugin';
 
 export class EditLabelPlugin extends Plugin {
   readonly name = 'edit-label';
   private input?: HTMLInputElement;
   private inputKeydown?: (event: KeyboardEvent) => void;
   private inputBlur?: () => void;
-  private readonly onDblClick = (e: any): void => {
+  private readonly onDblClick = (e: MouseEvent): void => {
     const container = this.container;
-    if (!container) return;
-    const node = closestCell(e.target);
+    if (!container || !this.graph) return;
+    const rect = container.getBoundingClientRect();
+    // g-lite 不转发 dblclick 事件，这里监听原生 dblclick 并用 pickNode 命中节点
+    const node = this.graph.pickNode(e.clientX - rect.left, e.clientY - rect.top);
     if (!node) return;
     e.preventDefault();
     this.showEditor(container, node, (node.getAttribute('label') as string) ?? '');
@@ -25,7 +27,7 @@ export class EditLabelPlugin extends Plugin {
     if (!container) return;
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     this.container = container;
-    graph.addEventListener('dblclick', this.onDblClick);
+    container.addEventListener('dblclick', this.onDblClick);
   }
 
   private closeEditor(): void {
@@ -63,7 +65,7 @@ export class EditLabelPlugin extends Plugin {
 
   destroy(): void {
     this.closeEditor();
-    this.graph.removeEventListener('dblclick', this.onDblClick);
+    this.container?.removeEventListener('dblclick', this.onDblClick);
     this.container = undefined;
     super.destroy();
   }
