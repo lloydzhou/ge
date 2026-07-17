@@ -108,6 +108,9 @@ export default defineConfig({
         '@ge': fileURLToPath(new URL('../../packages/ge-core/src/index.ts', import.meta.url)),
         '@ge-react': fileURLToPath(new URL('../../packages/ge-react/src/index.ts', import.meta.url)),
         '@examples': fileURLToPath(new URL('../../examples', import.meta.url)),
+        // 覆盖包名 import（@ge-react 源码内部按 @antv/ge-core 引入），指向源码避免依赖 dist 产物
+        '@antv/ge-core': fileURLToPath(new URL('../../packages/ge-core/src/index.ts', import.meta.url)),
+        '@antv/ge-react': fileURLToPath(new URL('../../packages/ge-react/src/index.ts', import.meta.url)),
       },
     },
     server: {
