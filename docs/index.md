@@ -40,3 +40,15 @@ features:
     title: React 支持
     details: "@antv/ge-react 声明式 GraphView，props 变化自动 diff 同步（增/删/改）。"
 ---
+
+<div class="vp-home-demo">
+
+## 🎬 在线体验
+
+下方是一个**真实渲染的流程图（非截图）**：可拖拽节点、滚轮缩放。点击右上角「全屏交互」获得更大画布。
+
+<ExamplePreview src="home/demo" :height="460" />
+
+> 想看更多能力？前往 [示例库](/examples/) 浏览全部 18 个场景，或阅读 [快速开始](/guide/getting-started)。
+
+</div>
