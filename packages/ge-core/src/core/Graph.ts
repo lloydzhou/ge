@@ -48,6 +48,25 @@ const deepClone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
+/** 点到线段的距离 */
+const pointToSegmentDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+};
+
+/** 点到折线的最近距离 */
+const pointToPolylineDist = (p: { x: number; y: number }, pts: { x: number; y: number }[]): number => {
+  let min = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const d = pointToSegmentDist(p, pts[i - 1], pts[i]);
+    if (d < min) min = d;
+  }
+  return min;
+};
+
 export class Graph extends Canvas {
   readonly anchors: AnchorRegistry;
   readonly shapes: ShapeRegistry;
@@ -162,6 +181,34 @@ export class Graph extends Canvas {
       }
     }
     return null;
+  }
+
+  /**
+   * 命中测试：视口点 → 顶层边（点到路径折线的距离 ≤ 容差）。
+   * g-lite 不转发 dblclick，VertexPlugin 改用原生 dblclick + pickEdge 命中边。
+   */
+  pickEdge(viewportX: number, viewportY: number, tolerance = 12): any {
+    const w = this.viewport2Canvas({ x: viewportX, y: viewportY });
+    const edges = this.getEdges();
+    for (let i = edges.length - 1; i >= 0; i--) {
+      const e = edges[i] as any;
+      const pts = this.edgePolylinePoints(e);
+      if (pts.length >= 2 && pointToPolylineDist(w, pts) <= tolerance) return e;
+    }
+    return null;
+  }
+
+  /** 边的折线点序列：source 中心 → waypoints → target 中心 */
+  private edgePolylinePoints(edge: any): { x: number; y: number }[] {
+    const src = edge.getAttribute('source');
+    const tgt = edge.getAttribute('target');
+    const sn = this.getNode(typeof src === 'string' ? src : src?.cell);
+    const tn = this.getNode(typeof tgt === 'string' ? tgt : tgt?.cell);
+    const pts: { x: number; y: number }[] = [];
+    if (sn) pts.push(sn.getWorldCenter());
+    for (const p of (edge.getAttribute('waypoints') as any[]) || []) pts.push({ x: p.x, y: p.y });
+    if (tn) pts.push(tn.getWorldCenter());
+    return pts;
   }
 
   protected registerElements(): void {

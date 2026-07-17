@@ -18,6 +18,7 @@ type HandleListeners = {
 
 export class VertexPlugin extends Plugin {
   readonly name = 'vertex';
+  private container?: HTMLElement;
   private activeEdge?: any;
   private handles: HTMLDivElement[] = [];
   private handleListeners = new Map<HTMLDivElement, HandleListeners>();
@@ -25,12 +26,19 @@ export class VertexPlugin extends Plugin {
   private tgtHandle?: HTMLDivElement;
   private endpointListeners: Array<{ handle: HTMLDivElement; onPointerDown: (event: PointerEvent) => void; onPointerUp: (event: PointerEvent) => void }> = [];
   private edgeDrag: { sx: number; sy: number; wps: any[] } | null = null;
-  private readonly onDblClick = (e: any): void => {
-    const edge = closestEdge(e.target);
-    if (!edge || e.target?.getAttribute?.('data-ge-endpoint')) return;
+  private readonly onDblClick = (e: MouseEvent): void => {
+    if (!this.container || !this.graph) return;
+    const rect = this.container.getBoundingClientRect();
+    const vx = e.clientX - rect.left;
+    const vy = e.clientY - rect.top;
+    // g-lite 不转发 dblclick，改监听原生 dblclick + pickEdge 命中边
+    const edge = this.graph.pickEdge(vx, vy);
+    if (!edge) return;
+    e.preventDefault();
     this.activeEdge = edge;
     const wps = (((edge.getAttribute('waypoints') as Point[]) || []) as Point[]).slice();
-    wps.push({ x: e.canvasX, y: e.canvasY });
+    const c = this.graph.viewport2Canvas({ x: vx, y: vy });
+    wps.push({ x: c.x, y: c.y });
     edge.setAttribute('waypoints', wps);
     this.syncHandles();
   };
@@ -59,7 +67,8 @@ export class VertexPlugin extends Plugin {
     const container = graph.getConfig().container as HTMLElement;
     if (!container) return;
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
-    graph.addEventListener('dblclick', this.onDblClick);
+    this.container = container;
+    container.addEventListener('dblclick', this.onDblClick);
     graph.addEventListener('afterrender', this.onAfterRender);
     graph.addEventListener('pointerdown', this.onPointerDown);
     graph.addEventListener('pointermove', this.onPointerMove);
@@ -200,7 +209,7 @@ export class VertexPlugin extends Plugin {
     this.tgtHandle?.remove();
     this.srcHandle = undefined;
     this.tgtHandle = undefined;
-    this.graph.removeEventListener('dblclick', this.onDblClick);
+    this.container?.removeEventListener('dblclick', this.onDblClick);
     this.graph.removeEventListener('afterrender', this.onAfterRender);
     this.graph.removeEventListener('pointerdown', this.onPointerDown);
     this.graph.removeEventListener('pointermove', this.onPointerMove);
