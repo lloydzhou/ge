@@ -28,7 +28,7 @@ graph.addEdge({ source: { cell: 'n1', port: 'p1' }, target: 'n2:p2' });
 |------|------|
 | `router` | normal / orthogonal / manhattan / **manhattan-astar**（A* 避障） |
 | `connector` | normal / rounded / smooth |
-| `vertices` | 路径控制点 `[{ x, y }]` |
+| `waypoints` | 路径控制点 `[{ x, y }]` |
 
 ```ts
 graph.addEdge({ source: 'a', target: 'b', router: 'manhattan-astar' });

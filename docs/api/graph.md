@@ -6,7 +6,7 @@
 
 ```ts
 const graph = new Graph({
-  container: 'app',  // DOM 容器 id 或元素
+  container: '#app',  // 选择器字符串或 HTMLElement
   width: 800,
   height: 600,
 });
@@ -43,7 +43,7 @@ graph.removeCell('n1');
 | `getNodes()` | Node[] |
 | `getEdges()` | Edge[] |
 | `getCells()` | (Node \| Edge)[] |
-| `getElement(id)` | 任意元素 |
+| `getElementById(id)` | 任意元素 |
 | `clear()` | 清空所有 |
 
 ## 坐标
@@ -77,8 +77,12 @@ graph.batch(() => { ... });     // 批量（History 合并）
 ## 布局
 
 ```ts
-graph.applyLayout('hierarchical', { nodeGap: 140, layerGap: 110 });
-// grid / circular / force / hierarchical
+import { hierarchicalLayout } from '@antv/ge';
+
+// 布局函数为纯函数，返回 positions Map，由 graph.applyLayout 应用
+const positions = hierarchicalLayout(nodes, edges, { nodeGap: 140, layerGap: 110 });
+graph.applyLayout(positions);
+// 可用：gridLayout / circularLayout / forceLayout / hierarchicalLayout / treeLayout
 ```
 
 ## 插件

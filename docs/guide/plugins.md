@@ -1,6 +1,6 @@
 # 插件系统
 
-GE 提供 21 个插件，覆盖图编辑器的全部交互能力。
+GE 提供 20 个插件，覆盖图编辑器的全部交互能力。
 
 ## 安装插件
 
@@ -58,7 +58,6 @@ graph.use(new HistoryPlugin());
 
 | 插件 | 用途 |
 |------|------|
-| `GroupPlugin` | 分组嵌套 |
 | `DndPlugin` | Stencil 拖拽创建 |
 | `ContextMenuPlugin` | 右键菜单 |
 | `TooltipPlugin` | 悬停提示 |
