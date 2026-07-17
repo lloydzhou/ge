@@ -10,6 +10,9 @@ hero:
       text: 快速开始
       link: /guide/getting-started
     - theme: alt
+      text: 示例
+      link: /examples/
+    - theme: alt
       text: GitHub
       link: https://github.com/lloydzhou/ge
 
@@ -35,5 +38,5 @@ features:
     details: ShapeRegistry / Markup+Selector / Attrs / Model，数据结构对标 X6，降低迁移成本。
   - icon: ⚛️
     title: React 支持
-    details: @antv/ge-react 声明式 GraphView，props 变化自动 diff 同步（增/删/改）。
+    details: "@antv/ge-react 声明式 GraphView，props 变化自动 diff 同步（增/删/改）。"
 ---

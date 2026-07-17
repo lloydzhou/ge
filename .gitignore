@@ -7,6 +7,10 @@ esm
 dist
 build
 
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist
+
 # Logs
 logs
 *.log
