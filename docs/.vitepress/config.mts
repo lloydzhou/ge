@@ -37,19 +37,49 @@ export default defineConfig({
           items: [
             { text: '基础渲染', link: '/examples/node/basic' },
             { text: '内置 Shape', link: '/examples/node/shapes' },
+            { text: '分组', link: '/examples/node/group' },
           ],
         },
         {
           text: '边',
           items: [
             { text: '路由与连接器', link: '/examples/edge/router' },
+            { text: '端口连接', link: '/examples/edge/port' },
           ],
         },
         {
           text: '交互插件',
           items: [
             { text: '拖拽与选中', link: '/examples/plugin/interaction' },
+            { text: '对齐辅助线', link: '/examples/plugin/snapline' },
+            { text: '编辑动作', link: '/examples/plugin/edit' },
+            { text: '模具拖拽', link: '/examples/plugin/stencil' },
             { text: '全功能演示', link: '/examples/plugin/all-features' },
+          ],
+        },
+        {
+          text: '布局',
+          items: [
+            { text: '布局算法', link: '/examples/layout/grid' },
+          ],
+        },
+        {
+          text: '坐标变换',
+          items: [
+            { text: '平移与缩放', link: '/examples/coordinate/pan-zoom' },
+          ],
+        },
+        {
+          text: '数据导出',
+          items: [
+            { text: '序列化', link: '/examples/data/serialize' },
+            { text: '导出图片', link: '/examples/data/export' },
+          ],
+        },
+        {
+          text: 'React',
+          items: [
+            { text: 'GraphView', link: '/examples/react/basic' },
           ],
         },
       ],
