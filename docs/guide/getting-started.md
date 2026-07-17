@@ -70,9 +70,13 @@ graph.addEventListener('cell:added', (e) => console.log('added', e.detail.cell.i
 - **数据结构**：借鉴 X6（Markup / Selector / Attrs / stateStyles）
 - **交互 API**：靠拢 DOM（setAttribute / appendChild / addEventListener）
 
-| 操作 | ❌ 命令式 | ✅ GE DOM 化 |
-|------|---------|-------------|
-| 创建节点 | graph.addNode({...}) | graph.appendChild(new Node({...})) |
-| 变换 | node.resize(w,h) | node.setAttribute('width', w) |
+GE 的节点 / 边是真正的 DOM 元素（继承 `CustomElement`），增删改查一律走 DOM 原语。核心是**摒弃 X6 的命令式 API**（`graph.on` / `node.addTools` / `node.resize` / `node.prop`），改用 DOM 原生等价物：
+
+| 操作 | ❌ X6 命令式（GE 不采用） | ✅ GE DOM 化 |
+|------|------------------------|-------------|
+| 改属性 | node.resize(w,h) / node.prop(...) | node.setAttribute('width', w) |
 | 工具 | node.addTools(['resize']) | node.setAttribute('resizable', true) |
 | 事件 | graph.on('node:click') | graph.addEventListener('click') |
+| 查询 | 自造 Map / cell.getData() | getElementById / getElementsByClassName |
+
+> **关于创建节点**：`graph.addNode({...})` 与 `graph.appendChild(new Node({...}))` **完全等价**——前者内部就是 `document.createElement` + `appendChild` 的便捷封装，属合法用法，二者按喜好选用。

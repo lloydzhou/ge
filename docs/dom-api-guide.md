@@ -289,7 +289,7 @@ All GE elements inherit these from DisplayObject:
 
 ## Best Practices
 
-1. **Prefer DOM-style API**: Use `appendChild` instead of `addNode` for consistency
+1. **addNode 与 appendChild 等价**: `addNode({...})` 内部就是 `createElement` + `appendChild` 的便捷封装，二者可随意选用
 2. **Use registry for performance**: `getNodeById()` is faster than `querySelector('#id')`
 3. **Direct style manipulation**: Use `element.style.prop = value` instead of data mutation
 4. **Query with selectors**: Use `querySelectorAll` for complex queries instead of manual iteration
