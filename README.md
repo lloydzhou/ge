@@ -7,16 +7,17 @@
 - **数据结构**：借鉴 X6（Markup/Selector/Attrs/shape 声明式模型）
 - **交互 API**：靠拢 DOM（`setAttribute` / `appendChild` / `addEventListener` / `classList` / `querySelector`）
 
-不用 X6 的命令式 API（`addNode/addTools/graph.on`），用 DOM 标准 API：
+摒弃 X6 的命令式 API（`addTools` / `graph.on` / `node.resize` / `node.prop`），改用 DOM 标准 API。节点 / 边 / 端口都是真正的 DOM 元素（继承 `CustomElement`）：
 
-| 操作 | ❌ 命令式 | ✅ GE DOM 化 |
-|------|---------|-------------|
-| 创建节点 | `graph.addNode({...})` | `graph.appendChild(new Node({...}))` |
-| 删除 | `graph.removeNode(id)` | `graph.removeChild(node)` |
-| 变换 | `node.resize(w,h)` | `node.setAttribute('width', w)` |
+| 操作 | ❌ X6 命令式（GE 不采用） | ✅ GE DOM 化 |
+|------|------------------------|-------------|
+| 改属性 | `node.resize(w,h)` / `node.prop(...)` | `node.setAttribute('width', w)` |
 | 工具 | `node.addTools(['resize'])` | `node.setAttribute('resizable', true)` |
-| 事件 | `graph.on('node:click', fn)` | `graph.addEventListener('node:click', fn)` |
+| 事件 | `graph.on('node:click', fn)` | `graph.addEventListener('click', fn)` |
 | 端口 | `node.addPort({id})` | `node.appendChild(new Port({id}))` |
+| 删除 | `graph.removeNode(id)` | `graph.removeCell(id)` / `removeChild(el)` |
+
+> `graph.addNode({...})` 与 `graph.appendChild(new Node({...}))` **等价**——前者内部就是 `createElement` + `appendChild` 的便捷封装，均可使用。
 
 ```ts
 // 创建（DOM 风格）
@@ -68,7 +69,7 @@ graph.addEventListener('cell:added', fn);
 | **History** | snapshot undo/redo（覆盖全操作 + mark/commit） |
 | **Scroller** | 滚轮缩放 + 中/右键平移 |
 | **Snapline** | 对齐辅助线 |
-| **Group** | 分组嵌套（embed + getWorldBBox 含 parent offset） |
+| **EditLabel** | 双击节点 inline 编辑标签 |
 | **Dnd** | Stencil 拖拽创建（pan/zoom 后精确） |
 | **Minimap** | 缩略导航（拖框平移） |
 | **Grid** | 背景网格（点阵/网格线） |
@@ -84,7 +85,7 @@ graph.addEventListener('cell:added', fn);
 - **多标签**：`labels: [{ text, distance }]`（distance 0-1 沿路径定位）
 - **流动动画**：`lineDashFlow: true`（数据流效果）
 - **虚线/透明/可见**：`lineDash` / `opacity` / `visible`
-- **路径控制**：`vertices`（waypoint）
+- **路径控制**：`waypoints`（路径控制点）
 - **端点重连**：拖拽 source/target 手柄改变连线端点
 - **整段拖拽**：拖拽边线 → 所有 waypoints 平移
 - **自环**：source == target → 自动 U 形路径
@@ -123,8 +124,10 @@ graph.batch(() => {
   graph.addEdge({ source: 'x', target: 'y' });
 });
 
-// 布局：grid / circular / force / hierarchical
-graph.applyLayout('hierarchical', { layerGap: 110, nodeGap: 140 });
+// 布局（纯函数返回 positions Map，由 applyLayout 应用）
+import { hierarchicalLayout } from '@antv/ge';
+graph.applyLayout(hierarchicalLayout(nodes, edges, { layerGap: 110, nodeGap: 140 }));
+// 可用：gridLayout / circularLayout / forceLayout / hierarchicalLayout / treeLayout
 ```
 
 ### 抽象层（X6 对齐）
@@ -143,7 +146,7 @@ graph.applyLayout('hierarchical', { layerGap: 110, nodeGap: 140 });
 
 ```bash
 pnpm install && pnpm dev    # 启动 examples
-pnpm test                    # 77 单测
+pnpm test                    # 121 单测
 pnpm build                   # 构建
 ```
 
@@ -159,6 +162,10 @@ pnpm build                   # 构建
 | `06-stencil` | Stencil 拖拽 + 布局 + 小地图拖框 |
 | `07-react` | React 声明式 GraphView |
 | `08-edit` | 连线 + 键盘 + 复制 + Resize + Rotate + 框选 + Grid |
+| `09-features` | 全功能集成（12 Shape + A* 避障 + Port + 流动动画） |
+| `10-multi-canvas` | 多画布实例 |
+
+📖 **在线文档站**：https://lloydzhou.github.io/ge/ （18 个可交互示例 + API 参考）
 
 ## License
 

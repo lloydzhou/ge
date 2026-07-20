@@ -1,5 +1,7 @@
 # GE 重构建议：基于 antv/g-lite 和 antv/x6 研究
 
+> ⚠️ **历史文档**：本文是 GE 早期重构的设计研究笔记，部分建议（如「移除 addNode/addEdge」）**未最终采纳**——`addNode`/`addEdge` 作为 `appendChild` 的便捷封装予以保留。API 以[实际源码](https://github.com/lloydzhou/ge)与[快速开始](/guide/getting-started)为准。
+
 ## 研究结论
 
 ### @antv/g-lite 已经提供的能力
